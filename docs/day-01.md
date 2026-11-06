@@ -40,6 +40,7 @@ drizzle/
 | Husky + lint-staged (pre-commit)                  | Formats/lints only staged files, so commits stay fast. The full suite runs in CI.                                                                                                                                |
 | GitHub Actions CI                                 | typecheck → lint → format check → tests → migration drift check (fails if `schema.ts` changed without a committed migration).                                                                                    |
 | `geist` npm package instead of `next/font/google` | The font ships in `node_modules`, so builds don't depend on fetching Google Fonts.                                                                                                                               |
+| `typecheck` = `next typegen && tsc --noEmit`      | Next.js route types (`LayoutProps`, `PageProps`) must be generated before `tsc` can see them. See the CI story below.                                                                                            |
 
 ## 2. Schema
 
@@ -204,6 +205,64 @@ well under a millisecond. If it ever mattered, sort busy intervals and sweep wit
   in exactly one place (the booking insert).
 - **"Why Drizzle over Prisma?"** SQL-shaped API, schema in TS with no separate DSL or codegen step, thin
   runtime that suits serverless, and easy escape to raw SQL (needed here for EXCLUDE).
+
+## 6. Stories (problems hit and how they were solved)
+
+Interviewers ask "tell me about a bug you fixed" or "a decision you made". Each story: what happened → what I
+did → what I learned.
+
+### "Works on my machine": CI failed on typecheck
+
+- **What happened:** `npm run typecheck` passed locally, but failed in GitHub Actions with
+  `Cannot find name 'LayoutProps'`.
+- **Why:** `LayoutProps` is a type Next.js generates into `.next/` when you run `dev` or `build`. My machine
+  had a `.next` folder; CI starts from a fresh clone, so the type didn't exist.
+- **What I did:** reproduced it by deleting `.next` locally, then changed the script to
+  `next typegen && tsc --noEmit` so types are generated first. Verified from a clean state.
+- **Lesson:** CI is a clean environment on purpose. When something passes locally and fails in CI, look for
+  state that only exists on your machine (generated files, caches, env vars).
+
+### Proving the tests can actually fail
+
+- **Question:** 44 tests passed first time. Are they testing anything?
+- **What I did:** planted bugs on purpose (mutation testing): removed the busy-time check, removed the window
+  merge, and swapped DST-correct time building for "midnight + N minutes". Each bug failed 3–7 tests. Then I
+  replaced the exclusion-constraint migration with `SELECT 1`: 3 database tests failed.
+- **Lesson:** a green test suite only means something if you've seen it go red for the right reason.
+
+### Dependency conflict: not forcing past it
+
+- **What happened:** installing Vitest 5 failed with a peer-dependency error: it needs `@types/node` 22+,
+  the starter template had 20.
+- **What I did:** upgraded `@types/node` to 22 to match the Node 22 runtime, instead of
+  `--legacy-peer-deps`.
+- **Lesson:** a peer conflict is usually telling you something real. Here the types were simply wrong for the
+  Node version we run.
+
+### Build depended on the internet
+
+- **What happened:** `next build` failed in a network-restricted environment: `next/font/google` downloads
+  fonts from Google at build time.
+- **What I did:** switched to the `geist` npm package, which ships the font files in `node_modules`.
+- **Lesson:** builds should be reproducible without outside services. Fewer things that can break a deploy.
+
+### Catching a naming problem before it was deployed
+
+- **What happened:** the generated migration named a constraint `event_types_userId_slug_unique`
+  (camelCase inside a snake_case database).
+- **What I did:** named it explicitly and regenerated the migrations from scratch.
+- **Lesson:** migrations are free to rewrite before they've run anywhere real; after deploy, every change
+  needs a new migration. Review generated SQL before the first deploy.
+
+### Choosing the database region
+
+- **Decision:** Neon in AWS US East 1, even though I develop from Bangladesh.
+- **Why:** the database should be close to the **server**, not the developer or the user. Vercel functions
+  run in Washington DC by default, and one page can make several queries, each a round trip. Recruiters
+  (the real users of the demo) are mostly in the US/EU too.
+- **Trade-off accepted:** ~250 ms per query in local development.
+- I also skipped `neon init` and the extra Neon services (hosted auth, storage, realtime): every part of the
+  stack stays code in the repo that I can explain.
 
 ## Next (day 2)
 

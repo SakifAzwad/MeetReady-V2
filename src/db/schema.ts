@@ -38,18 +38,29 @@ const timestamps = {
 // Better Auth uses text ids it generates itself. Day 2: compare against
 // `npx @better-auth/cli generate` output when wiring Google login.
 
-export const user = pgTable("user", {
-  id: text().primaryKey(),
-  name: text().notNull(),
-  email: text().notNull().unique(),
-  emailVerified: boolean().notNull().default(false),
-  image: text(),
-  /** Public booking URL: meetready.app/{username}. Null until onboarding. */
-  username: varchar({ length: 40 }).unique(),
-  /** IANA name, e.g. "Asia/Dhaka". Availability rules are interpreted in this zone. */
-  timeZone: text().notNull().default("UTC"),
-  ...timestamps,
-});
+export const user = pgTable(
+  "user",
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    email: text().notNull().unique(),
+    emailVerified: boolean().notNull().default(false),
+    image: text(),
+    /** Public booking URL: meetready.app/{username}. Null until onboarding. */
+    username: varchar({ length: 30 }).unique(),
+    /** IANA name, e.g. "Asia/Dhaka". Availability rules are interpreted in this zone. */
+    timeZone: text().notNull().default("UTC"),
+    ...timestamps,
+  },
+  (t) => [
+    // Same rule as usernameSchema. Lowercase-only also makes the UNIQUE
+    // constraint case-insensitive in practice: "Sakif" can't sit next to "sakif".
+    check(
+      "user_username_format_check",
+      sql`${t.username} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(${t.username}) >= 3`,
+    ),
+  ],
+);
 
 export const session = pgTable(
   "session",

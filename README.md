@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MeetReady
 
-## Getting Started
+A Calendly-style meeting scheduler: hosts define event types and weekly availability, share a link, and
+guests book a time shown in their own timezone. Double booking is prevented by the database itself.
 
-First, run the development server:
+> v2: a solo rebuild of a 2024 university group project. See [Credits](#credits).
+
+## Stack
+
+Next.js 16 (App Router) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Zod · date-fns +
+`@date-fns/tz` · Vitest + fast-check · PGlite (in-process Postgres for tests) · GitHub Actions
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env.local   # Next.js
+cp .env.example .env         # drizzle-kit
+# put your Neon connection string in both
+
+npm run db:migrate           # applies drizzle/*.sql (incl. the no-overlap constraint)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script                                        | What it does                                                    |
+| --------------------------------------------- | --------------------------------------------------------------- |
+| `npm test`                                    | Unit, property-based and database tests (no external DB needed) |
+| `npm run typecheck` / `lint` / `format:check` | Same checks CI runs                                             |
+| `npm run db:generate`                         | New migration from `src/db/schema.ts`                           |
+| `npm run db:studio`                           | Browse the database                                             |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Design notes
 
-## Learn More
+- [Day 1: setup, schema, slot generation](docs/day-01.md): timezone model, DST handling, the exclusion
+  constraint, and why slot generation is a pure function.
 
-To learn more about Next.js, take a look at the following resources:
+## Credits
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MeetReady v1 (Jan–Feb 2024) was built by a team of about 10 students at IIUC:
+[SakifAzwad/Meet-Ready](https://github.com/SakifAzwad/Meet-Ready). v2 keeps the idea and rewrites the code.

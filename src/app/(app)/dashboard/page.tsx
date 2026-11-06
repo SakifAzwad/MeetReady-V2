@@ -1,31 +1,39 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { requireOnboardedUser } from "@/server/auth/session";
-import { SignOutButton } from "./sign-out-button";
 
 export const metadata: Metadata = { title: "Dashboard · MeetReady" };
 
 /*
- * Cache Components (on in next.config.ts): everything outside <Suspense> is
- * prerendered into a static shell that loads instantly. Anything that reads
- * the request (cookies -> session) must sit inside a <Suspense> boundary and
- * streams in after.
+ * Cache Components: everything outside <Suspense> is a static shell that loads
+ * instantly; the part that reads the session streams in.
  */
 export default function DashboardPage() {
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-12">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <SignOutButton />
-      </header>
-
-      <Suspense
-        fallback={<div className="mt-8 h-32 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-900" />}
-      >
+    <main className="flex flex-col gap-8">
+      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <Suspense fallback={<div className="bg-muted h-36 animate-pulse rounded-xl" />}>
         <BookingLinkCard />
       </Suspense>
-
-      <p className="mt-8 text-sm text-neutral-500">Event types and availability arrive on Day 3.</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardTitle>Event types</CardTitle>
+          <CardDescription>The kinds of meetings guests can book: length, location, rules.</CardDescription>
+          <Button asChild variant="outline" className="self-start">
+            <Link href="/dashboard/event-types">Manage event types</Link>
+          </Button>
+        </Card>
+        <Card>
+          <CardTitle>Availability</CardTitle>
+          <CardDescription>Your weekly hours, timezone and days off.</CardDescription>
+          <Button asChild variant="outline" className="self-start">
+            <Link href="/dashboard/availability">Set availability</Link>
+          </Button>
+        </Card>
+      </div>
     </main>
   );
 }
@@ -33,15 +41,12 @@ export default function DashboardPage() {
 async function BookingLinkCard() {
   // The real auth check. proxy.ts only checked that a cookie exists.
   const user = await requireOnboardedUser();
-
   return (
-    <section className="mt-8 rounded-lg border border-neutral-200 p-6 dark:border-neutral-800">
-      <p className="text-neutral-600 dark:text-neutral-400">Signed in as {user.name}</p>
-      <h2 className="mt-4 font-medium">Your booking link</h2>
-      <p className="mt-1 font-mono text-blue-700 dark:text-blue-400">meetready.app/{user.username}</p>
-      <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-        Timezone: {user.timeZone.replaceAll("_", " ")}
-      </p>
-    </section>
+    <Card>
+      <CardDescription>Signed in as {user.name}</CardDescription>
+      <CardTitle>Your booking link</CardTitle>
+      <p className="text-primary font-mono">meetready.app/{user.username}</p>
+      <p className="text-muted-foreground text-sm">Timezone: {user.timeZone.replaceAll("_", " ")}</p>
+    </Card>
   );
 }

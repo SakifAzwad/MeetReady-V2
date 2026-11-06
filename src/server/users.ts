@@ -3,6 +3,7 @@ import { pgConstraintName, pgErrorCode, PG_UNIQUE_VIOLATION } from "@/db/errors"
 import { user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import type { OnboardingInput } from "@/lib/validation/onboarding";
+import { ensureDefaultAvailability } from "./availability";
 import { RESERVED_USERNAMES } from "@/lib/validation/onboarding";
 
 export type OnboardingResult = { ok: true } | { ok: false; error: "username_taken" };
@@ -15,6 +16,9 @@ export type OnboardingResult = { ok: true } | { ok: false; error: "username_take
  * Why not "SELECT to check the name is free, then UPDATE"? Two people picking
  * the same name at the same moment would both pass the check. The UNIQUE
  * constraint on user.username decides atomically; we just translate its error.
+ *
+ * Also gives a new host a default Mon–Fri 09:00–17:00 week, in the same
+ * transaction: either both happen or neither does.
  */
 export async function completeOnboarding(
   db: Database,
@@ -22,10 +26,13 @@ export async function completeOnboarding(
   input: OnboardingInput,
 ): Promise<OnboardingResult> {
   try {
-    await db
-      .update(user)
-      .set({ username: input.username, timeZone: input.timeZone })
-      .where(eq(user.id, userId));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(user)
+        .set({ username: input.username, timeZone: input.timeZone })
+        .where(eq(user.id, userId));
+      await ensureDefaultAvailability(tx, userId);
+    });
     return { ok: true };
   } catch (error) {
     if (pgErrorCode(error) === PG_UNIQUE_VIOLATION && pgConstraintName(error) === "user_username_unique") {

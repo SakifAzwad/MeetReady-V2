@@ -7,7 +7,7 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 
 ## Stack
 
-Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · date-fns +
+Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +
 `@date-fns/tz` · Vitest + fast-check · PGlite (in-process Postgres for tests) · GitHub Actions
 
 ## Getting started
@@ -37,6 +37,8 @@ npm run dev
   constraint, and why slot generation is a pure function.
 - [Day 2: Google login, onboarding, authorization](docs/day-02.md): sessions, the three authorization
   layers, username rules, open-redirect protection.
+- [Day 3: Event types and availability](docs/day-03.md): owner-scoped CRUD (IDOR tests), transactional
+  schedule saves, forms with shared Zod schemas, and the bugs a real-browser run found.
 
 ## Credits
 

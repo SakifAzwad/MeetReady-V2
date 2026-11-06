@@ -39,6 +39,8 @@ npm run dev
   layers, username rules, open-redirect protection.
 - [Day 3: Event types and availability](docs/day-03.md): owner-scoped CRUD (IDOR tests), transactional
   schedule saves, forms with shared Zod schemas, and the bugs a real-browser run found.
+- [Day 4: The public booking page](docs/day-04.md): three layers against double booking (re-check, per-host
+  advisory lock, exclusion constraint), proven with deterministic race tests on real Postgres.
 
 ## Credits
 

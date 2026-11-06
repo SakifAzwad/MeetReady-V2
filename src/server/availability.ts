@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gte } from "drizzle-orm";
+import { and, asc, count, eq, gte, lte } from "drizzle-orm";
 import { availabilityRules, dateOverrides, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import type { DateOverrideInput } from "@/lib/validation/availability";
@@ -20,7 +20,7 @@ export type HostAvailability = {
 export async function getAvailability(
   db: Database,
   userId: string,
-  options: { overridesFrom?: string } = {},
+  options: { overridesFrom?: string; overridesTo?: string } = {},
 ): Promise<HostAvailability> {
   const [host] = await db.select({ timeZone: user.timeZone }).from(user).where(eq(user.id, userId));
   const rules = await db
@@ -36,9 +36,11 @@ export async function getAvailability(
     .select({ date: dateOverrides.date, startTime: dateOverrides.startTime, endTime: dateOverrides.endTime })
     .from(dateOverrides)
     .where(
-      options.overridesFrom
-        ? and(eq(dateOverrides.userId, userId), gte(dateOverrides.date, options.overridesFrom))
-        : eq(dateOverrides.userId, userId),
+      and(
+        eq(dateOverrides.userId, userId),
+        options.overridesFrom ? gte(dateOverrides.date, options.overridesFrom) : undefined,
+        options.overridesTo ? lte(dateOverrides.date, options.overridesTo) : undefined,
+      ),
     )
     .orderBy(asc(dateOverrides.date), asc(dateOverrides.startTime));
 

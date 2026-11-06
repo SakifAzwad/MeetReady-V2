@@ -227,6 +227,21 @@ tests; with both removed, the `//` and `\` tests fail.
   `/login`. No user data was sent.
 - **Lesson:** I can show, not just claim, that security lives next to the data.
 
+### GitHub blocked my push: real secrets in `.env.example`
+
+- **What happened:** `git push` was rejected with `GH013: Push cannot contain secrets`. I'd pasted my real
+  Google OAuth client ID and secret into `.env.example`, the committed template, instead of `.env.local`,
+  which git ignores.
+- **What I did:** didn't use the "allow this secret" link. Cleared `.env.example` back to empty placeholders
+  (checked `DATABASE_URL` and `BETTER_AUTH_SECRET` too, which the scanner hadn't flagged), confirmed only one
+  commit was unpushed, rewrote it with `git commit --amend` so the secret isn't anywhere in history, and pushed.
+  The secret had still left my machine (uploaded, then rejected), so the right follow-up is to rotate the
+  Google client secret: add a new one in Google Cloud Console, switch `.env.local`, delete the old one.
+- **Why amend, not a new commit:** a follow-up commit that deletes the secret still leaves it in the earlier
+  commit, readable by anyone with the repo.
+- **Lesson:** templates hold names, never values. And it's the exact mistake v1 shipped (a hardcoded Zoom
+  token), caught this time by tooling before it went public. Rotate anything that left your machine.
+
 ## Next (day 3)
 
 Event types (create / edit / list / deactivate) and weekly availability + date overrides, with shadcn/ui and

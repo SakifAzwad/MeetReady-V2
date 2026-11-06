@@ -67,3 +67,29 @@ describe("suggestUsername", () => {
     expect(suggestUsername(email)).toBe(expected);
   });
 });
+
+describe("completeOnboarding: default availability", () => {
+  it("gives a new host Mon–Fri 09:00–17:00, once, and not if onboarding fails", async () => {
+    const db = await createTestDb();
+    await db.insert(user).values([
+      { id: "u1", name: "One", email: "one@example.com" },
+      { id: "u2", name: "Two", email: "two@example.com" },
+    ]);
+    const { getAvailability } = await import("./availability");
+
+    await completeOnboarding(db, "u1", { username: "sakif", timeZone: "Asia/Dhaka" });
+    const first = await getAvailability(db, "u1");
+    expect(first.rules.map((r) => r.dayOfWeek)).toEqual([1, 2, 3, 4, 5]);
+    expect(first.rules[0]).toMatchObject({ startTime: "09:00", endTime: "17:00" });
+
+    // Re-saving doesn't duplicate or overwrite rules.
+    await completeOnboarding(db, "u1", { username: "sakif", timeZone: "Asia/Dhaka" });
+    expect((await getAvailability(db, "u1")).rules).toHaveLength(5);
+
+    // Username taken -> the whole transaction rolls back: no rules for u2.
+    expect(await completeOnboarding(db, "u2", { username: "sakif", timeZone: "UTC" })).toMatchObject({
+      ok: false,
+    });
+    expect((await getAvailability(db, "u2")).rules).toHaveLength(0);
+  }, 30_000);
+});

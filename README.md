@@ -7,7 +7,7 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 
 ## Stack
 
-Next.js 16 (App Router) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Zod · date-fns +
+Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · date-fns +
 `@date-fns/tz` · Vitest + fast-check · PGlite (in-process Postgres for tests) · GitHub Actions
 
 ## Getting started
@@ -16,7 +16,7 @@ Next.js 16 (App Router) · TypeScript (strict) · PostgreSQL on Neon · Drizzle 
 npm install
 cp .env.example .env.local   # Next.js
 cp .env.example .env         # drizzle-kit
-# put your Neon connection string in both
+# fill in DATABASE_URL, BETTER_AUTH_SECRET and the Google OAuth client (see .env.example)
 
 npm run db:migrate           # applies drizzle/*.sql (incl. the no-overlap constraint)
 npm run dev
@@ -35,6 +35,8 @@ npm run dev
 
 - [Day 1: setup, schema, slot generation](docs/day-01.md): timezone model, DST handling, the exclusion
   constraint, and why slot generation is a pure function.
+- [Day 2: Google login, onboarding, authorization](docs/day-02.md): sessions, the three authorization
+  layers, username rules, open-redirect protection.
 
 ## Credits
 

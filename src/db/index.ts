@@ -1,7 +1,9 @@
+import "server-only";
 import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { env } from "@/lib/env";
 import * as schema from "./schema";
+import type { Database } from "./types";
 
 /*
  * Neon's serverless driver over WebSockets (not neon-http) because booking
@@ -10,5 +12,4 @@ import * as schema from "./schema";
  */
 const pool = new Pool({ connectionString: env.DATABASE_URL });
 
-export const db = drizzle({ client: pool, schema, casing: "snake_case" });
-export type Db = typeof db;
+export const db: Database = drizzle({ client: pool, schema, casing: "snake_case" });

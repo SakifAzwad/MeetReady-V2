@@ -1,0 +1,2 @@
+ALTER TABLE "user" ALTER COLUMN "username" SET DATA TYPE varchar(30);--> statement-breakpoint
+ALTER TABLE "user" ADD CONSTRAINT "user_username_format_check" CHECK ("user"."username" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length("user"."username") >= 3);

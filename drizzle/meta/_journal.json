@@ -15,6 +15,13 @@
       "when": 1793931355437,
       "tag": "0001_bookings_no_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793946499485,
+      "tag": "0002_username_rules",
+      "breakpoints": true
     }
   ]
 }

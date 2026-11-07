@@ -2,7 +2,14 @@
 
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import {
+  addTransitionType,
+  startTransition,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  ViewTransition,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/input";
 import {
@@ -71,20 +78,44 @@ function Booking(props: Props) {
   const [chosen, setChosen] = useState<string | null>(null);
   const timeZone = chosen ?? detected;
 
-  if (!timeZone) return <Shell layout={props.layout} aside={null} main={<Skeleton />} />;
+  if (!timeZone) return <Shell layout={props.layout} aside={null} stage="pick" main={<Skeleton />} />;
   return <Scheduler {...props} timeZone={timeZone} onTimeZoneChange={setChosen} />;
 }
 
 /** Facts panel on the left (full layout), the working area on the right. */
+type Stage = "pick" | "details" | "done";
+type Direction = "step-forward" | "step-back";
+const STEP_MOTION = { "step-forward": "step-forward", "step-back": "step-back", default: "none" };
+
+/**
+ * Moves between steps (pick a time → your details → booked) as a transition
+ * tagged with a direction, so the content slides forward or back. Plain
+ * setState wouldn't animate: <ViewTransition> only runs for transitions.
+ */
+function go(direction: Direction, update: () => void) {
+  startTransition(() => {
+    addTransitionType(direction);
+    update();
+  });
+}
+
 function Shell({
   layout = "full",
   aside,
   main,
+  stage,
 }: {
   layout?: Props["layout"];
   aside: React.ReactNode;
   main: React.ReactNode;
+  stage: Stage;
 }) {
+  // Keyed by stage: a new key is a new element, so the old step exits and the new one enters.
+  main = (
+    <ViewTransition key={stage} enter={STEP_MOTION} exit={STEP_MOTION} default="none">
+      <div>{main}</div>
+    </ViewTransition>
+  );
   if (layout === "embedded") return <div className="p-6 md:p-8">{main}</div>;
   return (
     <div className="bg-card grid w-full max-w-6xl overflow-hidden rounded-2xl border shadow-[0_1px_2px_rgb(24_33_58/0.05),0_12px_40px_rgb(24_33_58/0.07)] md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
@@ -166,17 +197,19 @@ function Scheduler({
 
   const aside =
     layout === "embedded" ? null : <FactsPanel event={event} timeZone={timeZone} hour12={hour12} />;
-  const slotGone = () => {
-    setStep("pick");
-    setSelectedSlot(null);
-    setNotice("Someone just booked that time. Pick another one.");
-  };
+  const slotGone = () =>
+    go("step-back", () => {
+      setStep("pick");
+      setSelectedSlot(null);
+      setNotice("Someone just booked that time. Pick another one.");
+    });
 
   if (booked) {
     return (
       <Shell
         layout={layout}
         aside={aside}
+        stage="done"
         main={
           <Confirmation
             heading={
@@ -199,6 +232,7 @@ function Scheduler({
       <Shell
         layout={layout}
         aside={aside}
+        stage="details"
         main={
           reschedule ? (
             <RescheduleConfirm
@@ -208,9 +242,9 @@ function Scheduler({
               token={reschedule.token}
               currentStartsAt={reschedule.currentStartsAt}
               currentEndsAt={reschedule.currentEndsAt}
-              onBack={() => setStep("pick")}
+              onBack={() => go("step-back", () => setStep("pick"))}
               onMoved={(b) => {
-                setBooked(b);
+                go("step-forward", () => setBooked(b));
                 reschedule.onMoved?.();
               }}
               onSlotGone={slotGone}
@@ -228,8 +262,8 @@ function Scheduler({
               hour12={hour12}
               username={event.username}
               slug={event.slug}
-              onBack={() => setStep("pick")}
-              onBooked={setBooked}
+              onBack={() => go("step-back", () => setStep("pick"))}
+              onBooked={(b) => go("step-forward", () => setBooked(b))}
               onSlotGone={slotGone}
             />
           )
@@ -243,6 +277,7 @@ function Scheduler({
     <Shell
       layout={layout}
       aside={aside}
+      stage="pick"
       main={
         <div className="flex flex-col gap-6">
           {reschedule && (
@@ -324,10 +359,12 @@ function Scheduler({
                   hour12={hour12}
                   selected={selectedSlot}
                   onSelect={setSelectedSlot}
-                  onContinue={(slot) => {
-                    setSelectedSlot(slot);
-                    setStep("details");
-                  }}
+                  onContinue={(slot) =>
+                    go("step-forward", () => {
+                      setSelectedSlot(slot);
+                      setStep("details");
+                    })
+                  }
                 />
               ) : (
                 <p className="text-muted-foreground">

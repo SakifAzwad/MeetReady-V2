@@ -18,6 +18,7 @@ export function DaylightBand({
   hostTimeZone,
   hostName,
   hour12,
+  headingAs: Heading = "h2",
 }: {
   windows: Interval[];
   day: DateKey;
@@ -25,6 +26,8 @@ export function DaylightBand({
   hostTimeZone: string;
   hostName: string;
   hour12: boolean;
+  /** "h4" inside the landing page preview, where it sits under other headings. */
+  headingAs?: "h2" | "h4";
 }) {
   const now = useMinuteClock();
   const segments = bandSegments(windows, day, timeZone);
@@ -49,9 +52,9 @@ export function DaylightBand({
   return (
     <section aria-labelledby="band-heading" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-        <h2 id="band-heading" className="text-xl font-semibold">
+        <Heading id="band-heading" className="text-xl font-semibold">
           Your day in {cityName(timeZone)}
-        </h2>
+        </Heading>
         <p className="text-muted-foreground text-sm">
           {difference ? `${hostCity} is ${difference}` : `Same timezone as ${firstName}`}
         </p>

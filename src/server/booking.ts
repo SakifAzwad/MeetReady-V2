@@ -92,7 +92,13 @@ export async function getPublicEventType(
 /** A host's public profile: name and active event types. */
 export async function getPublicProfile(db: Database, username: string) {
   const [host] = await db
-    .select({ id: user.id, name: user.name, image: user.image, username: user.username })
+    .select({
+      id: user.id,
+      name: user.name,
+      image: user.image,
+      username: user.username,
+      timeZone: user.timeZone,
+    })
     .from(user)
     .where(and(eq(user.username, username.toLowerCase()), isNotNull(user.username)));
   if (!host?.username) return null;
@@ -108,7 +114,13 @@ export async function getPublicProfile(db: Database, username: string) {
     .from(eventTypes)
     .where(and(eq(eventTypes.userId, host.id), eq(eventTypes.isActive, true)))
     .orderBy(asc(eventTypes.createdAt));
-  return { name: host.name, image: host.image, username: host.username, eventTypes: types };
+  return {
+    name: host.name,
+    image: host.image,
+    username: host.username,
+    timeZone: host.timeZone,
+    eventTypes: types,
+  };
 }
 
 /**

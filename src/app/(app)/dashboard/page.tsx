@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { cityName } from "@/lib/scheduling/daylight";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,8 +12,9 @@ import { getAvailability } from "@/server/availability";
 import { listHostBookings } from "@/server/manage-booking";
 import { CopyLinkButton } from "./copy-link-button";
 import { WeekGlance } from "./week-glance";
+import { PageTransition, Reveal } from "@/components/motion";
 
-export const metadata: Metadata = { title: "Dashboard · MeetReady" };
+export const metadata: Metadata = { title: "Dashboard" };
 
 /*
  * Answers the three things a host opens this page for: what's my link,
@@ -23,11 +23,13 @@ export const metadata: Metadata = { title: "Dashboard · MeetReady" };
  */
 export default function DashboardPage() {
   return (
-    <main>
-      <Suspense fallback={<DashboardSkeleton />}>
-        <Dashboard />
-      </Suspense>
-    </main>
+    <PageTransition>
+      <main>
+        <Reveal fallback={<DashboardSkeleton />}>
+          <Dashboard />
+        </Reveal>
+      </main>
+    </PageTransition>
   );
 }
 

@@ -10,27 +10,30 @@ import { LOCATION_LABELS } from "@/lib/validation/event-type";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { listEventTypes } from "@/server/event-types";
 import { ActiveToggle, CopyLinkButton } from "./event-type-controls";
+import { PageTransition } from "@/components/motion";
 
-export const metadata: Metadata = { title: "Event types · MeetReady" };
+export const metadata: Metadata = { title: "Event types" };
 
 export default function EventTypesPage() {
   return (
-    <main className="flex flex-col gap-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Event types</h1>
-          <p className="text-muted-foreground text-sm">The kinds of meetings guests can book with you.</p>
+    <PageTransition>
+      <main className="flex flex-col gap-8">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Event types</h1>
+            <p className="text-muted-foreground text-sm">The kinds of meetings guests can book with you.</p>
+          </div>
+          <Button asChild>
+            <Link href="/dashboard/event-types/new">
+              <Plus /> New event type
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/event-types/new">
-            <Plus /> New event type
-          </Link>
-        </Button>
-      </div>
-      <Suspense fallback={<div className="bg-muted h-40 animate-pulse rounded-xl" />}>
-        <EventTypeList />
-      </Suspense>
-    </main>
+        <Suspense fallback={<div className="bg-muted h-40 animate-pulse rounded-xl" />}>
+          <EventTypeList />
+        </Suspense>
+      </main>
+    </PageTransition>
   );
 }
 

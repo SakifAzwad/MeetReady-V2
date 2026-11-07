@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Reveal } from "@/components/motion";
+import { PoweredBy } from "@/components/site/powered-by";
 import { db } from "@/db";
 import { LOCATION_LABELS } from "@/lib/validation/event-type";
 import { getPublicEventType } from "@/server/booking";
@@ -11,16 +12,17 @@ type Params = PageProps<"/[username]/[slug]">["params"];
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { username, slug } = await params;
   const eventType = await getPublicEventType(db, username, slug);
-  return { title: eventType ? `${eventType.title} with ${eventType.hostName}` : "Not found · MeetReady" };
+  return { title: eventType ? `${eventType.title} with ${eventType.hostName}` : "Not found" };
 }
 
 /** The public booking page: meetready.app/{username}/{slug}. No login. */
 export default function BookingPage({ params }: { params: Params }) {
   return (
-    <main className="flex flex-1 items-start justify-center px-3 py-6 sm:px-6 sm:py-12">
-      <Suspense fallback={<div className="bg-muted h-[36rem] w-full max-w-6xl animate-pulse rounded-2xl" />}>
+    <main className="flex flex-1 flex-col items-center gap-8 px-3 py-6 sm:px-6 sm:py-12">
+      <Reveal fallback={<div className="bg-muted h-[36rem] w-full max-w-6xl animate-pulse rounded-2xl" />}>
         <BookingCard params={params} />
-      </Suspense>
+      </Reveal>
+      <PoweredBy />
     </main>
   );
 }

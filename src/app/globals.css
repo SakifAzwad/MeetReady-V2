@@ -151,3 +151,135 @@
     accent-color: var(--color-primary);
   }
 }
+
+/* ─── Motion ──────────────────────────────────────────────────────────────
+ * Every animation answers something the user did or explains a change:
+ * page load (once), switching pages, moving to the next step, a tab's
+ * highlight following the click. Old content leaves fast, new content
+ * arrives a little slower. All of it is switched off by reduced motion.
+ */
+:root {
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --duration-exit: 120ms;
+  --duration-enter: 220ms;
+  --duration-move: 360ms;
+}
+
+@keyframes in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes in-left {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+@utility animate-in-up {
+  animation: in-up 520ms var(--ease-out) both;
+}
+@utility animate-in-down {
+  animation: in-down 180ms var(--ease-out) both;
+}
+@utility animate-in-left {
+  animation: in-left 200ms var(--ease-out) both;
+}
+
+/* View transitions (React <ViewTransition> + the browser API). */
+::view-transition {
+  pointer-events: none; /* clicks during a transition reach the live page */
+}
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-slide {
+  from {
+    translate: var(--slide-offset, 0 8px);
+  }
+}
+
+/* Moving between pages: the old page fades out quickly, the new one rises in. */
+::view-transition-old(.page) {
+  animation: var(--duration-exit) ease-in both vt-fade reverse;
+}
+::view-transition-new(.page) {
+  animation:
+    var(--duration-enter) var(--ease-out) var(--duration-exit) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide;
+}
+
+/* Suspense: the skeleton yields, the real content arrives. */
+::view-transition-old(.skeleton-out) {
+  animation: var(--duration-exit) ease-in both vt-fade reverse;
+}
+::view-transition-new(.reveal) {
+  animation:
+    var(--duration-enter) var(--ease-out) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide;
+}
+
+/* Steps of the booking flow: forward slides left, back slides right. */
+::view-transition-old(.step-forward) {
+  --slide-offset: -40px 0;
+  animation:
+    var(--duration-exit) ease-in both vt-fade reverse,
+    var(--duration-move) var(--ease-out) both vt-slide reverse;
+}
+::view-transition-new(.step-forward) {
+  --slide-offset: 40px 0;
+  animation:
+    var(--duration-enter) var(--ease-out) var(--duration-exit) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide;
+}
+::view-transition-old(.step-back) {
+  --slide-offset: 40px 0;
+  animation:
+    var(--duration-exit) ease-in both vt-fade reverse,
+    var(--duration-move) var(--ease-out) both vt-slide reverse;
+}
+::view-transition-new(.step-back) {
+  --slide-offset: -40px 0;
+  animation:
+    var(--duration-enter) var(--ease-out) var(--duration-exit) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide;
+}
+
+/* Shared elements (logo, the active-tab highlight) glide between positions. */
+::view-transition-group(.morph) {
+  animation-duration: var(--duration-move);
+  animation-timing-function: var(--ease-out);
+}
+
+/* Headers stay put while the content under them changes. */
+::view-transition-group(app-header),
+::view-transition-group(site-header) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(app-header),
+::view-transition-old(site-header) {
+  display: none;
+}
+::view-transition-new(app-header),
+::view-transition-new(site-header) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

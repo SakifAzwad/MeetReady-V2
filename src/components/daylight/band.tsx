@@ -46,7 +46,7 @@ export function Band({
       )}
     >
       <div
-        className="absolute inset-y-0 left-0 w-[200%]"
+        className="absolute inset-y-0 left-0 w-[200%] transition-transform duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)]"
         style={{
           backgroundImage: DAYLIGHT,
           backgroundSize: "50% 100%",
@@ -54,15 +54,25 @@ export function Band({
           transform: `translateX(-${shift * 50}%)`,
         }}
       />
-      {segments.map((s) => (
+      {/*
+       * Keyed by position in the list (not by value) so that when the day or
+       * the city changes, the same bracket slides to its new place via the
+       * CSS transition instead of being replaced.
+       */}
+      {segments.map((s, i) => (
         <div
-          key={`${s.left}-${s.width}`}
-          className="absolute inset-y-1.5 rounded-lg border-2 border-white shadow-[0_0_0_2px_rgb(24_33_58/0.3)]"
+          key={i}
+          className="absolute inset-y-1.5 rounded-lg border-2 border-white shadow-[0_0_0_2px_rgb(24_33_58/0.3)] transition-[left,width] duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)]"
           style={{ left: `${s.left}%`, width: `${s.width}%` }}
         />
       ))}
       {children}
-      {nowAt !== null && <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: `${nowAt}%` }} />}
+      {nowAt !== null && (
+        <div
+          className="absolute inset-y-0 w-0.5 bg-white transition-[left] duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)]"
+          style={{ left: `${nowAt}%` }}
+        />
+      )}
     </div>
   );
 }

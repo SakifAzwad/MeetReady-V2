@@ -1,7 +1,8 @@
 import { CalendarX2, Clock, MapPin, User } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Reveal } from "@/components/motion";
+import { PoweredBy } from "@/components/site/powered-by";
 import { db } from "@/db";
 import { formatMinutes } from "@/lib/format";
 import { formatWhen, locationText } from "@/lib/booking-format";
@@ -16,7 +17,7 @@ import { ManageBooking } from "./manage-booking";
  *    send this URL to another site in the Referer header.
  */
 export const metadata: Metadata = {
-  title: "Your booking · MeetReady",
+  title: "Your booking",
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 };
@@ -25,10 +26,11 @@ type Params = PageProps<"/booking/[token]">["params"];
 
 export default function ManageBookingPage({ params }: { params: Params }) {
   return (
-    <main className="bg-muted/40 flex flex-1 items-start justify-center px-4 py-8 sm:py-16">
-      <Suspense fallback={<div className="bg-muted h-96 w-full max-w-4xl animate-pulse rounded-xl" />}>
+    <main className="flex flex-1 flex-col items-center gap-8 px-4 py-8 sm:py-16">
+      <Reveal fallback={<div className="bg-muted h-96 w-full max-w-4xl rounded-xl" />}>
         <BookingPanel params={params} />
-      </Suspense>
+      </Reveal>
+      <PoweredBy />
     </main>
   );
 }

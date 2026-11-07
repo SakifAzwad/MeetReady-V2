@@ -92,7 +92,7 @@ export function TimeList({
                   {isSelected && (
                     <Button
                       size="sm"
-                      className="bg-highlight text-night hover:bg-highlight/90 font-semibold"
+                      className="bg-highlight text-night hover:bg-highlight/90 animate-in-left font-semibold"
                       onClick={() => onContinue(slot)}
                     >
                       Continue

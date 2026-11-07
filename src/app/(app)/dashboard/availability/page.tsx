@@ -7,22 +7,25 @@ import { requireOnboardedUser } from "@/server/auth/session";
 import { getAvailability } from "@/server/availability";
 import { DateOverrides } from "./date-overrides";
 import { WeeklyScheduleForm } from "./weekly-schedule-form";
+import { PageTransition } from "@/components/motion";
 
-export const metadata: Metadata = { title: "Availability · MeetReady" };
+export const metadata: Metadata = { title: "Availability" };
 
 export default function AvailabilityPage() {
   return (
-    <main className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-3xl font-bold">Availability</h1>
-        <p className="text-muted-foreground text-sm">
-          When guests can book you. Bookings and buffers are subtracted automatically.
-        </p>
-      </div>
-      <Suspense fallback={<div className="bg-muted h-[32rem] animate-pulse rounded-xl" />}>
-        <AvailabilityEditor />
-      </Suspense>
-    </main>
+    <PageTransition>
+      <main className="flex flex-col gap-8">
+        <div>
+          <h1 className="text-3xl font-bold">Availability</h1>
+          <p className="text-muted-foreground text-sm">
+            When guests can book you. Bookings and buffers are subtracted automatically.
+          </p>
+        </div>
+        <Suspense fallback={<div className="bg-muted h-[32rem] animate-pulse rounded-xl" />}>
+          <AvailabilityEditor />
+        </Suspense>
+      </main>
+    </PageTransition>
   );
 }
 

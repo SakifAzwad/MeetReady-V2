@@ -14,11 +14,11 @@ describe("formatMinutes", () => {
 
 describe("formatWallTime", () => {
   it.each([
-    ["00:00", "12:00am"],
-    ["09:05", "9:05am"],
-    ["12:00", "12:00pm"],
-    ["13:30", "1:30pm"],
-    ["24:00", "12:00am (end of day)"],
+    ["00:00", "12:00 AM"],
+    ["09:05", "9:05 AM"],
+    ["12:00", "12:00 PM"],
+    ["13:30", "1:30 PM"],
+    ["24:00", "12:00 AM (end of day)"],
   ])("%s -> %s", (t, expected) => expect(formatWallTime(t)).toBe(expected));
 });
 

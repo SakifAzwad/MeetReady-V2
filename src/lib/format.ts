@@ -11,13 +11,13 @@ export function formatMinutes(total: number): string {
   return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
 }
 
-/** "09:00" -> "9:00am", "13:30" -> "1:30pm", "24:00" -> "12:00am (end of day)" */
+/** "09:00" -> "9:00 AM", "13:30" -> "1:30 PM", "24:00" -> "12:00 AM (end of day)". Same style as the booking page. */
 export function formatWallTime(time: string): string {
-  if (time === "24:00") return "12:00am (end of day)";
+  if (time === "24:00") return "12:00 AM (end of day)";
   const [h, m] = time.split(":").map(Number) as [number, number];
-  const suffix = h < 12 ? "am" : "pm";
+  const suffix = h < 12 ? "AM" : "PM";
   const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m).padStart(2, "0")}${suffix}`;
+  return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
 /** Every 15 minutes from 00:00 to 24:00, for time pickers. */

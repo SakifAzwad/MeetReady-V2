@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "New event type · MeetReady" };
 export default function NewEventTypePage() {
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New event type</h1>
+      <h1 className="text-3xl font-bold">New event type</h1>
       <Suspense fallback={<div className="bg-muted h-96 animate-pulse rounded-xl" />}>
         <NewEventTypeForm />
       </Suspense>

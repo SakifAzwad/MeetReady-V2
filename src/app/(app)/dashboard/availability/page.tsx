@@ -14,7 +14,7 @@ export default function AvailabilityPage() {
   return (
     <main className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Availability</h1>
+        <h1 className="text-3xl font-bold">Availability</h1>
         <p className="text-muted-foreground text-sm">
           When guests can book you. Bookings and buffers are subtracted automatically.
         </p>

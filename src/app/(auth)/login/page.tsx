@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { safeRedirectPath } from "@/lib/safe-redirect";
@@ -10,13 +11,14 @@ export const metadata: Metadata = { title: "Log in · MeetReady" };
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">Log in to MeetReady</h1>
-      <p className="mt-2 text-neutral-600 dark:text-neutral-400">
+      <Link href="/" className="font-display mb-10 text-xl font-bold tracking-tight">
+        MeetReady
+      </Link>
+      <h1 className="text-3xl font-bold">Log in</h1>
+      <p className="text-muted-foreground mt-2">
         Hosts sign in with Google. Guests booking a meeting don&apos;t need an account.
       </p>
-      <Suspense
-        fallback={<div className="mt-8 h-10 animate-pulse rounded-md bg-neutral-100 dark:bg-neutral-900" />}
-      >
+      <Suspense fallback={<div className="bg-muted mt-8 h-10 animate-pulse rounded-md" />}>
         <SignIn searchParams={searchParams} />
       </Suspense>
     </main>

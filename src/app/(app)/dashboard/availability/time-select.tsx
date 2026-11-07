@@ -13,7 +13,7 @@ export function TimeSelect({ kind, ...props }: { kind: "start" | "end" } & React
     <NativeSelect className="w-32 sm:w-36" {...props}>
       {(kind === "start" ? START_TIMES : END_TIMES).map((t) => (
         <option key={t} value={t}>
-          {t === "24:00" ? "12:00am (midnight)" : formatWallTime(t)}
+          {t === "24:00" ? "12:00 AM (midnight)" : formatWallTime(t)}
         </option>
       ))}
     </NativeSelect>

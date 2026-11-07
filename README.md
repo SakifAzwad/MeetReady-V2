@@ -43,6 +43,8 @@ npm run dev
   advisory lock, exclusion constraint), proven with deterministic race tests on real Postgres.
 - [Day 5: Emails, invites, cancel and reschedule](docs/day-05.md): hashed guest manage tokens, `.ics` invites
   (UID/SEQUENCE/METHOD), emails sent with `after()`, a migration that's safe on existing data.
+- [Day 6: Design, "Daylight"](docs/day-06.md): a design system where colour means time of day, the daylight
+  band (same code as slot generation), two timezones on one timeline, landing page and dashboard.
 
 ## Credits
 

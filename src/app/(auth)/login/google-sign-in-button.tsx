@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
 export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
@@ -26,16 +27,11 @@ export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
 
   return (
     <div className="mt-8 flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={signIn}
-        disabled={pending}
-        className="rounded-md border border-neutral-300 px-4 py-2 font-medium hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-      >
+      <Button type="button" size="lg" onClick={signIn} disabled={pending}>
         {pending ? "Redirecting to Google…" : "Continue with Google"}
-      </button>
+      </Button>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
       )}

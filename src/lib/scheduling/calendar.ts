@@ -43,9 +43,33 @@ export function monthGrid({ year, month }: YearMonth): (DateKey | null)[][] {
   return Array.from({ length: cells.length / 7 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
 }
 
-/** "3:00 PM" in the viewer's timezone. */
-export function formatTime(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(instant);
+/** "3:00 PM" (12-hour) or "15:00" (24-hour) in the viewer's timezone. */
+export function formatTime(instant: Date, timeZone: string, hour12 = true): string {
+  return new Intl.DateTimeFormat(hour12 ? "en-US" : "en-GB", {
+    hour: hour12 ? "numeric" : "2-digit",
+    minute: "2-digit",
+    hourCycle: hour12 ? "h12" : "h23",
+    timeZone,
+  }).format(instant);
+}
+
+/**
+ * A compact range: "3–11 AM", "9:30 AM–5 PM", "10 PM–12 AM", or "03:00–11:00".
+ * Whole hours drop ":00", and a shared AM/PM is written once.
+ */
+export function formatTimeRange(start: Date, end: Date, timeZone: string, hour12 = true): string {
+  if (!hour12) return `${formatTime(start, timeZone, false)}–${formatTime(end, timeZone, false)}`;
+  const parts = (d: Date) => {
+    // \s, not " ": newer ICU versions (some browsers) put a narrow no-break
+    // space (U+202F) between the time and AM/PM.
+    const [time, period] = formatTime(d, timeZone).split(/\s+/) as [string, string];
+    return { time: time.endsWith(":00") ? time.slice(0, -3) : time, period };
+  };
+  const a = parts(start);
+  const b = parts(end);
+  return a.period === b.period
+    ? `${a.time}–${b.time} ${b.period}`
+    : `${a.time} ${a.period}–${b.time} ${b.period}`;
 }
 
 /** "Monday, 9 November 2026" for a calendar date (formatted as a date, never shifted by a timezone). */

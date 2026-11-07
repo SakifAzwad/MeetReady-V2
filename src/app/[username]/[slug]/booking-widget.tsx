@@ -1,56 +1,57 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarCheck, ChevronLeft, ChevronRight, Globe } from "lucide-react";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { Globe } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { useForm, type Path } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, NativeSelect, Textarea } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/input";
 import {
-  addMonths,
   compareMonths,
   formatDateKey,
   formatMonth,
   formatTime,
-  monthGrid,
   monthRangeInZone,
   type YearMonth,
 } from "@/lib/scheduling/calendar";
-import { groupSlotsByDate } from "@/lib/scheduling/group-slots";
 import type { Slot } from "@/lib/scheduling/generate-slots";
+import { groupSlotsByDate } from "@/lib/scheduling/group-slots";
+import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
-import { guestDetailsSchema, type GuestDetailsForm } from "@/lib/validation/booking";
-import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
-import { bookSlotAction } from "./actions";
+import { DaylightBand } from "./daylight-band";
+import { FactsPanel, type EventInfo } from "./facts-panel";
+import { MonthCalendar } from "./month-calendar";
+import { useHour12 } from "@/components/daylight/preferences";
+import { Confirmation, GuestForm, RescheduleConfirm, type Booked } from "./steps";
+import { TimeList } from "./time-list";
+
+export type { EventInfo } from "./facts-panel";
+
+type Reschedule = {
+  token: string;
+  currentStartsAt: string;
+  currentEndsAt: string;
+  /** "Keep the current time": leave reschedule mode. */
+  onExit?: () => void;
+  /** After a successful move, e.g. to refresh the server-rendered details. */
+  onMoved?: () => void;
+};
 
 type Props = {
-  username: string;
-  slug: string;
-  hostName: string;
-  hostTimeZone: string;
-  locationLabel: string;
+  event: EventInfo;
   /** Reschedule mode (guest manage page): pick a new time for an existing booking. */
-  reschedule?: {
-    token: string;
-    currentStartsAt: string;
-    currentEndsAt: string;
-    /** "Keep the current time": leave reschedule mode. */
-    onExit?: () => void;
-    /** After a successful move, e.g. to refresh the server-rendered details. */
-    onMoved?: () => void;
-  };
+  reschedule?: Reschedule;
+  /** "embedded" drops the facts panel, for pages that show their own. */
+  layout?: "full" | "embedded";
 };
 
 const noSubscription = () => () => {};
 const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /**
- * TanStack Query is used only here: this is the one place the browser fetches
- * data itself (slots for whichever month/timezone the guest is looking at).
- * Created per widget instead of app-wide, because nothing else needs it.
+ * TanStack Query is used only here: the one place the browser fetches data
+ * itself (slots and the host's working windows for whichever month and
+ * timezone the guest is looking at). Created per widget, not app-wide.
  */
 export function BookingWidget(props: Props) {
   const [queryClient] = useState(
@@ -64,32 +65,71 @@ export function BookingWidget(props: Props) {
 }
 
 function Booking(props: Props) {
-  // The guest's timezone exists only in the browser. During server render and
-  // hydration this is null (a skeleton renders), then the real value: no
-  // hydration mismatch.
+  // The guest's timezone exists only in the browser: null during server render
+  // and hydration (a skeleton shows), then the real value. No hydration mismatch.
   const detected = useSyncExternalStore(noSubscription, browserTimeZone, () => null);
   const [chosen, setChosen] = useState<string | null>(null);
   const timeZone = chosen ?? detected;
 
-  if (!timeZone) return <WidgetSkeleton />;
+  if (!timeZone) return <Shell layout={props.layout} aside={null} main={<Skeleton />} />;
   return <Scheduler {...props} timeZone={timeZone} onTimeZoneChange={setChosen} />;
 }
 
-type Booked = { startsAt: Date; endsAt: Date };
+/** Facts panel on the left (full layout), the working area on the right. */
+function Shell({
+  layout = "full",
+  aside,
+  main,
+}: {
+  layout?: Props["layout"];
+  aside: React.ReactNode;
+  main: React.ReactNode;
+}) {
+  if (layout === "embedded") return <div className="p-6 md:p-8">{main}</div>;
+  return (
+    <div className="bg-card grid w-full max-w-6xl overflow-hidden rounded-2xl border shadow-[0_1px_2px_rgb(24_33_58/0.05),0_12px_40px_rgb(24_33_58/0.07)] md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+      {aside ?? <div className="hidden border-r md:block" />}
+      <div className="min-w-0 p-6 md:p-8">{main}</div>
+    </div>
+  );
+}
+
+type CalendarData = { slots: Slot[]; windows: Interval[] };
+
+async function fetchCalendar(
+  event: EventInfo,
+  from: Date,
+  to: Date,
+  rescheduleToken?: string,
+): Promise<CalendarData> {
+  const params = new URLSearchParams({
+    username: event.username,
+    slug: event.slug,
+    from: from.toISOString(),
+    to: to.toISOString(),
+  });
+  if (rescheduleToken) params.set("reschedule", rescheduleToken);
+  const res = await fetch(`/api/slots?${params}`);
+  if (!res.ok) throw new Error(`Slots request failed: ${res.status}`);
+  const body = (await res.json()) as {
+    slots: { start: string; end: string }[];
+    windows: { start: string; end: string }[];
+  };
+  const toInterval = (i: { start: string; end: string }) => ({
+    start: new Date(i.start),
+    end: new Date(i.end),
+  });
+  return { slots: body.slots.map(toInterval), windows: body.windows.map(toInterval) };
+}
 
 function Scheduler({
-  username,
-  slug,
-  hostName,
-  hostTimeZone,
-  locationLabel,
+  event,
   reschedule,
+  layout,
   timeZone,
   onTimeZoneChange,
-}: Props & {
-  timeZone: string;
-  onTimeZoneChange: (tz: string) => void;
-}) {
+}: Props & { timeZone: string; onTimeZoneChange: (tz: string) => void }) {
+  const [hour12, setHour12] = useHour12();
   const [now] = useState(() => new Date());
   const today = dateKeyInZone(now, timeZone);
   const thisMonth: YearMonth = { year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) };
@@ -98,485 +138,273 @@ function Scheduler({
   const visible = month ?? thisMonth;
   const [selectedDate, setSelectedDate] = useState<DateKey | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [step, setStep] = useState<"pick" | "details">("pick");
   const [booked, setBooked] = useState<Booked | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // The month as the GUEST sees it, turned into UTC instants for the API.
   const { from, to } = monthRangeInZone(visible, timeZone);
-  const slotsQuery = useQuery({
-    queryKey: ["slots", username, slug, from.toISOString(), to.toISOString(), reschedule?.token ?? null],
-    queryFn: () => fetchSlots(username, slug, from, to, reschedule?.token),
+  const calendar = useQuery({
+    queryKey: [
+      "calendar",
+      event.username,
+      event.slug,
+      from.toISOString(),
+      to.toISOString(),
+      reschedule?.token ?? null,
+    ],
+    queryFn: () => fetchCalendar(event, from, to, reschedule?.token),
   });
 
   const byDate = useMemo(
-    () => groupSlotsByDate(slotsQuery.data ?? [], timeZone),
-    [slotsQuery.data, timeZone],
+    () => groupSlotsByDate(calendar.data?.slots ?? [], timeZone),
+    [calendar.data, timeZone],
   );
-  const firstAvailable = [...byDate.keys()].sort()[0] ?? null;
   // Default to the first day with free times, so the guest sees options straight away.
+  const firstAvailable = [...byDate.keys()].sort()[0] ?? null;
   const activeDate = selectedDate && byDate.has(selectedDate) ? selectedDate : firstAvailable;
+
+  const aside =
+    layout === "embedded" ? null : <FactsPanel event={event} timeZone={timeZone} hour12={hour12} />;
+  const slotGone = () => {
+    setStep("pick");
+    setSelectedSlot(null);
+    setNotice("Someone just booked that time. Pick another one.");
+  };
 
   if (booked) {
     return (
-      <Confirmation
-        heading={reschedule ? "Your meeting has moved" : `You're booked with ${hostName}`}
-        booked={booked}
-        timeZone={timeZone}
-        hostName={hostName}
-        hostTimeZone={hostTimeZone}
-        locationLabel={locationLabel}
+      <Shell
+        layout={layout}
+        aside={aside}
+        main={
+          <Confirmation
+            heading={
+              reschedule ? "Your meeting has moved" : `You're booked with ${event.hostName.split(" ")[0]}`
+            }
+            booked={booked}
+            timeZone={timeZone}
+            hour12={hour12}
+            hostName={event.hostName}
+            hostTimeZone={event.hostTimeZone}
+            locationLabel={event.locationLabel}
+          />
+        }
       />
     );
   }
 
-  if (selectedSlot && reschedule) {
+  if (step === "details" && selectedSlot) {
     return (
-      <RescheduleConfirm
-        slot={selectedSlot}
-        timeZone={timeZone}
-        reschedule={reschedule}
-        onBack={() => setSelectedSlot(null)}
-        onMoved={setBooked}
-        onSlotGone={() => {
-          setSelectedSlot(null);
-          setNotice("Sorry, someone just booked that time. Please pick another.");
-        }}
-        onNotChangeable={() => {
-          setSelectedSlot(null);
-          setNotice(
-            "This booking can't be changed any more (cancelled or already started). Reload the page.",
-          );
-        }}
-      />
-    );
-  }
-
-  if (selectedSlot) {
-    return (
-      <GuestForm
-        slot={selectedSlot}
-        timeZone={timeZone}
-        username={username}
-        slug={slug}
-        onBack={() => setSelectedSlot(null)}
-        onBooked={setBooked}
-        onSlotGone={() => {
-          setSelectedSlot(null);
-          setNotice("Sorry, someone just booked that time. Please pick another.");
-        }}
-      />
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6 p-6">
-      <h2 className="text-lg font-semibold">{reschedule ? "Pick a new time" : "Select a date and time"}</h2>
-      {reschedule && (
-        <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 text-sm">
-          <p>
-            Currently: {formatDateKey(dateKeyInZone(new Date(reschedule.currentStartsAt), timeZone))},{" "}
-            {formatTime(new Date(reschedule.currentStartsAt), timeZone)}
-          </p>
-          {reschedule.onExit && (
-            <Button variant="link" size="sm" className="h-auto px-0" onClick={reschedule.onExit}>
-              Keep the current time
-            </Button>
-          )}
-        </div>
-      )}
-      {notice && (
-        <p
-          role="alert"
-          className="border-destructive/30 bg-destructive/5 rounded-md border px-3 py-2 text-sm"
-        >
-          {notice}
-        </p>
-      )}
-
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_200px]">
-        <MonthCalendar
-          month={visible}
-          today={today}
-          canGoBack={compareMonths(visible, thisMonth) > 0}
-          onMonthChange={(m) => {
-            setMonth(m);
-            setSelectedDate(null);
-          }}
-          availableDates={byDate}
-          activeDate={activeDate}
-          onSelect={(d) => {
-            setSelectedDate(d);
-            setNotice(null);
-          }}
-          loading={slotsQuery.isPending}
-        />
-
-        <div className="flex flex-col gap-3">
-          {slotsQuery.isError ? (
-            <div className="text-sm">
-              <p className="text-destructive">Couldn&apos;t load times.</p>
-              <Button variant="link" className="px-0" onClick={() => slotsQuery.refetch()}>
-                Try again
-              </Button>
-            </div>
-          ) : slotsQuery.isPending ? (
-            <div className="bg-muted h-40 animate-pulse rounded-md" />
-          ) : activeDate ? (
-            <>
-              <h3 className="text-sm font-medium">{formatDateKey(activeDate, "short")}</h3>
-              <ul
-                className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1"
-                aria-label={`Times on ${formatDateKey(activeDate)}`}
-              >
-                {byDate.get(activeDate)!.map((slot) => (
-                  <li key={slot.start.toISOString()}>
-                    <Button
-                      variant="outline"
-                      className="border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground w-full"
-                      onClick={() => setSelectedSlot(slot)}
-                    >
-                      {formatTime(slot.start, timeZone)}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </>
+      <Shell
+        layout={layout}
+        aside={aside}
+        main={
+          reschedule ? (
+            <RescheduleConfirm
+              slot={selectedSlot}
+              timeZone={timeZone}
+              hour12={hour12}
+              token={reschedule.token}
+              currentStartsAt={reschedule.currentStartsAt}
+              currentEndsAt={reschedule.currentEndsAt}
+              onBack={() => setStep("pick")}
+              onMoved={(b) => {
+                setBooked(b);
+                reschedule.onMoved?.();
+              }}
+              onSlotGone={slotGone}
+              onNotChangeable={() => {
+                setStep("pick");
+                setNotice(
+                  "This booking can't be changed any more (cancelled or already started). Reload the page.",
+                );
+              }}
+            />
           ) : (
-            <p className="text-muted-foreground text-sm">
-              No free times in {formatMonth(visible)}. Try the next month.
+            <GuestForm
+              slot={selectedSlot}
+              timeZone={timeZone}
+              hour12={hour12}
+              username={event.username}
+              slug={event.slug}
+              onBack={() => setStep("pick")}
+              onBooked={setBooked}
+              onSlotGone={slotGone}
+            />
+          )
+        }
+      />
+    );
+  }
+
+  const daySlots = activeDate ? (byDate.get(activeDate) ?? []) : [];
+  return (
+    <Shell
+      layout={layout}
+      aside={aside}
+      main={
+        <div className="flex flex-col gap-6">
+          {reschedule && (
+            <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-3 text-sm">
+              <p>
+                Moving your meeting from{" "}
+                {formatDateKey(dateKeyInZone(new Date(reschedule.currentStartsAt), timeZone))},{" "}
+                {formatTime(new Date(reschedule.currentStartsAt), timeZone, hour12)}.
+              </p>
+              {reschedule.onExit && (
+                <Button variant="link" size="sm" className="h-auto px-0" onClick={reschedule.onExit}>
+                  Keep the current time
+                </Button>
+              )}
+            </div>
+          )}
+
+          {activeDate && calendar.data ? (
+            <DaylightBand
+              windows={calendar.data.windows}
+              day={activeDate}
+              timeZone={timeZone}
+              hostTimeZone={event.hostTimeZone}
+              hostName={event.hostName}
+              hour12={hour12}
+            />
+          ) : (
+            <div aria-hidden className="bg-muted h-[7.5rem] animate-pulse rounded-xl" />
+          )}
+
+          {notice && (
+            <p
+              role="alert"
+              className="border-destructive/30 bg-destructive/5 rounded-lg border px-3 py-2 text-sm"
+            >
+              {notice}
             </p>
           )}
+
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+            <MonthCalendar
+              month={visible}
+              today={today}
+              canGoBack={compareMonths(visible, thisMonth) > 0}
+              onMonthChange={(m) => {
+                setMonth(m);
+                setSelectedDate(null);
+                setSelectedSlot(null);
+              }}
+              availableDates={byDate}
+              activeDate={activeDate}
+              onSelect={(d) => {
+                setSelectedDate(d);
+                setSelectedSlot(null);
+                setNotice(null);
+              }}
+              loading={calendar.isPending}
+            />
+
+            <div className="flex min-w-0 flex-col gap-2">
+              <h3 className="text-lg font-semibold">
+                {activeDate ? formatDateKey(activeDate) : formatMonth(visible)}
+              </h3>
+              {calendar.isError ? (
+                <div className="text-sm">
+                  <p className="text-destructive">Couldn&apos;t load times.</p>
+                  <Button variant="link" className="px-0" onClick={() => calendar.refetch()}>
+                    Try again
+                  </Button>
+                </div>
+              ) : calendar.isPending ? (
+                <div className="bg-muted h-60 animate-pulse rounded-lg" />
+              ) : activeDate ? (
+                <TimeList
+                  label={`Times on ${formatDateKey(activeDate)}`}
+                  slots={daySlots}
+                  timeZone={timeZone}
+                  hostTimeZone={event.hostTimeZone}
+                  hour12={hour12}
+                  selected={selectedSlot}
+                  onSelect={setSelectedSlot}
+                  onContinue={(slot) => {
+                    setSelectedSlot(slot);
+                    setStep("details");
+                  }}
+                />
+              ) : (
+                <p className="text-muted-foreground">
+                  No free times in {formatMonth(visible)}. Try the next month.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DisplayOptions
+            timeZone={timeZone}
+            onTimeZoneChange={onTimeZoneChange}
+            hour12={hour12}
+            onHour12Change={setHour12}
+          />
         </div>
-      </div>
-
-      <TimeZonePicker value={timeZone} onChange={onTimeZoneChange} />
-    </div>
-  );
-}
-
-async function fetchSlots(
-  username: string,
-  slug: string,
-  from: Date,
-  to: Date,
-  rescheduleToken?: string,
-): Promise<Slot[]> {
-  const params = new URLSearchParams({ username, slug, from: from.toISOString(), to: to.toISOString() });
-  if (rescheduleToken) params.set("reschedule", rescheduleToken);
-  const res = await fetch(`/api/slots?${params}`);
-  if (!res.ok) throw new Error(`Slots request failed: ${res.status}`);
-  const body = (await res.json()) as { slots: { start: string; end: string }[] };
-  return body.slots.map((s) => ({ start: new Date(s.start), end: new Date(s.end) }));
-}
-
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-function MonthCalendar({
-  month,
-  today,
-  canGoBack,
-  onMonthChange,
-  availableDates,
-  activeDate,
-  onSelect,
-  loading,
-}: {
-  month: YearMonth;
-  today: DateKey;
-  canGoBack: boolean;
-  onMonthChange: (m: YearMonth) => void;
-  availableDates: Map<DateKey, Slot[]>;
-  activeDate: DateKey | null;
-  onSelect: (d: DateKey) => void;
-  loading: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <p className="font-medium" aria-live="polite">
-          {formatMonth(month)}
-        </p>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Previous month"
-            disabled={!canGoBack}
-            onClick={() => onMonthChange(addMonths(month, -1))}
-          >
-            <ChevronLeft />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Next month"
-            onClick={() => onMonthChange(addMonths(month, 1))}
-          >
-            <ChevronRight />
-          </Button>
-        </div>
-      </div>
-      <table className={cn("w-full table-fixed text-center text-sm", loading && "animate-pulse")}>
-        <thead>
-          <tr>
-            {WEEKDAYS.map((d) => (
-              <th key={d} scope="col" className="text-muted-foreground pb-2 text-xs font-medium">
-                {d}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {monthGrid(month).map((week, w) => (
-            <tr key={w}>
-              {week.map((day, i) => {
-                if (!day) return <td key={i} />;
-                const count = availableDates.get(day)?.length ?? 0;
-                const isActive = day === activeDate;
-                return (
-                  <td key={day} className="p-0.5">
-                    <button
-                      type="button"
-                      disabled={count === 0}
-                      aria-pressed={isActive}
-                      aria-label={`${formatDateKey(day)}, ${count === 0 ? "no times" : `${count} time${count === 1 ? "" : "s"} available`}`}
-                      onClick={() => onSelect(day)}
-                      className={cn(
-                        "focus-visible:ring-ring/50 mx-auto flex aspect-square w-full max-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-[3px]",
-                        count === 0 && "text-muted-foreground/60 cursor-default",
-                        count > 0 &&
-                          !isActive &&
-                          "bg-primary/10 text-primary hover:bg-primary/20 font-semibold",
-                        isActive && "bg-primary text-primary-foreground font-semibold",
-                        day === today && !isActive && "underline underline-offset-4",
-                      )}
-                    >
-                      {Number(day.slice(8))}
-                    </button>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TimeZonePicker({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
-  const zones = useMemo(
-    () => [...new Set(["UTC", value, ...Intl.supportedValuesOf("timeZone")])].sort(),
-    [value],
-  );
-  return (
-    <div className="flex max-w-sm flex-col gap-2">
-      <label htmlFor="guest-timezone" className="flex items-center gap-2 text-sm font-medium">
-        <Globe className="size-4" /> Times shown in
-      </label>
-      <NativeSelect id="guest-timezone" value={value} onChange={(e) => onChange(e.target.value)}>
-        {zones.map((tz) => (
-          <option key={tz} value={tz}>
-            {tz.replaceAll("_", " ")}
-          </option>
-        ))}
-      </NativeSelect>
-    </div>
-  );
-}
-
-function GuestForm({
-  slot,
-  timeZone,
-  username,
-  slug,
-  onBack,
-  onBooked,
-  onSlotGone,
-}: {
-  slot: Slot;
-  timeZone: string;
-  username: string;
-  slug: string;
-  onBack: () => void;
-  onBooked: (b: Booked) => void;
-  onSlotGone: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [formError, setFormError] = useState<string | null>(null);
-  const form = useForm<GuestDetailsForm>({
-    resolver: zodResolver(guestDetailsSchema),
-    defaultValues: { guestName: "", guestEmail: "", guestNotes: "" },
-    mode: "onTouched",
-  });
-  const { register, formState, setError } = form;
-
-  const onSubmit = form.handleSubmit(async () => {
-    setFormError(null);
-    const result = await bookSlotAction({
-      ...form.getValues(), // raw values: the server parses them with the same schema
-      username,
-      slug,
-      startsAt: slot.start.toISOString(),
-      guestTimeZone: timeZone,
-    });
-    // Either way the free times have changed: refetch them.
-    await queryClient.invalidateQueries({ queryKey: ["slots", username, slug] });
-
-    if (result.ok) {
-      onBooked({ startsAt: new Date(result.booking.startsAt), endsAt: new Date(result.booking.endsAt) });
-    } else if (result.error === "slot_unavailable") {
-      onSlotGone();
-    } else if (result.error === "invalid") {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        if (messages?.[0]) setError(field as Path<GuestDetailsForm>, { message: messages[0] });
       }
-    } else {
-      setFormError("This event type isn't available any more.");
-    }
-  });
+    />
+  );
+}
 
-  const day = dateKeyInZone(slot.start, timeZone);
+function DisplayOptions({
+  timeZone,
+  onTimeZoneChange,
+  hour12,
+  onHour12Change,
+}: {
+  timeZone: string;
+  onTimeZoneChange: (tz: string) => void;
+  hour12: boolean;
+  onHour12Change: (v: boolean) => void;
+}) {
+  const zones = useMemo(
+    () => [...new Set(["UTC", timeZone, ...Intl.supportedValuesOf("timeZone")])].sort(),
+    [timeZone],
+  );
   return (
-    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5 p-6">
-      <Button type="button" variant="ghost" size="sm" className="self-start" onClick={onBack}>
-        <ArrowLeft /> Back
-      </Button>
-      <div>
-        <h2 className="text-lg font-semibold">Your details</h2>
-        <p className="text-muted-foreground text-sm">
-          {formatDateKey(day)}, {formatTime(slot.start, timeZone)} – {formatTime(slot.end, timeZone)} (
-          {timeZone.replaceAll("_", " ")})
-        </p>
+    <div className="flex flex-wrap items-end gap-4 border-t pt-5">
+      <div className="flex max-w-xs flex-1 flex-col gap-2">
+        <label htmlFor="guest-timezone" className="flex items-center gap-2 text-sm font-medium">
+          <Globe className="size-4" /> Times shown in
+        </label>
+        <NativeSelect id="guest-timezone" value={timeZone} onChange={(e) => onTimeZoneChange(e.target.value)}>
+          {zones.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz.replaceAll("_", " ")}
+            </option>
+          ))}
+        </NativeSelect>
       </div>
-      <Field id="guestName" label="Name" error={formState.errors.guestName?.message}>
-        {(aria) => <Input {...aria} autoComplete="name" {...register("guestName")} />}
-      </Field>
-      <Field id="guestEmail" label="Email" error={formState.errors.guestEmail?.message}>
-        {(aria) => <Input {...aria} type="email" autoComplete="email" {...register("guestEmail")} />}
-      </Field>
-      <Field
-        id="guestNotes"
-        label="Anything to share before the meeting?"
-        hint="Optional"
-        error={formState.errors.guestNotes?.message}
-      >
-        {(aria) => <Textarea {...aria} rows={3} {...register("guestNotes")} />}
-      </Field>
-      {formError && (
-        <p role="alert" className="text-destructive text-sm">
-          {formError}
-        </p>
-      )}
-      <Button type="submit" disabled={formState.isSubmitting} className="self-start">
-        {formState.isSubmitting ? "Booking…" : "Confirm booking"}
-      </Button>
-    </form>
-  );
-}
-
-function Confirmation({
-  heading,
-  booked,
-  timeZone,
-  hostName,
-  hostTimeZone,
-  locationLabel,
-}: {
-  heading: string;
-  booked: Booked;
-  timeZone: string;
-  hostName: string;
-  hostTimeZone: string;
-  locationLabel: string;
-}) {
-  const day = dateKeyInZone(booked.startsAt, timeZone);
-  const sameZone = timeZone === hostTimeZone;
-  return (
-    <div role="status" className="flex flex-col items-center gap-4 p-10 text-center">
-      <CalendarCheck className="text-primary size-10" />
-      <h2 className="text-xl font-semibold">{heading}</h2>
-      <p>
-        {formatDateKey(day)}
-        <br />
-        {formatTime(booked.startsAt, timeZone)} – {formatTime(booked.endsAt, timeZone)} (
-        {timeZone.replaceAll("_", " ")})
-      </p>
-      {!sameZone && (
-        <p className="text-muted-foreground text-sm">
-          That&apos;s {formatTime(booked.startsAt, hostTimeZone)} for {hostName.split(" ")[0]} (
-          {hostTimeZone.replaceAll("_", " ")}).
-        </p>
-      )}
-      <p className="text-muted-foreground text-sm">Location: {locationLabel}</p>
+      <div role="radiogroup" aria-label="Clock format" className="flex rounded-lg border p-0.5">
+        {[true, false].map((value) => (
+          <button
+            key={String(value)}
+            type="button"
+            role="radio"
+            aria-checked={hour12 === value}
+            onClick={() => onHour12Change(value)}
+            className={cn(
+              "focus-visible:ring-ring/50 rounded-md px-3 py-1.5 text-sm font-medium outline-none focus-visible:ring-[3px]",
+              hour12 === value
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {value ? "12h" : "24h"}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
-function RescheduleConfirm({
-  slot,
-  timeZone,
-  reschedule,
-  onBack,
-  onMoved,
-  onSlotGone,
-  onNotChangeable,
-}: {
-  slot: Slot;
-  timeZone: string;
-  reschedule: NonNullable<Props["reschedule"]>;
-  onBack: () => void;
-  onMoved: (b: Booked) => void;
-  onSlotGone: () => void;
-  onNotChangeable: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [pending, setPending] = useState(false);
-  const current = new Date(reschedule.currentStartsAt);
-
-  async function confirm() {
-    setPending(true);
-    const result = await rescheduleByTokenAction({
-      token: reschedule.token,
-      startsAt: slot.start.toISOString(),
-    });
-    await queryClient.invalidateQueries({ queryKey: ["slots"] });
-    setPending(false);
-    if (result.ok) {
-      onMoved({ startsAt: slot.start, endsAt: slot.end });
-      reschedule.onMoved?.();
-    } else if (result.error === "slot_unavailable") onSlotGone();
-    else onNotChangeable();
-  }
-
+function Skeleton() {
   return (
-    <div className="flex flex-col gap-5 p-6">
-      <Button type="button" variant="ghost" size="sm" className="self-start" onClick={onBack}>
-        <ArrowLeft /> Back
-      </Button>
-      <h2 className="text-lg font-semibold">Move your meeting?</h2>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        <dt className="text-muted-foreground">From</dt>
-        <dd className="line-through">
-          {formatDateKey(dateKeyInZone(current, timeZone))}, {formatTime(current, timeZone)}
-        </dd>
-        <dt className="text-muted-foreground">To</dt>
-        <dd className="font-medium">
-          {formatDateKey(dateKeyInZone(slot.start, timeZone))}, {formatTime(slot.start, timeZone)} –{" "}
-          {formatTime(slot.end, timeZone)}
-        </dd>
-      </dl>
-      <Button onClick={confirm} disabled={pending} className="self-start">
-        {pending ? "Moving…" : "Confirm new time"}
-      </Button>
-    </div>
-  );
-}
-
-function WidgetSkeleton() {
-  return (
-    <div className="flex flex-col gap-6 p-6" aria-busy="true">
-      <div className="bg-muted h-6 w-56 animate-pulse rounded" />
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <div className="bg-muted h-[7.5rem] animate-pulse rounded-xl" />
       <div className="bg-muted h-72 animate-pulse rounded-lg" />
     </div>
   );

@@ -2,12 +2,12 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { slotsQuerySchema } from "@/lib/validation/booking";
-import { getBookableSlots, getPublicEventType } from "@/server/booking";
+import { getBookingCalendar, getPublicEventType } from "@/server/booking";
 import { getBookingByToken } from "@/server/manage-booking";
 
 /**
  * GET /api/slots?username=sakif&slug=intro&from=<ISO>&to=<ISO>
- * -> { slots: [{ start, end }] } as UTC ISO strings.
+ * -> { slots: [{ start, end }], windows: [{ start, end }] } as UTC ISO strings.
  *
  * A route handler, not a server action: reads should be GET (cacheable,
  * can run in parallel, safe to retry). Server actions are POST and queue
@@ -32,11 +32,13 @@ export async function GET(request: NextRequest) {
     if (own && own.eventTypeId === eventType.id && own.status === "confirmed") excludeBookingId = own.id;
   }
 
-  const slots = await getBookableSlots(db, eventType, { start: from, end: to }, new Date(), {
+  const { slots, windows } = await getBookingCalendar(db, eventType, { start: from, end: to }, new Date(), {
     excludeBookingId,
   });
+  const iso = (i: { start: Date; end: Date }) => ({ start: i.start.toISOString(), end: i.end.toISOString() });
   return Response.json(
-    { slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })) },
+    // windows: the host's working hours (for the daylight band), not free time.
+    { slots: slots.map(iso), windows: windows.map(iso) },
     // Availability changes with every booking; never serve a stale copy.
     { headers: { "Cache-Control": "no-store" } },
   );

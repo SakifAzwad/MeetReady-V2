@@ -17,6 +17,8 @@ type Props = {
   hostName: string;
   hostTimeZone: string;
   locationLabel: string;
+  title: string;
+  durationMinutes: number;
   currentStartsAt: string;
   currentEndsAt: string;
 };
@@ -37,11 +39,17 @@ export function ManageBooking(props: Props) {
   if (mode === "reschedule") {
     return (
       <BookingWidget
-        username={props.username}
-        slug={props.slug}
-        hostName={props.hostName}
-        hostTimeZone={props.hostTimeZone}
-        locationLabel={props.locationLabel}
+        layout="embedded"
+        event={{
+          username: props.username,
+          slug: props.slug,
+          title: props.title,
+          description: null,
+          durationMinutes: props.durationMinutes,
+          hostName: props.hostName,
+          hostTimeZone: props.hostTimeZone,
+          locationLabel: props.locationLabel,
+        }}
         reschedule={{
           token: props.token,
           currentStartsAt: props.currentStartsAt,

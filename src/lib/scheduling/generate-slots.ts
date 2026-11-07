@@ -69,19 +69,8 @@ export function generateSlots(input: SlotGenerationInput): Slot[] {
   const duration = eventType.durationMinutes;
   const step = eventType.slotIntervalMinutes ?? duration;
 
-  // 1. Host-calendar days to look at. One extra day before the range so a
-  //    window that runs past midnight into the range is still seen whole.
-  const firstDay = addDaysToKey(dateKeyInZone(range.start, tz), -1);
-  const lastDay = dateKeyInZone(range.end, tz);
-  const days = eachDay(firstDay, lastDay);
-
-  // 2. Each day's availability windows -> UTC instants, then merge.
-  //    Merging handles overlapping rules and windows that continue over midnight.
-  const overridesByDate = groupBy(host.dateOverrides, (o) => o.date);
-  const rawWindows: Interval[] = days.flatMap((day) =>
-    windowsForDay(day, tz, host.weeklyRules, overridesByDate.get(day)),
-  );
-  const windows = mergeIntervals(rawWindows);
+  // 1–2. The host's availability windows around the range, as UTC instants.
+  const windows = availabilityWindows(range, host);
 
   // 3. Limits that don't depend on the individual slot.
   const earliestStart = addMinutes(now, eventType.minimumNoticeMinutes);
@@ -114,6 +103,27 @@ export function generateSlots(input: SlotGenerationInput): Slot[] {
     }
   }
   return slots;
+}
+
+/**
+ * The host's working windows (weekly rules, with date overrides applied) that
+ * touch `range`, as merged UTC intervals. Bookings are NOT subtracted: this is
+ * "when does the host work", used by generateSlots and by the booking page's
+ * daylight band, so the two can never disagree.
+ */
+export function availabilityWindows(range: Interval, host: SlotGenerationInput["host"]): Interval[] {
+  const tz = host.timeZone;
+  // Host-calendar days to look at. One extra day before the range so a
+  // window that runs past midnight into the range is still seen whole.
+  const firstDay = addDaysToKey(dateKeyInZone(range.start, tz), -1);
+  const lastDay = dateKeyInZone(range.end, tz);
+  const overridesByDate = groupBy(host.dateOverrides, (o) => o.date);
+  // Merging handles overlapping rules and windows that continue over midnight.
+  return mergeIntervals(
+    eachDay(firstDay, lastDay).flatMap((day) =>
+      windowsForDay(day, tz, host.weeklyRules, overridesByDate.get(day)),
+    ),
+  ).filter((w) => w.end > range.start && w.start < range.end);
 }
 
 function windowsForDay(

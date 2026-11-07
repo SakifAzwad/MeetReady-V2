@@ -13,7 +13,7 @@ export default function DashboardLayout({ children }: LayoutProps<"/dashboard">)
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-4 sm:gap-6 sm:px-6">
-          <Link href="/dashboard" className="hidden font-semibold tracking-tight sm:block">
+          <Link href="/dashboard" className="font-display hidden text-lg font-bold tracking-tight sm:block">
             MeetReady
           </Link>
           <Suspense fallback={<NavLinks pathname={null} />}>

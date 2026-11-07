@@ -45,6 +45,8 @@ npm run dev
   (UID/SEQUENCE/METHOD), emails sent with `after()`, a migration that's safe on existing data.
 - [Day 6: Design, "Daylight"](docs/day-06.md): a design system where colour means time of day, the daylight
   band (same code as slot generation), two timezones on one timeline, landing page and dashboard.
+- [Day 7: Brand, landing page and motion](docs/day-07.md): a logo built from the band, icons and link
+  previews, a full landing page, account menu, 404/error pages, and view transitions that explain each change.
 
 ## Credits
 

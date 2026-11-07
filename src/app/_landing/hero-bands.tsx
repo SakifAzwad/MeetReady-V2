@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
  * The host is illustrative (not read from the database), but the maths is the
  * real thing: availabilityWindows is what generateSlots uses for bookings.
  */
-const HOST = {
+export const HOST = {
   name: "Sakif",
   timeZone: "Asia/Dhaka",
   weeklyRules: [1, 2, 3, 4, 5].map((dayOfWeek) => ({ dayOfWeek, startTime: "09:00", endTime: "17:00" })),
@@ -43,7 +43,7 @@ const STARTS: Record<PartOfDay, string> = {
 };
 
 /** The browser's timezone; null on the server, so nothing guesses a zone. */
-function useBrowserZone(): string | null {
+export function useBrowserZone(): string | null {
   return useSyncExternalStore(
     () => () => {},
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,

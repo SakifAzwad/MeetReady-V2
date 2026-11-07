@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 import { Badge, Card } from "@/components/ui/card";
 import { db } from "@/db";
 import { cityName } from "@/lib/scheduling/daylight";
@@ -10,8 +10,9 @@ import { cn } from "@/lib/utils";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { listHostBookings, type BookingsView, type HostBookingRow } from "@/server/manage-booking";
 import { CancelBookingButton } from "./cancel-booking-button";
+import { PageTransition } from "@/components/motion";
 
-export const metadata: Metadata = { title: "Bookings · MeetReady" };
+export const metadata: Metadata = { title: "Bookings" };
 
 const VIEWS: { view: BookingsView; label: string }[] = [
   { view: "upcoming", label: "Upcoming" },
@@ -23,17 +24,19 @@ type SearchParams = PageProps<"/dashboard/bookings">["searchParams"];
 
 export default function BookingsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <main className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold">Bookings</h1>
-        <p className="text-muted-foreground text-sm">
-          Meetings guests have booked with you, in your timezone.
-        </p>
-      </div>
-      <Suspense fallback={<div className="bg-muted h-64 animate-pulse rounded-xl" />}>
-        <BookingsList searchParams={searchParams} />
-      </Suspense>
-    </main>
+    <PageTransition>
+      <main className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-3xl font-bold">Bookings</h1>
+          <p className="text-muted-foreground text-sm">
+            Meetings guests have booked with you, in your timezone.
+          </p>
+        </div>
+        <Suspense fallback={<div className="bg-muted h-64 animate-pulse rounded-xl" />}>
+          <BookingsList searchParams={searchParams} />
+        </Suspense>
+      </main>
+    </PageTransition>
   );
 }
 
@@ -53,11 +56,17 @@ async function BookingsList({ searchParams }: { searchParams: SearchParams }) {
             href={`/dashboard/bookings?view=${v.view}`}
             aria-current={v.view === view ? "page" : undefined}
             className={cn(
-              "text-muted-foreground hover:text-foreground -mb-px border-b-2 px-3 py-2 text-sm",
-              v.view === view ? "border-primary text-foreground font-medium" : "border-transparent",
+              "relative -mb-px px-3 py-2 text-sm transition-colors",
+              v.view === view ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {v.label}
+            {/* One shared underline that slides to the chosen tab (same idea as the dashboard nav). */}
+            {v.view === view && (
+              <ViewTransition name="bookings-tab-underline" share="morph" default="none">
+                <span aria-hidden className="bg-primary absolute inset-x-0 bottom-0 h-0.5 rounded-full" />
+              </ViewTransition>
+            )}
           </Link>
         ))}
       </nav>

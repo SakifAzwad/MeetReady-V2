@@ -25,12 +25,16 @@ export function FactsPanel({
   event,
   timeZone,
   hour12,
+  titleAs = "h1",
 }: {
   event: EventInfo;
   timeZone: string;
   hour12: boolean;
+  /** "h2" when the panel is embedded in another page that has its own h1 (the landing page preview). */
+  titleAs?: "h1" | "h2" | "h3";
 }) {
   const now = useMinuteClock();
+  const Title = titleAs;
   const firstName = event.hostName.split(" ")[0];
   const sameZone = timeZone === event.hostTimeZone;
 
@@ -45,7 +49,7 @@ export function FactsPanel({
         </span>
         <span className="font-medium">{event.hostName}</span>
       </div>
-      <h1 className="text-4xl leading-none font-bold md:text-[2.75rem]">{event.title}</h1>
+      <Title className="text-4xl leading-none font-bold md:text-[2.75rem]">{event.title}</Title>
 
       <dl className="border-foreground border-t-[1.5px] text-sm">
         <Fact term="Length" value={formatMinutes(event.durationMinutes)} />

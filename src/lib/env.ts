@@ -18,6 +18,8 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   /** Resend's shared test sender only delivers to your own Resend account email; use a verified domain in production. */
   EMAIL_FROM: z.string().min(3).default("MeetReady <onboarding@resend.dev>"),
+  /** Optional: a real booking page to link from the landing page, e.g. "/sakif/intro". */
+  DEMO_BOOKING_PATH: z.preprocess((v) => (v === "" ? undefined : v), z.string().startsWith("/").optional()),
 });
 
 export const env = envSchema.parse(process.env);

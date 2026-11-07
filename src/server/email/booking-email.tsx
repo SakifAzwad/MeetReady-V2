@@ -47,26 +47,47 @@ export function bookingEmailHeading(p: BookingEmailProps): string {
   return p.cancelledBy === "host" ? `${host} cancelled your meeting` : "Your meeting is cancelled";
 }
 
+// The Daylight palette, as plain hex: email clients don't support CSS variables.
+// Web fonts are unreliable in email, so a system stack stands in for Figtree.
+const INK = "#1d2540";
+const MUTED = "#5d6680";
 const styles = {
   body: {
-    backgroundColor: "#f5f5f5",
-    fontFamily: "Helvetica, Arial, sans-serif",
+    backgroundColor: "#f5f7fb",
+    color: INK,
+    fontFamily: "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
     margin: 0,
     padding: "24px 0",
   },
-  card: { backgroundColor: "#ffffff", borderRadius: 12, margin: "0 auto", maxWidth: 520, padding: 32 },
-  heading: { fontSize: 22, margin: "0 0 16px" },
-  label: { color: "#737373", fontSize: 12, margin: "16px 0 2px", textTransform: "uppercase" as const },
-  value: { fontSize: 15, margin: 0 },
-  old: { color: "#737373", fontSize: 14, margin: "4px 0 0", textDecoration: "line-through" },
+  brand: {
+    color: INK,
+    fontSize: 16,
+    fontWeight: 700,
+    margin: "0 auto 12px",
+    maxWidth: 520,
+    padding: "0 4px",
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    border: "1px solid #e2e6ef",
+    borderRadius: 12,
+    margin: "0 auto",
+    maxWidth: 520,
+    padding: 32,
+  },
+  heading: { color: INK, fontSize: 24, letterSpacing: "-0.01em", margin: "0 0 8px" },
+  label: { color: MUTED, fontSize: 13, margin: "18px 0 2px" },
+  value: { color: INK, fontSize: 16, margin: 0 },
+  old: { color: MUTED, fontSize: 14, margin: "4px 0 0", textDecoration: "line-through" },
   button: {
-    backgroundColor: "#2b4dd8",
+    backgroundColor: INK,
     borderRadius: 8,
     color: "#ffffff",
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: 600,
     padding: "12px 20px",
   },
-  footer: { color: "#a3a3a3", fontSize: 12, marginTop: 24 },
+  footer: { color: MUTED, fontSize: 12, marginTop: 24 },
 };
 
 export function BookingEmail(p: BookingEmailProps) {
@@ -77,6 +98,7 @@ export function BookingEmail(p: BookingEmailProps) {
       <Head />
       <Preview>{`${heading}: ${p.eventTitle}, ${p.when}`}</Preview>
       <Body style={styles.body}>
+        <Text style={styles.brand}>MeetReady</Text>
         <Container style={styles.card}>
           <Heading style={styles.heading}>{heading}</Heading>
 
@@ -133,7 +155,7 @@ export function BookingEmail(p: BookingEmailProps) {
             </Section>
           )}
 
-          <Hr style={{ borderColor: "#e5e5e5", marginTop: 28 }} />
+          <Hr style={{ borderColor: "#e2e6ef", marginTop: 28 }} />
           <Text style={styles.footer}>
             {cancelled
               ? "The calendar invite attached removes this event from your calendar."

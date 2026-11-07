@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Badge, Card } from "@/components/ui/card";
 import { db } from "@/db";
-import { formatDateKey, formatTime } from "@/lib/scheduling/calendar";
+import { cityName } from "@/lib/scheduling/daylight";
+import { formatDateKey, formatTime, formatTimeRange } from "@/lib/scheduling/calendar";
 import { dateKeyInZone } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
 import { requireOnboardedUser } from "@/server/auth/session";
@@ -24,7 +25,7 @@ export default function BookingsPage({ searchParams }: { searchParams: SearchPar
   return (
     <main className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Bookings</h1>
+        <h1 className="text-3xl font-bold">Bookings</h1>
         <p className="text-muted-foreground text-sm">
           Meetings guests have booked with you, in your timezone.
         </p>
@@ -106,18 +107,20 @@ function BookingRow({
           <p className={cn("font-medium", view === "cancelled" && "line-through")}>
             {formatDateKey(day, "short")}
           </p>
-          <p className="text-muted-foreground text-sm">
-            {formatTime(b.startsAt, timeZone)} – {formatTime(b.endsAt, timeZone)}
+          <p className="text-muted-foreground tabular text-sm">
+            {formatTimeRange(b.startsAt, b.endsAt, timeZone)}
           </p>
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-medium">
             {b.eventTitle} with {b.guestName}
           </p>
-          <p className="text-muted-foreground truncate text-sm">
-            {b.guestEmail} · their time: {formatTime(b.startsAt, b.guestTimeZone)} (
-            {b.guestTimeZone.replaceAll("_", " ")})
-          </p>
+          <p className="text-muted-foreground truncate text-sm">{b.guestEmail}</p>
+          {b.guestTimeZone !== timeZone && (
+            <p className="text-muted-foreground text-sm">
+              {formatTime(b.startsAt, b.guestTimeZone)} for them in {cityName(b.guestTimeZone)}
+            </p>
+          )}
           {b.guestNotes && <p className="mt-2 text-sm whitespace-pre-line">&ldquo;{b.guestNotes}&rdquo;</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             {inProgress && <Badge className="border-primary/40 text-primary">Happening now</Badge>}

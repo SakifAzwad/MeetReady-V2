@@ -18,7 +18,7 @@ export default function EventTypesPage() {
     <main className="flex flex-col gap-8">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Event types</h1>
+          <h1 className="text-3xl font-bold">Event types</h1>
           <p className="text-muted-foreground text-sm">The kinds of meetings guests can book with you.</p>
         </div>
         <Button asChild>

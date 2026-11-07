@@ -47,7 +47,7 @@ async function BookingPanel({ params }: { params: Params }) {
     <div className="bg-card grid w-full max-w-4xl overflow-hidden rounded-xl border shadow-sm md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
       <aside className="flex flex-col gap-4 border-b p-6 md:border-r md:border-b-0">
         <p className="text-muted-foreground text-sm">Your booking</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{booking.eventTitle}</h1>
+        <h1 className="text-2xl font-bold">{booking.eventTitle}</h1>
         <ul className="flex flex-col gap-2 text-sm">
           <li className="flex gap-2">
             <User className="text-muted-foreground mt-0.5 size-4 shrink-0" /> with {booking.hostName}
@@ -63,7 +63,7 @@ async function BookingPanel({ params }: { params: Params }) {
           </li>
         </ul>
         <p className="text-muted-foreground text-sm">
-          {formatMinutes(booking.durationMinutes)} · booked by {booking.guestName}
+          {formatMinutes(booking.durationMinutes)}, booked by {booking.guestName}
         </p>
       </aside>
 
@@ -90,6 +90,8 @@ async function BookingPanel({ params }: { params: Params }) {
           hostName={booking.hostName}
           hostTimeZone={booking.hostTimeZone}
           locationLabel={locationText(booking)}
+          title={booking.eventTitle}
+          durationMinutes={booking.durationMinutes}
           currentStartsAt={booking.startsAt.toISOString()}
           currentEndsAt={booking.endsAt.toISOString()}
         />

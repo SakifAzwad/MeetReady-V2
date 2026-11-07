@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/input";
 import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
 import { usernameSchema } from "@/lib/validation/onboarding";
 import { submitOnboarding, type OnboardingFormState } from "./actions";
@@ -43,8 +45,8 @@ export function OnboardingForm({ suggestedUsername, timeZones }: Props) {
         <label htmlFor="username" className="text-sm font-medium">
           Username
         </label>
-        <div className="flex items-center rounded-md border border-neutral-300 focus-within:ring-2 focus-within:ring-blue-600 dark:border-neutral-700">
-          <span className="pl-3 text-neutral-500 select-none">meetready.app/</span>
+        <div className="bg-card focus-within:ring-ring/50 focus-within:border-ring flex items-center rounded-md border focus-within:ring-[3px]">
+          <span className="text-muted-foreground pl-3 select-none">meetready.app/</span>
           <input
             id="username"
             name="username"
@@ -60,7 +62,7 @@ export function OnboardingForm({ suggestedUsername, timeZones }: Props) {
           />
         </div>
         {usernameError && (
-          <p id="username-error" className="text-sm text-red-600">
+          <p id="username-error" className="text-destructive text-sm">
             {usernameError}
           </p>
         )}
@@ -70,38 +72,35 @@ export function OnboardingForm({ suggestedUsername, timeZones }: Props) {
         <label htmlFor="timeZone" className="text-sm font-medium">
           Timezone
         </label>
-        <select
+        <NativeSelect
           id="timeZone"
           name="timeZone"
           value={timeZone}
           onChange={(e) => setChosenZone(e.target.value)}
-          className="rounded-md border border-neutral-300 bg-transparent px-3 py-2 dark:border-neutral-700"
         >
           {options.map((tz) => (
             <option key={tz} value={tz}>
               {tz.replaceAll("_", " ")}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         {detectedZone && timeZone !== detectedZone && (
           <button
             type="button"
             onClick={() => setChosenZone(detectedZone)}
-            className="self-start text-sm text-blue-700 underline dark:text-blue-400"
+            className="self-start text-sm underline underline-offset-4"
           >
             Use detected: {detectedZone.replaceAll("_", " ")}
           </button>
         )}
-        {state.errors?.timeZone?.[0] && <p className="text-sm text-red-600">{state.errors.timeZone[0]}</p>}
+        {state.errors?.timeZone?.[0] && (
+          <p className="text-destructive text-sm">{state.errors.timeZone[0]}</p>
+        )}
       </div>
 
-      <button
-        type="submit"
-        disabled={pending || Boolean(clientError)}
-        className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-      >
+      <Button type="submit" size="lg" disabled={pending || Boolean(clientError)}>
         {pending ? "Saving…" : "Continue"}
-      </button>
+      </Button>
     </form>
   );
 }

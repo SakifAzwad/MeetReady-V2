@@ -2,7 +2,12 @@ import { and, asc, eq, gt, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
-import { generateSlots, type BusyInterval, type Slot } from "@/lib/scheduling/generate-slots";
+import {
+  availabilityWindows,
+  generateSlots,
+  type BusyInterval,
+  type Slot,
+} from "@/lib/scheduling/generate-slots";
 import { addMinutes, type Interval } from "@/lib/scheduling/intervals";
 import { addDaysToKey, dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import type { BookingRequest } from "@/lib/validation/booking";
@@ -120,6 +125,21 @@ export async function getBookableSlots(
   /** When rescheduling: the booking being moved doesn't block its own new time. */
   options: { excludeBookingId?: string } = {},
 ): Promise<Slot[]> {
+  return (await getBookingCalendar(db, eventType, range, now, options)).slots;
+}
+
+/**
+ * Free slots plus the host's working windows for the range. The booking page
+ * draws the windows on its daylight band; both come from the same rules, so
+ * the band and the slot list can't disagree.
+ */
+export async function getBookingCalendar(
+  db: Database,
+  eventType: PublicEventType,
+  range: Interval,
+  now: Date,
+  options: { excludeBookingId?: string } = {},
+): Promise<{ slots: Slot[]; windows: Interval[] }> {
   const tz = eventType.hostTimeZone;
   // Host-calendar days can stick out past a UTC range by up to a day on each
   // side, and buffers/daily limits look at whole host days, so load a margin.
@@ -162,18 +182,22 @@ export async function getBookableSlots(
     countsTowardDailyLimit: b.eventTypeId === eventType.id,
   }));
 
-  return generateSlots({
-    range,
-    now,
-    host: {
-      timeZone: tz,
-      weeklyRules: availability.rules,
-      // Postgres `date` arrives as a "YYYY-MM-DD" string: exactly the DateKey format.
-      dateOverrides: availability.overrides.map((o) => ({ ...o, date: o.date as DateKey })),
-    },
-    eventType: { durationMinutes: eventType.durationMinutes, ...eventType.rules },
-    busy,
-  });
+  const host = {
+    timeZone: tz,
+    weeklyRules: availability.rules,
+    // Postgres `date` arrives as a "YYYY-MM-DD" string: exactly the DateKey format.
+    dateOverrides: availability.overrides.map((o) => ({ ...o, date: o.date as DateKey })),
+  };
+  return {
+    slots: generateSlots({
+      range,
+      now,
+      host,
+      eventType: { durationMinutes: eventType.durationMinutes, ...eventType.rules },
+      busy,
+    }),
+    windows: availabilityWindows(range, host),
+  };
 }
 
 export type BookingResult =

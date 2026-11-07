@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addMonths, formatDateKey, formatTime, monthGrid, monthRangeInZone } from "./calendar";
+import {
+  addMonths,
+  formatDateKey,
+  formatTime,
+  formatTimeRange,
+  monthGrid,
+  monthRangeInZone,
+} from "./calendar";
 
 describe("monthRangeInZone", () => {
   it("starts the month at local midnight, as a UTC instant", () => {
@@ -44,5 +51,24 @@ describe("formatting", () => {
   it("formats a calendar date without shifting it", () => {
     expect(formatDateKey("2026-11-09")).toBe("Monday, 9 November 2026");
     expect(formatDateKey("2026-11-09", "short")).toBe("Mon 9 Nov");
+  });
+});
+
+describe("12/24-hour formatting", () => {
+  const at = (iso: string) => new Date(iso);
+  it("formats single times both ways", () => {
+    expect(formatTime(at("2026-11-09T15:05:00Z"), "UTC")).toBe("3:05 PM");
+    expect(formatTime(at("2026-11-09T15:05:00Z"), "UTC", false)).toBe("15:05");
+    expect(formatTime(at("2026-11-09T04:00:00Z"), "UTC", false)).toBe("04:00");
+    expect(formatTime(at("2026-11-09T00:00:00Z"), "UTC", false)).toBe("00:00");
+  });
+
+  it.each([
+    ["2026-11-09T03:00:00Z", "2026-11-09T11:00:00Z", true, "3–11 AM"],
+    ["2026-11-09T09:30:00Z", "2026-11-09T17:00:00Z", true, "9:30 AM–5 PM"],
+    ["2026-11-09T22:00:00Z", "2026-11-10T00:00:00Z", true, "10 PM–12 AM"],
+    ["2026-11-09T03:00:00Z", "2026-11-09T11:00:00Z", false, "03:00–11:00"],
+  ])("range %s–%s (12h: %s) -> %s", (a, b, hour12, expected) => {
+    expect(formatTimeRange(at(a), at(b), "UTC", hour12)).toBe(expected);
   });
 });

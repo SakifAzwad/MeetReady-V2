@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Edit event type · MeetReady" };
 export default function EditEventTypePage({ params }: PageProps<"/dashboard/event-types/[id]/edit">) {
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Edit event type</h1>
+      <h1 className="text-3xl font-bold">Edit event type</h1>
       <Suspense fallback={<div className="bg-muted h-96 animate-pulse rounded-xl" />}>
         <EditForm params={params} />
       </Suspense>

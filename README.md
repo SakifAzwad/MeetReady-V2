@@ -41,6 +41,8 @@ npm run dev
   schedule saves, forms with shared Zod schemas, and the bugs a real-browser run found.
 - [Day 4: The public booking page](docs/day-04.md): three layers against double booking (re-check, per-host
   advisory lock, exclusion constraint), proven with deterministic race tests on real Postgres.
+- [Day 5: Emails, invites, cancel and reschedule](docs/day-05.md): hashed guest manage tokens, `.ics` invites
+  (UID/SEQUENCE/METHOD), emails sent with `after()`, a migration that's safe on existing data.
 
 ## Credits
 

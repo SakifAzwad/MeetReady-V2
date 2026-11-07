@@ -206,6 +206,7 @@ export const dateOverrides = pgTable(
 // ─── Bookings ───────────────────────────────────────────────────────────────────
 
 export const bookingStatus = pgEnum("booking_status", ["confirmed", "cancelled"]);
+export const cancelledBy = pgEnum("cancelled_by", ["host", "guest"]);
 
 export const bookings = pgTable(
   "bookings",
@@ -231,13 +232,27 @@ export const bookings = pgTable(
     endsAt: timestamp({ withTimezone: true }).notNull(),
     status: bookingStatus().notNull().default("confirmed"),
     cancelledAt: timestamp({ withTimezone: true }),
+    cancelledBy: cancelledBy(),
     cancellationReason: text(),
+    /**
+     * SHA-256 of the guest's manage-link token (/booking/{token}). Only the
+     * hash is stored, like a password: someone with a database backup can't
+     * use it to cancel or move meetings. The token itself exists only in the
+     * guest's email.
+     */
+    manageTokenHash: text().notNull().unique("bookings_manage_token_hash_unique"),
+    /** Set when the guest moves the meeting. The booking keeps its id and manage link. */
+    rescheduledAt: timestamp({ withTimezone: true }),
+    /** Calendar invite version (.ics SEQUENCE): +1 on every change, so calendar apps apply updates in order. */
+    sequence: integer().notNull().default(0),
     ...timestamps,
   },
   (t) => [
     index().on(t.hostId, t.startsAt),
     index().on(t.eventTypeId),
     check("bookings_time_order_check", sql`${t.endsAt} > ${t.startsAt}`),
+    // A cancelled booking always says when; a confirmed one never does.
+    check("bookings_cancellation_check", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`),
     // The no-double-booking EXCLUDE constraint is in a custom migration
     // (drizzle/0001_bookings_no_overlap.sql): Drizzle can't express EXCLUDE yet.
   ],

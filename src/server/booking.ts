@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNotNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
@@ -7,6 +7,7 @@ import { addMinutes, type Interval } from "@/lib/scheduling/intervals";
 import { addDaysToKey, dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import type { BookingRequest } from "@/lib/validation/booking";
 import { getAvailability } from "./availability";
+import { newManageToken } from "./manage-token";
 
 /*
  * The public booking side. No session here: the guest is anonymous, so the
@@ -116,6 +117,8 @@ export async function getBookableSlots(
   eventType: PublicEventType,
   range: Interval,
   now: Date,
+  /** When rescheduling: the booking being moved doesn't block its own new time. */
+  options: { excludeBookingId?: string } = {},
 ): Promise<Slot[]> {
   const tz = eventType.hostTimeZone;
   // Host-calendar days can stick out past a UTC range by up to a day on each
@@ -147,6 +150,7 @@ export async function getBookableSlots(
         eq(bookings.status, "confirmed"),
         lt(bookings.startsAt, loadTo),
         gt(bookings.endsAt, loadFrom),
+        options.excludeBookingId ? ne(bookings.id, options.excludeBookingId) : undefined,
       ),
     );
 
@@ -173,7 +177,7 @@ export async function getBookableSlots(
 }
 
 export type BookingResult =
-  | { ok: true; booking: { id: string; startsAt: Date; endsAt: Date } }
+  | { ok: true; booking: { id: string; startsAt: Date; endsAt: Date }; manageToken: string }
   | { ok: false; error: "not_found" | "slot_unavailable" | "slot_taken" };
 
 /**
@@ -219,9 +223,12 @@ export async function createBooking(
       }
       await testHooks.afterCheck?.();
 
+      // The raw token goes back to the caller (for the guest's email) and is never stored.
+      const { token, hash } = newManageToken();
       const [row] = await tx
         .insert(bookings)
         .values({
+          manageTokenHash: hash,
           eventTypeId: eventType.id,
           hostId: eventType.hostId,
           guestName: request.guestName,
@@ -232,7 +239,7 @@ export async function createBooking(
           endsAt: addMinutes(start, eventType.durationMinutes),
         })
         .returning({ id: bookings.id, startsAt: bookings.startsAt, endsAt: bookings.endsAt });
-      return { ok: true, booking: row! } as const;
+      return { ok: true, booking: row!, manageToken: token } as const;
     });
   } catch (error) {
     // (3) An error aborts the transaction, so it's caught out here, after rollback.

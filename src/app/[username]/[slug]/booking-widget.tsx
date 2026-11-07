@@ -23,6 +23,7 @@ import type { Slot } from "@/lib/scheduling/generate-slots";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
 import { guestDetailsSchema, type GuestDetailsForm } from "@/lib/validation/booking";
+import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
 import { bookSlotAction } from "./actions";
 
 type Props = {
@@ -31,6 +32,16 @@ type Props = {
   hostName: string;
   hostTimeZone: string;
   locationLabel: string;
+  /** Reschedule mode (guest manage page): pick a new time for an existing booking. */
+  reschedule?: {
+    token: string;
+    currentStartsAt: string;
+    currentEndsAt: string;
+    /** "Keep the current time": leave reschedule mode. */
+    onExit?: () => void;
+    /** After a successful move, e.g. to refresh the server-rendered details. */
+    onMoved?: () => void;
+  };
 };
 
 const noSubscription = () => () => {};
@@ -72,6 +83,7 @@ function Scheduler({
   hostName,
   hostTimeZone,
   locationLabel,
+  reschedule,
   timeZone,
   onTimeZoneChange,
 }: Props & {
@@ -92,8 +104,8 @@ function Scheduler({
   // The month as the GUEST sees it, turned into UTC instants for the API.
   const { from, to } = monthRangeInZone(visible, timeZone);
   const slotsQuery = useQuery({
-    queryKey: ["slots", username, slug, from.toISOString(), to.toISOString()],
-    queryFn: () => fetchSlots(username, slug, from, to),
+    queryKey: ["slots", username, slug, from.toISOString(), to.toISOString(), reschedule?.token ?? null],
+    queryFn: () => fetchSlots(username, slug, from, to, reschedule?.token),
   });
 
   const byDate = useMemo(
@@ -107,11 +119,34 @@ function Scheduler({
   if (booked) {
     return (
       <Confirmation
+        heading={reschedule ? "Your meeting has moved" : `You're booked with ${hostName}`}
         booked={booked}
         timeZone={timeZone}
         hostName={hostName}
         hostTimeZone={hostTimeZone}
         locationLabel={locationLabel}
+      />
+    );
+  }
+
+  if (selectedSlot && reschedule) {
+    return (
+      <RescheduleConfirm
+        slot={selectedSlot}
+        timeZone={timeZone}
+        reschedule={reschedule}
+        onBack={() => setSelectedSlot(null)}
+        onMoved={setBooked}
+        onSlotGone={() => {
+          setSelectedSlot(null);
+          setNotice("Sorry, someone just booked that time. Please pick another.");
+        }}
+        onNotChangeable={() => {
+          setSelectedSlot(null);
+          setNotice(
+            "This booking can't be changed any more (cancelled or already started). Reload the page.",
+          );
+        }}
       />
     );
   }
@@ -135,7 +170,20 @@ function Scheduler({
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <h2 className="text-lg font-semibold">Select a date and time</h2>
+      <h2 className="text-lg font-semibold">{reschedule ? "Pick a new time" : "Select a date and time"}</h2>
+      {reschedule && (
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 text-sm">
+          <p>
+            Currently: {formatDateKey(dateKeyInZone(new Date(reschedule.currentStartsAt), timeZone))},{" "}
+            {formatTime(new Date(reschedule.currentStartsAt), timeZone)}
+          </p>
+          {reschedule.onExit && (
+            <Button variant="link" size="sm" className="h-auto px-0" onClick={reschedule.onExit}>
+              Keep the current time
+            </Button>
+          )}
+        </div>
+      )}
       {notice && (
         <p
           role="alert"
@@ -206,8 +254,15 @@ function Scheduler({
   );
 }
 
-async function fetchSlots(username: string, slug: string, from: Date, to: Date): Promise<Slot[]> {
+async function fetchSlots(
+  username: string,
+  slug: string,
+  from: Date,
+  to: Date,
+  rescheduleToken?: string,
+): Promise<Slot[]> {
   const params = new URLSearchParams({ username, slug, from: from.toISOString(), to: to.toISOString() });
+  if (rescheduleToken) params.set("reschedule", rescheduleToken);
   const res = await fetch(`/api/slots?${params}`);
   if (!res.ok) throw new Error(`Slots request failed: ${res.status}`);
   const body = (await res.json()) as { slots: { start: string; end: string }[] };
@@ -421,12 +476,14 @@ function GuestForm({
 }
 
 function Confirmation({
+  heading,
   booked,
   timeZone,
   hostName,
   hostTimeZone,
   locationLabel,
 }: {
+  heading: string;
   booked: Booked;
   timeZone: string;
   hostName: string;
@@ -438,7 +495,7 @@ function Confirmation({
   return (
     <div role="status" className="flex flex-col items-center gap-4 p-10 text-center">
       <CalendarCheck className="text-primary size-10" />
-      <h2 className="text-xl font-semibold">You&apos;re booked with {hostName}</h2>
+      <h2 className="text-xl font-semibold">{heading}</h2>
       <p>
         {formatDateKey(day)}
         <br />
@@ -452,6 +509,66 @@ function Confirmation({
         </p>
       )}
       <p className="text-muted-foreground text-sm">Location: {locationLabel}</p>
+    </div>
+  );
+}
+
+function RescheduleConfirm({
+  slot,
+  timeZone,
+  reschedule,
+  onBack,
+  onMoved,
+  onSlotGone,
+  onNotChangeable,
+}: {
+  slot: Slot;
+  timeZone: string;
+  reschedule: NonNullable<Props["reschedule"]>;
+  onBack: () => void;
+  onMoved: (b: Booked) => void;
+  onSlotGone: () => void;
+  onNotChangeable: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [pending, setPending] = useState(false);
+  const current = new Date(reschedule.currentStartsAt);
+
+  async function confirm() {
+    setPending(true);
+    const result = await rescheduleByTokenAction({
+      token: reschedule.token,
+      startsAt: slot.start.toISOString(),
+    });
+    await queryClient.invalidateQueries({ queryKey: ["slots"] });
+    setPending(false);
+    if (result.ok) {
+      onMoved({ startsAt: slot.start, endsAt: slot.end });
+      reschedule.onMoved?.();
+    } else if (result.error === "slot_unavailable") onSlotGone();
+    else onNotChangeable();
+  }
+
+  return (
+    <div className="flex flex-col gap-5 p-6">
+      <Button type="button" variant="ghost" size="sm" className="self-start" onClick={onBack}>
+        <ArrowLeft /> Back
+      </Button>
+      <h2 className="text-lg font-semibold">Move your meeting?</h2>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt className="text-muted-foreground">From</dt>
+        <dd className="line-through">
+          {formatDateKey(dateKeyInZone(current, timeZone))}, {formatTime(current, timeZone)}
+        </dd>
+        <dt className="text-muted-foreground">To</dt>
+        <dd className="font-medium">
+          {formatDateKey(dateKeyInZone(slot.start, timeZone))}, {formatTime(slot.start, timeZone)} –{" "}
+          {formatTime(slot.end, timeZone)}
+        </dd>
+      </dl>
+      <Button onClick={confirm} disabled={pending} className="self-start">
+        {pending ? "Moving…" : "Confirm new time"}
+      </Button>
     </div>
   );
 }

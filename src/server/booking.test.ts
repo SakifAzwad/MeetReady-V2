@@ -155,7 +155,10 @@ describe("public booking", () => {
     it("a cancelled booking frees the slot", async () => {
       const first = await createBooking(db, request("04:00"), NOW);
       if (!first.ok) throw new Error("setup failed");
-      await db.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, first.booking.id));
+      await db
+        .update(bookings)
+        .set({ status: "cancelled", cancelledAt: new Date() })
+        .where(eq(bookings.id, first.booking.id));
       expect((await createBooking(db, request("04:00"), NOW)).ok).toBe(true);
     });
 

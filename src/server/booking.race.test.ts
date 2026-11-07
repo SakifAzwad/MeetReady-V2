@@ -6,6 +6,7 @@ import { createPostgresTestDb, TEST_DATABASE_URL } from "@/test/postgres";
 import { saveWeeklySchedule } from "./availability";
 import { createBooking } from "./booking";
 import { createEventType } from "./event-types";
+import { rescheduleBookingByToken } from "./manage-booking";
 
 /*
  * Races, on a real multi-connection PostgreSQL. Each test fires several
@@ -115,5 +116,15 @@ describe.skipIf(!TEST_DATABASE_URL)("concurrent bookings (real Postgres)", () =>
     const times = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"];
     const results = await Promise.all(times.map((t, n) => createBooking(db, request("limited", t, n), NOW)));
     expect(outcomes(results)).toEqual({ ok: 1, slot_unavailable: 7 });
+  });
+  it("a new booking and a reschedule racing for the same time: exactly one wins", async () => {
+    const existing = await createBooking(db, request("intro", "09:00", 99), NOW);
+    if (!existing.ok) throw new Error("setup failed");
+    const afterCheck = barrier(2);
+    const [moved, fresh] = await Promise.all([
+      rescheduleBookingByToken(db, existing.manageToken, at("12:00"), NOW, { afterCheck }),
+      createBooking(db, request("intro", "12:00", 1), NOW, { afterCheck }),
+    ]);
+    expect([moved.ok, fresh.ok].filter(Boolean)).toHaveLength(1);
   });
 });

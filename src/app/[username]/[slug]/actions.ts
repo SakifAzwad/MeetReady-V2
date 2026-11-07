@@ -1,9 +1,12 @@
 "use server";
 
+import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { bookingRequestSchema, type GuestDetailsForm } from "@/lib/validation/booking";
 import { createBooking } from "@/server/booking";
+import { emailContext } from "@/server/email";
+import { notifyBookingConfirmed } from "@/server/email/notifications";
 
 export type BookSlotResult =
   | { ok: true; booking: { startsAt: string; endsAt: string } }
@@ -30,6 +33,14 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
     // the re-check) mean the same thing to a guest: pick another time.
     return { ok: false, error: result.error === "not_found" ? "not_found" : "slot_unavailable" };
   }
+
+  // Emails go out AFTER the response is sent: the guest sees "You're booked"
+  // without waiting on the mail provider, and a failed email can't undo a
+  // committed booking. (A job queue with retries comes with Inngest later.)
+  const { id } = result.booking;
+  const { manageToken } = result;
+  after(() => notifyBookingConfirmed(emailContext(), id, manageToken));
+
   return {
     ok: true,
     booking: { startsAt: result.booking.startsAt.toISOString(), endsAt: result.booking.endsAt.toISOString() },

@@ -27,6 +27,21 @@ export const bookingRequestSchema = guestDetailsSchema.extend({
 
 export type BookingRequest = z.output<typeof bookingRequestSchema>;
 
+/** Guest's reschedule request: the token proves which booking, startsAt is the new time. */
+export const rescheduleRequestSchema = z.object({
+  token: z.string().max(64),
+  startsAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
+});
+
+export const cancelRequestSchema = z.object({
+  token: z.string().max(64),
+  reason: z
+    .string()
+    .trim()
+    .max(500)
+    .transform((r) => r || null),
+});
+
 const MAX_RANGE_DAYS = 62;
 
 /** GET /api/slots query. The range is capped so one request can't ask for years of slots. */
@@ -36,6 +51,8 @@ export const slotsQuerySchema = z
     slug: z.string().trim().toLowerCase().min(1).max(80),
     from: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
     to: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
+    /** Guest's manage token when rescheduling: their own booking shouldn't block the new time. */
+    reschedule: z.string().max(64).optional(),
   })
   .refine((q) => q.to > q.from, { message: "`to` must be after `from`", path: ["to"] })
   .refine((q) => q.to.getTime() - q.from.getTime() <= MAX_RANGE_DAYS * 86_400_000, {

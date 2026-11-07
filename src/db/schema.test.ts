@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 import { eq } from "drizzle-orm";
@@ -47,6 +48,7 @@ describe("database schema", () => {
     guestName: "Guest",
     guestEmail: "guest@example.com",
     guestTimeZone: "Europe/London",
+    manageTokenHash: randomUUID(), // any unique value; real ones are SHA-256 hex
     startsAt: new Date(start),
     endsAt: new Date(end),
     ...extra,
@@ -118,11 +120,16 @@ describe("database schema", () => {
     it("blocks re-confirming a cancelled booking whose slot was taken", async () => {
       const [first] = await db
         .insert(bookings)
-        .values(booking("2026-11-09T10:00:00Z", "2026-11-09T10:30:00Z", { status: "cancelled" }))
+        .values(
+          booking("2026-11-09T10:00:00Z", "2026-11-09T10:30:00Z", {
+            status: "cancelled",
+            cancelledAt: new Date(),
+          }),
+        )
         .returning({ id: bookings.id });
       await db.insert(bookings).values(booking("2026-11-09T10:00:00Z", "2026-11-09T10:30:00Z"));
       const code = await pgErrorCode(
-        db.update(bookings).set({ status: "confirmed" }).where(eq(bookings.id, first!.id)),
+        db.update(bookings).set({ status: "confirmed", cancelledAt: null }).where(eq(bookings.id, first!.id)),
       );
       expect(code).toBe(EXCLUSION_VIOLATION);
     });
@@ -152,6 +159,36 @@ describe("database schema", () => {
           .values({ userId: "host-1", title: "X", slug: "Intro Call!", durationMinutes: 30 }),
       );
       expect(code).toBe(CHECK_VIOLATION);
+    });
+
+    it("keeps status and cancelled_at consistent", async () => {
+      expect(
+        await pgErrorCode(
+          db
+            .insert(bookings)
+            .values(booking("2026-11-09T12:00:00Z", "2026-11-09T12:30:00Z", { status: "cancelled" })),
+        ),
+      ).toBe(CHECK_VIOLATION);
+      expect(
+        await pgErrorCode(
+          db
+            .insert(bookings)
+            .values(booking("2026-11-09T12:00:00Z", "2026-11-09T12:30:00Z", { cancelledAt: new Date() })),
+        ),
+      ).toBe(CHECK_VIOLATION);
+    });
+
+    it("rejects two bookings with the same manage token hash", async () => {
+      await db
+        .insert(bookings)
+        .values(booking("2026-11-09T12:00:00Z", "2026-11-09T12:30:00Z", { manageTokenHash: "h" }));
+      expect(
+        await pgErrorCode(
+          db
+            .insert(bookings)
+            .values(booking("2026-11-09T13:00:00Z", "2026-11-09T13:30:00Z", { manageTokenHash: "h" })),
+        ),
+      ).toBe(UNIQUE_VIOLATION);
     });
 
     it("rejects a duplicate slug for the same host", async () => {

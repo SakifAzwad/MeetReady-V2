@@ -14,6 +14,10 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.url(),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
+  /** Optional. Without it, emails are saved as files in the OS temp folder (see server/email/sender.ts). */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  /** Resend's shared test sender only delivers to your own Resend account email; use a verified domain in production. */
+  EMAIL_FROM: z.string().min(3).default("MeetReady <onboarding@resend.dev>"),
 });
 
 export const env = envSchema.parse(process.env);

@@ -3,6 +3,8 @@ import { availabilityWindows } from "./generate-slots";
 import {
   bandSegments,
   dayBounds,
+  daytimeOverlap,
+  nearestToDaytime,
   nowPosition,
   offsetDifference,
   partOfDay,
@@ -104,5 +106,51 @@ describe("offsets", () => {
     expect(offsetDifference("Asia/Dhaka", "Europe/London", new Date("2026-07-01T12:00:00Z"))).toBe(
       "5 hours ahead",
     );
+  });
+});
+
+describe("daytimeOverlap", () => {
+  // Host: Dhaka 09:00–17:00 on Mon 9 Nov 2026 = 03:00–11:00 UTC.
+  const dhakaDay = [{ start: new Date("2026-11-09T03:00:00Z"), end: new Date("2026-11-09T11:00:00Z") }];
+
+  it("London: 3–11 AM for the guest, daytime part is 8–11 AM", () => {
+    const overlap = daytimeOverlap(dhakaDay, "2026-11-09", "Europe/London");
+    expect(overlap).toEqual([
+      { start: new Date("2026-11-09T08:00:00Z"), end: new Date("2026-11-09T11:00:00Z") },
+    ]);
+  });
+
+  it("New York: all of it is at night, so nothing overlaps", () => {
+    // 10 PM Sun – 6 AM Mon in New York.
+    expect(daytimeOverlap(dhakaDay, "2026-11-08", "America/New_York")).toEqual([]);
+    expect(daytimeOverlap(dhakaDay, "2026-11-09", "America/New_York")).toEqual([]);
+  });
+
+  it("same timezone: the whole working day is daytime", () => {
+    expect(daytimeOverlap(dhakaDay, "2026-11-09", "Asia/Dhaka")).toEqual(dhakaDay);
+  });
+
+  it("uses the guest's local 8 AM on a DST change day", () => {
+    // London clocks go back on Sun 25 Oct 2026; 8 AM that day is 08:00 UTC (GMT).
+    const all = [{ start: new Date("2026-10-25T00:00:00Z"), end: new Date("2026-10-26T00:00:00Z") }];
+    expect(daytimeOverlap(all, "2026-10-25", "Europe/London")[0]?.start).toEqual(
+      new Date("2026-10-25T08:00:00Z"),
+    );
+  });
+});
+
+describe("nearestToDaytime", () => {
+  it("New York Monday: Sakif's hours end at 6 AM, before daytime starts", () => {
+    const segments = [{ start: new Date("2026-11-09T05:00:00Z"), end: new Date("2026-11-09T11:00:00Z") }]; // 00:00–06:00 NY
+    const near = nearestToDaytime(segments, "2026-11-09", "America/New_York");
+    expect(near.endsBefore).toEqual(new Date("2026-11-09T11:00:00Z"));
+    expect(near.startsAfter).toBeNull();
+  });
+
+  it("finds a window that starts after daytime ends", () => {
+    const segments = [{ start: new Date("2026-11-09T03:00:00Z"), end: new Date("2026-11-09T05:00:00Z") }]; // 22:00–24:00 NY on the 8th
+    const near = nearestToDaytime(segments, "2026-11-08", "America/New_York");
+    expect(near.startsAfter).toEqual(new Date("2026-11-09T03:00:00Z"));
+    expect(near.endsBefore).toBeNull();
   });
 });

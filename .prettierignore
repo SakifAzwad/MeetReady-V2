@@ -2,3 +2,6 @@
 node_modules
 drizzle/meta
 package-lock.json
+
+# Generated (compact on purpose): scripts/generate-zones.mjs
+src/lib/scheduling/zone-data.generated.ts

@@ -25,3 +25,11 @@ export const QUARTER_HOURS: string[] = Array.from({ length: 97 }, (_, i) => {
   if (i === 96) return "24:00";
   return `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`;
 });
+
+/** Short durations for dense rows: 45 -> "45 min", 90 -> "1.5 h", 480 -> "8 h", 140 -> "2.3 h". */
+export function formatHours(totalMinutes: number): string {
+  const m = Math.round(totalMinutes);
+  if (m < 60) return `${m} min`;
+  const hours = Math.round((m / 60) * 10) / 10;
+  return `${hours} h`;
+}

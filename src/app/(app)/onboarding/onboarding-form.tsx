@@ -1,8 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/input";
-import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
+import { TimezoneCombobox } from "@/components/timezone-combobox";
+import { useActionState, useState, useSyncExternalStore } from "react";
 import { usernameSchema } from "@/lib/validation/onboarding";
 import { submitOnboarding, type OnboardingFormState } from "./actions";
 
@@ -11,10 +11,9 @@ const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 type Props = {
   suggestedUsername: string;
-  timeZones: string[];
 };
 
-export function OnboardingForm({ suggestedUsername, timeZones }: Props) {
+export function OnboardingForm({ suggestedUsername }: Props) {
   const [state, formAction, pending] = useActionState<OnboardingFormState, FormData>(submitOnboarding, {});
 
   const [username, setUsername] = useState(state.values?.username ?? suggestedUsername);
@@ -27,12 +26,6 @@ export function OnboardingForm({ suggestedUsername, timeZones }: Props) {
   // null until the user picks one -> fall back to the detected zone.
   const [chosenZone, setChosenZone] = useState<string | null>(state.values?.timeZone ?? null);
   const timeZone = chosenZone ?? detectedZone ?? "UTC";
-
-  const options = useMemo(() => {
-    const set = new Set(["UTC", ...timeZones]);
-    if (detectedZone) set.add(detectedZone);
-    return [...set].sort();
-  }, [timeZones, detectedZone]);
 
   // Instant feedback while typing. The server re-validates with the same schema.
   const preview = usernameSchema.safeParse(username);
@@ -69,30 +62,14 @@ export function OnboardingForm({ suggestedUsername, timeZones }: Props) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="timeZone" className="text-sm font-medium">
-          Timezone
-        </label>
-        <NativeSelect
+        <TimezoneCombobox
           id="timeZone"
           name="timeZone"
+          label="Timezone"
           value={timeZone}
-          onChange={(e) => setChosenZone(e.target.value)}
-        >
-          {options.map((tz) => (
-            <option key={tz} value={tz}>
-              {tz.replaceAll("_", " ")}
-            </option>
-          ))}
-        </NativeSelect>
-        {detectedZone && timeZone !== detectedZone && (
-          <button
-            type="button"
-            onClick={() => setChosenZone(detectedZone)}
-            className="self-start text-sm underline underline-offset-4"
-          >
-            Use detected: {detectedZone.replaceAll("_", " ")}
-          </button>
-        )}
+          onChange={setChosenZone}
+          detected={detectedZone}
+        />
         {state.errors?.timeZone?.[0] && (
           <p className="text-destructive text-sm">{state.errors.timeZone[0]}</p>
         )}

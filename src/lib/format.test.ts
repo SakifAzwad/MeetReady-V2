@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMinutes, formatWallTime, QUARTER_HOURS } from "./format";
+import { formatHours, formatMinutes, formatWallTime, QUARTER_HOURS } from "./format";
 
 describe("formatMinutes", () => {
   it.each([
@@ -27,4 +27,17 @@ it("QUARTER_HOURS covers the whole day", () => {
   expect(QUARTER_HOURS[37]).toBe("09:15");
   expect(QUARTER_HOURS.at(-1)).toBe("24:00");
   expect(QUARTER_HOURS).toHaveLength(97);
+});
+
+describe("formatHours", () => {
+  it.each([
+    [0, "0 min"],
+    [45, "45 min"],
+    [60, "1 h"],
+    [90, "1.5 h"],
+    [140, "2.3 h"],
+    [480, "8 h"],
+  ])("%i minutes -> %s", (minutes, text) => {
+    expect(formatHours(minutes)).toBe(text);
+  });
 });

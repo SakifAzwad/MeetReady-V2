@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, X } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   Controller,
   useFieldArray,
@@ -14,9 +14,9 @@ import {
 } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Field } from "@/components/ui/field";
-import { NativeSelect } from "@/components/ui/input";
+import { TimezoneCombobox } from "@/components/timezone-combobox";
 import { Switch } from "@/components/ui/switch";
+import { cityName } from "@/lib/scheduling/daylight";
 import { weeklyScheduleSchema, type WeeklySchedule } from "@/lib/validation/availability";
 import { saveWeeklyScheduleAction } from "./actions";
 import { TimeSelect } from "./time-select";
@@ -28,24 +28,13 @@ const DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const noSubscription = () => () => {};
 const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export function WeeklyScheduleForm({
-  defaultValues,
-  timeZones,
-}: {
-  defaultValues: WeeklySchedule;
-  timeZones: string[];
-}) {
+export function WeeklyScheduleForm({ defaultValues }: { defaultValues: WeeklySchedule }) {
   const [status, setStatus] = useState<{ kind: "saved" } | { kind: "error"; message: string } | null>(null);
   const form = useForm<WeeklySchedule>({ resolver: zodResolver(weeklyScheduleSchema), defaultValues });
   const { control, register, formState } = form;
 
   const detectedZone = useSyncExternalStore(noSubscription, browserTimeZone, () => null);
   const timeZone = useWatch({ control, name: "timeZone" });
-  const zoneOptions = useMemo(() => {
-    const set = new Set(["UTC", ...timeZones, timeZone]);
-    if (detectedZone) set.add(detectedZone);
-    return [...set].sort();
-  }, [timeZones, timeZone, detectedZone]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setStatus(null);
@@ -68,28 +57,31 @@ export function WeeklyScheduleForm({
           </CardDescription>
         </div>
 
-        <Field
-          id="timeZone"
-          label="Timezone"
-          hint={
-            detectedZone && detectedZone !== timeZone
-              ? `Your device is set to ${detectedZone.replaceAll("_", " ")}.`
-              : "Changing it keeps the same clock times (9:00 stays 9:00) in the new zone."
-          }
-          error={formState.errors.timeZone?.message}
-        >
-          {(aria) => (
-            // defaultValue: register() only sets the value after hydration, so without it the
-            // server HTML shows the first option until JavaScript loads.
-            <NativeSelect {...aria} defaultValue={defaultValues.timeZone} {...register("timeZone")}>
-              {zoneOptions.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz.replaceAll("_", " ")}
-                </option>
-              ))}
-            </NativeSelect>
+        <div className="flex flex-col gap-1.5">
+          <Controller
+            control={control}
+            name="timeZone"
+            render={({ field }) => (
+              <TimezoneCombobox
+                id="timeZone"
+                label="Timezone"
+                value={field.value}
+                onChange={field.onChange}
+                detected={detectedZone}
+              />
+            )}
+          />
+          <p className="text-muted-foreground text-xs">
+            {detectedZone && detectedZone !== timeZone
+              ? `Your device is set to ${cityName(detectedZone)}.`
+              : "Changing it keeps the same clock times (9:00 stays 9:00) in the new zone."}
+          </p>
+          {formState.errors.timeZone?.message && (
+            <p role="alert" className="text-destructive text-sm">
+              {formState.errors.timeZone.message}
+            </p>
           )}
-        </Field>
+        </div>
 
         <ul className="flex flex-col divide-y">
           {DISPLAY_ORDER.map((day) => (

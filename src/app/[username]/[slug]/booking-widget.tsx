@@ -1,7 +1,6 @@
 "use client";
 
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { Globe } from "lucide-react";
 import {
   addTransitionType,
   startTransition,
@@ -11,7 +10,7 @@ import {
   ViewTransition,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/input";
+import { TimezoneCombobox } from "@/components/timezone-combobox";
 import {
   compareMonths,
   formatDateKey,
@@ -227,52 +226,11 @@ function Scheduler({
     );
   }
 
-  if (step === "details" && selectedSlot) {
-    return (
-      <Shell
-        layout={layout}
-        aside={aside}
-        stage="details"
-        main={
-          reschedule ? (
-            <RescheduleConfirm
-              slot={selectedSlot}
-              timeZone={timeZone}
-              hour12={hour12}
-              token={reschedule.token}
-              currentStartsAt={reschedule.currentStartsAt}
-              currentEndsAt={reschedule.currentEndsAt}
-              onBack={() => go("step-back", () => setStep("pick"))}
-              onMoved={(b) => {
-                go("step-forward", () => setBooked(b));
-                reschedule.onMoved?.();
-              }}
-              onSlotGone={slotGone}
-              onNotChangeable={() => {
-                setStep("pick");
-                setNotice(
-                  "This booking can't be changed any more (cancelled or already started). Reload the page.",
-                );
-              }}
-            />
-          ) : (
-            <GuestForm
-              slot={selectedSlot}
-              timeZone={timeZone}
-              hour12={hour12}
-              username={event.username}
-              slug={event.slug}
-              onBack={() => go("step-back", () => setStep("pick"))}
-              onBooked={(b) => go("step-forward", () => setBooked(b))}
-              onSlotGone={slotGone}
-            />
-          )
-        }
-      />
-    );
-  }
-
   const daySlots = activeDate ? (byDate.get(activeDate) ?? []) : [];
+  // The slot being booked, or null while picking. On phones the details step
+  // still replaces everything else (there's no room for both side by side).
+  const inDetails = step === "details" ? selectedSlot : null;
+  const phoneHidden = inDetails ? "max-lg:hidden" : undefined;
   return (
     <Shell
       layout={layout}
@@ -295,18 +253,20 @@ function Scheduler({
             </div>
           )}
 
-          {activeDate && calendar.data ? (
-            <DaylightBand
-              windows={calendar.data.windows}
-              day={activeDate}
-              timeZone={timeZone}
-              hostTimeZone={event.hostTimeZone}
-              hostName={event.hostName}
-              hour12={hour12}
-            />
-          ) : (
-            <div aria-hidden className="bg-muted h-[7.5rem] animate-pulse rounded-xl" />
-          )}
+          <div className={phoneHidden}>
+            {activeDate && calendar.data ? (
+              <DaylightBand
+                windows={calendar.data.windows}
+                day={activeDate}
+                timeZone={timeZone}
+                hostTimeZone={event.hostTimeZone}
+                hostName={event.hostName}
+                hour12={hour12}
+              />
+            ) : (
+              <div aria-hidden className="bg-muted h-[7.5rem] animate-pulse rounded-xl" />
+            )}
+          </div>
 
           {notice && (
             <p
@@ -318,68 +278,135 @@ function Scheduler({
           )}
 
           <div className="grid gap-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
-            <MonthCalendar
-              month={visible}
-              today={today}
-              canGoBack={compareMonths(visible, thisMonth) > 0}
-              onMonthChange={(m) => {
-                setMonth(m);
-                setSelectedDate(null);
-                setSelectedSlot(null);
-              }}
-              availableDates={byDate}
-              activeDate={activeDate}
-              onSelect={(d) => {
-                setSelectedDate(d);
-                setSelectedSlot(null);
-                setNotice(null);
-              }}
-              loading={calendar.isPending}
-            />
-
-            <div className="flex min-w-0 flex-col gap-2">
-              <h3 className="text-lg font-semibold">
-                {activeDate ? formatDateKey(activeDate) : formatMonth(visible)}
-              </h3>
-              {calendar.isError ? (
-                <div className="text-sm">
-                  <p className="text-destructive">Couldn&apos;t load times.</p>
-                  <Button variant="link" className="px-0" onClick={() => calendar.refetch()}>
-                    Try again
-                  </Button>
-                </div>
-              ) : calendar.isPending ? (
-                <div className="bg-muted h-60 animate-pulse rounded-lg" />
-              ) : activeDate ? (
-                <TimeList
-                  label={`Times on ${formatDateKey(activeDate)}`}
-                  slots={daySlots}
-                  timeZone={timeZone}
-                  hostTimeZone={event.hostTimeZone}
-                  hour12={hour12}
-                  selected={selectedSlot}
-                  onSelect={setSelectedSlot}
-                  onContinue={(slot) =>
-                    go("step-forward", () => {
-                      setSelectedSlot(slot);
-                      setStep("details");
-                    })
-                  }
-                />
-              ) : (
-                <p className="text-muted-foreground">
-                  No free times in {formatMonth(visible)}. Try the next month.
-                </p>
-              )}
+            <div className={phoneHidden}>
+              <MonthCalendar
+                month={visible}
+                today={today}
+                canGoBack={compareMonths(visible, thisMonth) > 0}
+                onMonthChange={(m) => {
+                  setMonth(m);
+                  setSelectedDate(null);
+                  setSelectedSlot(null);
+                  setStep("pick");
+                }}
+                availableDates={byDate}
+                activeDate={activeDate}
+                onSelect={(d) => {
+                  const pickDay = () => {
+                    setSelectedDate(d);
+                    setSelectedSlot(null);
+                    setNotice(null);
+                    setStep("pick");
+                  };
+                  // Picking another day while filling in details slides back to that day's times.
+                  if (step === "details") go("step-back", pickDay);
+                  else pickDay();
+                }}
+                loading={calendar.isPending}
+              />
             </div>
+
+            {/*
+             * The details form takes the place of the times, in the same column:
+             * the band, the calendar and the event facts stay in view. Keyed by
+             * step so it slides in (and back out) as a transition.
+             */}
+            <ViewTransition
+              key={inDetails ? "details" : "pick"}
+              enter={STEP_MOTION}
+              exit={STEP_MOTION}
+              default="none"
+            >
+              {inDetails ? (
+                <div className="min-w-0">
+                  {reschedule ? (
+                    <RescheduleConfirm
+                      slot={inDetails}
+                      timeZone={timeZone}
+                      hour12={hour12}
+                      token={reschedule.token}
+                      currentStartsAt={reschedule.currentStartsAt}
+                      currentEndsAt={reschedule.currentEndsAt}
+                      onBack={() => go("step-back", () => setStep("pick"))}
+                      onMoved={(b) => {
+                        go("step-forward", () => setBooked(b));
+                        reschedule.onMoved?.();
+                      }}
+                      onSlotGone={slotGone}
+                      onNotChangeable={() => {
+                        setStep("pick");
+                        setNotice(
+                          "This booking can't be changed any more (cancelled or already started). Reload the page.",
+                        );
+                      }}
+                    />
+                  ) : (
+                    <GuestForm
+                      slot={inDetails}
+                      timeZone={timeZone}
+                      hour12={hour12}
+                      username={event.username}
+                      slug={event.slug}
+                      onBack={() => go("step-back", () => setStep("pick"))}
+                      onBooked={(b) => go("step-forward", () => setBooked(b))}
+                      onSlotGone={slotGone}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="flex min-w-0 flex-col gap-2">
+                  <h3 className="text-lg font-semibold">
+                    {activeDate ? formatDateKey(activeDate) : formatMonth(visible)}
+                  </h3>
+                  {calendar.isError ? (
+                    <div className="text-sm">
+                      <p className="text-destructive">Couldn&apos;t load times.</p>
+                      <Button variant="link" className="px-0" onClick={() => calendar.refetch()}>
+                        Try again
+                      </Button>
+                    </div>
+                  ) : calendar.isPending ? (
+                    <div className="bg-muted h-60 animate-pulse rounded-lg" />
+                  ) : activeDate ? (
+                    <TimeList
+                      label={`Times on ${formatDateKey(activeDate)}`}
+                      slots={daySlots}
+                      timeZone={timeZone}
+                      hostTimeZone={event.hostTimeZone}
+                      hour12={hour12}
+                      selected={selectedSlot}
+                      onSelect={setSelectedSlot}
+                      onContinue={(slot) =>
+                        go("step-forward", () => {
+                          setSelectedSlot(slot);
+                          setStep("details");
+                        })
+                      }
+                    />
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No free times in {formatMonth(visible)}. Try the next month.
+                    </p>
+                  )}
+                </div>
+              )}
+            </ViewTransition>
           </div>
 
-          <DisplayOptions
-            timeZone={timeZone}
-            onTimeZoneChange={onTimeZoneChange}
-            hour12={hour12}
-            onHour12Change={setHour12}
-          />
+          {/*
+           * Named so it glides to its new position when the column above changes
+           * height (times <-> form). Without a name it's part of the page
+           * snapshot, which cross-fades: for a moment the old copy sits on top
+           * of the incoming list.
+           */}
+          <div className={phoneHidden} style={{ viewTransitionName: "booking-display-options" }}>
+            <DisplayOptions
+              timeZone={timeZone}
+              onTimeZoneChange={onTimeZoneChange}
+              hour12={hour12}
+              onHour12Change={setHour12}
+            />
+          </div>
         </div>
       }
     />
@@ -397,24 +424,21 @@ function DisplayOptions({
   hour12: boolean;
   onHour12Change: (v: boolean) => void;
 }) {
-  const zones = useMemo(
-    () => [...new Set(["UTC", timeZone, ...Intl.supportedValuesOf("timeZone")])].sort(),
-    [timeZone],
+  const detected = useSyncExternalStore(
+    () => () => {},
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => null,
   );
   return (
     <div className="flex flex-wrap items-end gap-4 border-t pt-5">
-      <div className="flex max-w-xs flex-1 flex-col gap-2">
-        <label htmlFor="guest-timezone" className="flex items-center gap-2 text-sm font-medium">
-          <Globe className="size-4" /> Times shown in
-        </label>
-        <NativeSelect id="guest-timezone" value={timeZone} onChange={(e) => onTimeZoneChange(e.target.value)}>
-          {zones.map((tz) => (
-            <option key={tz} value={tz}>
-              {tz.replaceAll("_", " ")}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
+      <TimezoneCombobox
+        label="Times shown in"
+        value={timeZone}
+        onChange={onTimeZoneChange}
+        detected={detected}
+        id="guest-timezone"
+        className="max-w-xs flex-1"
+      />
       <div role="radiogroup" aria-label="Clock format" className="flex rounded-lg border p-0.5">
         {[true, false].map((value) => (
           <button

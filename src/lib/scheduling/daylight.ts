@@ -126,3 +126,48 @@ export function cityName(timeZone: string): string {
   const city = (timeZone.split("/").at(-1) ?? timeZone).replaceAll("_", " ");
   return RENAMED[city] ?? city;
 }
+
+/**
+ * "Daytime" for the guest: 8 AM–8 PM on their day. We don't know a guest's
+ * working hours, so the booking page says "your daytime", never "your
+ * working hours" or "best mutual hours", which would claim knowledge we don't have.
+ */
+export const DAYTIME = { from: "08:00", to: "20:00" } as const;
+
+export function daytimeBounds(day: DateKey, timeZone: string): Interval {
+  return {
+    start: wallTimeToInstant(day, DAYTIME.from, timeZone),
+    end: wallTimeToInstant(day, DAYTIME.to, timeZone),
+  };
+}
+
+/** The parts of the host's windows that fall inside the guest's daytime on `day`. */
+export function daytimeOverlap(windows: readonly Interval[], day: DateKey, timeZone: string): Interval[] {
+  const { start, end } = daytimeBounds(day, timeZone);
+  return windows
+    .map((w) => ({
+      start: new Date(Math.max(w.start.getTime(), start.getTime())),
+      end: new Date(Math.min(w.end.getTime(), end.getTime())),
+    }))
+    .filter((i) => i.start < i.end);
+}
+
+/**
+ * When nothing overlaps, the closest the host gets to the guest's daytime:
+ * the latest end before it ("finishes at 7 AM your time") and/or the
+ * earliest start after it ("starts at 9 PM").
+ */
+export function nearestToDaytime(
+  segments: readonly Interval[],
+  day: DateKey,
+  timeZone: string,
+): { endsBefore: Date | null; startsAfter: Date | null } {
+  const { start, end } = daytimeBounds(day, timeZone);
+  let endsBefore: Date | null = null;
+  let startsAfter: Date | null = null;
+  for (const s of segments) {
+    if (s.end <= start && (!endsBefore || s.end > endsBefore)) endsBefore = s.end;
+    if (s.start >= end && (!startsAfter || s.start < startsAfter)) startsAfter = s.start;
+  }
+  return { endsBefore, startsAfter };
+}

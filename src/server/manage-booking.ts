@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
@@ -289,4 +289,28 @@ export async function cancelBookingAsHost(
     .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
   // Another host's booking looks exactly like a missing one.
   return { ok: false, error: exists ? "not_changeable" : "not_found" };
+}
+
+/**
+ * Confirmed bookings that overlap [from, to), for the dashboard's week view.
+ * Overlap, not "starts inside": a meeting from 23:30 to 00:30 belongs to both days.
+ * Scoped to the host like every other host query.
+ */
+export async function listHostBookingsBetween(
+  db: Database,
+  hostId: string,
+  range: { start: Date; end: Date },
+): Promise<{ startsAt: Date; endsAt: Date }[]> {
+  return db
+    .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.hostId, hostId),
+        eq(bookings.status, "confirmed"),
+        lt(bookings.startsAt, range.end),
+        gt(bookings.endsAt, range.start),
+      ),
+    )
+    .orderBy(asc(bookings.startsAt));
 }

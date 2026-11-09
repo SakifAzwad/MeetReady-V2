@@ -18,6 +18,7 @@ export function Band({
   segments,
   nowAt = null,
   shiftHours = 0,
+  highlights = [],
   className,
   children,
 }: {
@@ -29,6 +30,8 @@ export function Band({
    * one x position is one moment for both, only the colours (local time) differ.
    */
   shiftHours?: number;
+  /** Parts of the brackets to light up (the booking page: the host's hours inside your daytime). */
+  highlights?: Pick<BandSegment, "left" | "width">[];
   className?: string;
   /** Extra marks drawn on top (the dashboard uses it for booked meetings). */
   children?: React.ReactNode;
@@ -54,6 +57,14 @@ export function Band({
           transform: `translateX(-${shift * 50}%)`,
         }}
       />
+      {/* Drawn under the brackets: a soft white fill with a glow, so the good part reads first. */}
+      {highlights.map((h, i) => (
+        <div
+          key={`h${i}`}
+          className="absolute inset-y-1.5 rounded-lg bg-white/60 shadow-[0_0_16px_4px_rgb(255_255_255/0.55)] transition-[left,width] duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)]"
+          style={{ left: `${h.left}%`, width: `${h.width}%` }}
+        />
+      ))}
       {/*
        * Keyed by position in the list (not by value) so that when the day or
        * the city changes, the same bracket slides to its new place via the

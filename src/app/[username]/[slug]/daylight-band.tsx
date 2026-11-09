@@ -1,10 +1,18 @@
 "use client";
 
 import { Band, BandTicks } from "@/components/daylight/band";
-import { formatTimeRange } from "@/lib/scheduling/calendar";
-import { bandSegments, cityName, nowPosition, offsetDifference } from "@/lib/scheduling/daylight";
+import { formatTime, formatTimeRange } from "@/lib/scheduling/calendar";
+import {
+  bandSegments,
+  daytimeBounds,
+  daytimeOverlap,
+  nearestToDaytime,
+  cityName,
+  nowPosition,
+  offsetDifference,
+} from "@/lib/scheduling/daylight";
 import type { Interval } from "@/lib/scheduling/intervals";
-import type { DateKey } from "@/lib/scheduling/time";
+import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { useMinuteClock } from "@/components/daylight/preferences";
 
 /*
@@ -41,13 +49,51 @@ export function DaylightBand({
   const hostCity = cityName(hostTimeZone);
 
   const yourRanges = segments.map((s) => formatTimeRange(s.start, s.end, timeZone, hour12));
-  const hostRanges = segments.map((s) => formatTimeRange(s.start, s.end, hostTimeZone, hour12));
+  // When the guest's day spans two of the host's dates, say which day each range is
+  // ("11 AM–5 PM Monday and 9–11 AM Tuesday"): otherwise the ranges look out of order.
+  const hostDates = new Set(segments.map((s) => dateKeyInZone(s.start, hostTimeZone)));
+  const hostWeekday = (d: Date) =>
+    new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: hostTimeZone }).format(d);
+  const hostRanges = segments.map(
+    (s) =>
+      formatTimeRange(s.start, s.end, hostTimeZone, hour12) +
+      (hostDates.size > 1 ? ` ${hostWeekday(s.start)}` : ""),
+  );
   const sentence =
     segments.length === 0
       ? `${firstName} isn't working on this day.`
       : !difference
         ? `${firstName} works ${hostRanges.join(" and ")}.`
         : `${firstName} works ${hostRanges.join(" and ")} in ${hostCity}, which is ${yourRanges.join(" and ")} your time.`;
+
+  // "Times in your daytime" (8 AM–8 PM): only worth saying when it isn't all of them.
+  const overlap = difference ? daytimeOverlap(segments, day, timeZone) : [];
+  const overlapMs = overlap.reduce((sum, i) => sum + (i.end.getTime() - i.start.getTime()), 0);
+  const segmentMs = segments.reduce((sum, i) => sum + (i.end.getTime() - i.start.getTime()), 0);
+  const daytime = daytimeBounds(day, timeZone);
+  const daytimeLabel = formatTimeRange(daytime.start, daytime.end, timeZone, hour12);
+  let daytimeNote: React.ReactNode = null;
+  if (difference && segments.length > 0 && overlapMs < segmentMs) {
+    if (overlap.length > 0) {
+      daytimeNote = (
+        <>
+          In your daytime ({daytimeLabel}):{" "}
+          <strong className="font-semibold">
+            {overlap.map((i) => formatTimeRange(i.start, i.end, timeZone, hour12)).join(" and ")}
+          </strong>
+          .
+        </>
+      );
+    } else {
+      const { endsBefore, startsAfter } = nearestToDaytime(segments, day, timeZone);
+      const parts = [
+        endsBefore && `they end at ${formatTime(endsBefore, timeZone, hour12)}`,
+        startsAfter &&
+          `${endsBefore ? "start again" : "they start"} at ${formatTime(startsAfter, timeZone, hour12)}`,
+      ].filter(Boolean);
+      daytimeNote = `None of ${firstName}'s hours fall in your daytime (${daytimeLabel}): ${parts.join(" and ")} your time.`;
+    }
+  }
 
   return (
     <section aria-labelledby="band-heading" className="flex flex-col gap-2">
@@ -61,10 +107,11 @@ export function DaylightBand({
       </div>
 
       {/* Decorative for screen readers: the sentence below says the same thing in words. */}
-      <Band segments={segments} nowAt={nowAt} />
+      <Band segments={segments} nowAt={nowAt} highlights={bandSegments(overlap, day, timeZone)} />
       <BandTicks hour12={hour12} />
 
       <p className="mt-1 text-[15px]">{sentence}</p>
+      {daytimeNote && <p className="text-muted-foreground text-[15px]">{daytimeNote}</p>}
     </section>
   );
 }

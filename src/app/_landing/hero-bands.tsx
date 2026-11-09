@@ -2,10 +2,12 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Band, BandTicks } from "@/components/daylight/band";
+import { TimezoneCombobox } from "@/components/timezone-combobox";
 import { useHour12, useMinuteClock } from "@/components/daylight/preferences";
 import {
   bandSegments,
   cityName,
+  daytimeOverlap,
   nowPosition,
   partOfDay,
   type PartOfDay,
@@ -84,6 +86,14 @@ export function HeroBands() {
             </button>
           );
         })}
+        <TimezoneCombobox
+          label="Or search any city"
+          hideLabel
+          value={zone ?? "UTC"}
+          onChange={(z) => setPicked(z === browserZone ? null : z)}
+          detected={browserZone}
+          className="w-full sm:ml-auto sm:w-60"
+        />
       </div>
     </div>
   );
@@ -115,6 +125,13 @@ function Timeline({ zone, now, hour12 }: { zone: string; now: Date; hour12: bool
   const hostCity = cityName(HOST.timeZone);
   const yourCity = cityName(zone);
   const workday = windows.find((w) => segments[0] && w.end > segments[0].start && w.start < segments[0].end);
+  // The part of the host's day that falls in the visitor's daytime (8 AM–8 PM), lit up on both bands.
+  const overlap = sameZone ? [] : daytimeOverlap(segments, day, zone);
+  const highlights = bandSegments(overlap, day, zone);
+  const partial =
+    workday &&
+    overlap.length > 0 &&
+    overlap[0]!.end.getTime() - overlap[0]!.start.getTime() < workday.end.getTime() - workday.start.getTime();
 
   return (
     <div>
@@ -124,10 +141,10 @@ function Timeline({ zone, now, hour12 }: { zone: string; now: Date; hour12: bool
 
       <div className="grid grid-cols-1 items-center gap-x-6 gap-y-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
         <Label who={HOST.name} city={hostCity} time={formatTime(now, HOST.timeZone, hour12)} />
-        <Band segments={segments} nowAt={nowAt} shiftHours={shiftHours} />
+        <Band segments={segments} nowAt={nowAt} shiftHours={shiftHours} highlights={highlights} />
 
         <Label who="You" city={yourCity} time={formatTime(now, zone, hour12)} className="mt-3 sm:mt-0" />
-        <Band segments={segments} nowAt={nowAt} />
+        <Band segments={segments} nowAt={nowAt} highlights={highlights} />
 
         <div className="hidden sm:block" />
         <BandTicks hour12={hour12} />
@@ -144,6 +161,13 @@ function Timeline({ zone, now, hour12 }: { zone: string; now: Date; hour12: bool
             {HOST.name} works {formatTimeRange(workday.start, workday.end, HOST.timeZone, hour12)} in{" "}
             {hostCity}. That&apos;s {formatTimeRange(workday.start, workday.end, zone, hour12)} for you in{" "}
             {yourCity}, starting {STARTS[partOfDay(workday.start, zone)]}.
+            {partial && (
+              <>
+                {" "}
+                The lit-up part, {formatTimeRange(overlap[0]!.start, overlap[0]!.end, zone, hour12)}, is in
+                your daytime.
+              </>
+            )}
           </>
         )}
       </p>

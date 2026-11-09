@@ -47,6 +47,8 @@ npm run dev
   band (same code as slot generation), two timezones on one timeline, landing page and dashboard.
 - [Day 7: Brand, landing page and motion](docs/day-07.md): a logo built from the band, icons and link
   previews, a full landing page, account menu, 404/error pages, and view transitions that explain each change.
+- [Day 8: UX upgrades from review](docs/day-08.md): timezone search from tz database data, the booking form
+  in place, "in your daytime", week paging with booked/free hours, and "share times by text".
 
 ## Credits
 

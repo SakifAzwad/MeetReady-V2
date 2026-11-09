@@ -12,6 +12,7 @@ import {
   cancelBookingByToken,
   getBookingByToken,
   listHostBookings,
+  listHostBookingsBetween,
   rescheduleBookingByToken,
 } from "./manage-booking";
 import { hashManageToken } from "./manage-token";
@@ -217,6 +218,26 @@ describe("managing bookings", () => {
         status: "cancelled",
         cancelledBy: "host",
       });
+    });
+
+    it("lists confirmed bookings overlapping a range, for the week view", async () => {
+      await book("intro", "10:00", "inside");
+      await book("intro", "11:00", "edge"); // 11:00–11:30
+      await book("intro", "16:30", "overlaps-end");
+      const c = await book("intro", "14:00", "cancelled");
+      await cancelBookingByToken(db, c.manageToken, null, NOW);
+
+      const range = { start: at("09:30"), end: at("16:45") };
+      const found = (await listHostBookingsBetween(db, "alice", range)).map((b) =>
+        b.startsAt.toISOString().slice(11, 16),
+      );
+      // 10:00 inside; 16:30–17:00 overlaps the end; cancelled and other hosts never appear.
+      expect(found).toEqual(["10:00", "11:00", "16:30"]);
+      // Half-open ranges: a meeting ending at 11:30 doesn't touch a range starting at 11:30.
+      expect(await listHostBookingsBetween(db, "alice", { start: at("11:30"), end: at("12:00") })).toEqual(
+        [],
+      );
+      expect(await listHostBookingsBetween(db, "bob", range)).toEqual([]);
     });
 
     // IDOR, again: knowing a booking id must not be enough.

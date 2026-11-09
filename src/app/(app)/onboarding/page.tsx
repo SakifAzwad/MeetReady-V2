@@ -29,10 +29,7 @@ async function OnboardingFormForUser() {
   const user = await requireUser();
   if (user.username) redirect("/dashboard");
 
-  // Built on the server and passed down, so server and browser render the same
-  // list (no hydration mismatch). The form adds the browser's detected zone if
-  // this list spells it differently (e.g. Asia/Kolkata vs Asia/Calcutta).
-  const timeZones = Intl.supportedValuesOf("timeZone");
-
-  return <OnboardingForm suggestedUsername={suggestUsername(user.email)} timeZones={timeZones} />;
+  // The timezone picker searches the browser's own zone list when opened, so
+  // nothing needs to be sent from here (Day 3 sent ~420 names to keep a <select> in sync).
+  return <OnboardingForm suggestedUsername={suggestUsername(user.email)} />;
 }

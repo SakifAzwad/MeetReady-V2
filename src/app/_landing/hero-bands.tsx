@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { Band, BandTicks } from "@/components/daylight/band";
+import { BandTicks } from "@/components/daylight/band";
+import { ScrubBand, useScrub } from "@/components/daylight/scrub";
 import { TimezoneCombobox } from "@/components/timezone-combobox";
 import { useHour12, useMinuteClock } from "@/components/daylight/preferences";
 import {
   bandSegments,
   cityName,
+  dayBounds,
   daytimeOverlap,
   nowPosition,
   partOfDay,
@@ -15,6 +17,8 @@ import {
 } from "@/lib/scheduling/daylight";
 import { formatDateKey, formatTime, formatTimeRange } from "@/lib/scheduling/calendar";
 import { availabilityWindows } from "@/lib/scheduling/generate-slots";
+import { momentReadout } from "@/lib/scheduling/readout";
+import { skyGradient } from "@/lib/scheduling/sky";
 import { addDaysToKey, dateKeyInZone, wallTimeToInstant, type DateKey } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
 
@@ -118,9 +122,23 @@ function Timeline({ zone, now, hour12 }: { zone: string; now: Date; hour12: bool
 
   const segments = bandSegments(windows, day, zone);
   const nowAt = nowPosition(now, day, zone);
+  const range = dayBounds(day, zone);
   const noon = wallTimeToInstant(day, "12:00", zone);
-  const shiftHours = (utcOffsetMinutes(noon, HOST.timeZone) - utcOffsetMinutes(noon, zone)) / 60;
-  const sameZone = shiftHours === 0;
+  const sameZone = utcOffsetMinutes(noon, HOST.timeZone) === utcOffsetMinutes(noon, zone);
+  // Both skies on the visitor's timeline: one x position is one moment for both people.
+  const hostSky = skyGradient(HOST.timeZone, range);
+  const yourSky = skyGradient(zone, range);
+  const scrub = useScrub(range, () => nowAt);
+  const readout = scrub.instant
+    ? momentReadout({
+        instant: scrub.instant,
+        guestZone: zone,
+        hostZone: HOST.timeZone,
+        hostName: HOST.name,
+        windows,
+        hour12,
+      })
+    : null;
 
   const hostCity = cityName(HOST.timeZone);
   const yourCity = cityName(zone);
@@ -141,14 +159,36 @@ function Timeline({ zone, now, hour12 }: { zone: string; now: Date; hour12: bool
 
       <div className="grid grid-cols-1 items-center gap-x-6 gap-y-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
         <Label who={HOST.name} city={hostCity} time={formatTime(now, HOST.timeZone, hour12)} />
-        <Band segments={segments} nowAt={nowAt} shiftHours={shiftHours} highlights={highlights} />
+        <ScrubBand
+          scrub={scrub}
+          segments={segments}
+          nowAt={nowAt}
+          gradient={hostSky}
+          highlights={highlights}
+          slider={{ label: `Compare times, ${HOST.name} and you`, valueText: readout?.text ?? null }}
+          badge={readout?.lines.map((line, i) => (
+            <span key={line} className={cn("block", i === readout.lines.length - 1 && "font-semibold")}>
+              {line}
+            </span>
+          ))}
+        />
 
         <Label who="You" city={yourCity} time={formatTime(now, zone, hour12)} className="mt-3 sm:mt-0" />
-        <Band segments={segments} nowAt={nowAt} highlights={highlights} />
+        <ScrubBand
+          scrub={scrub}
+          segments={segments}
+          nowAt={nowAt}
+          gradient={yourSky}
+          highlights={highlights}
+        />
 
         <div className="hidden sm:block" />
         <BandTicks hour12={hour12} />
       </div>
+      <p className="text-muted-foreground mt-2 text-sm sm:pl-[11.5rem]">
+        Real daylight for both cities on this date. Hover or drag across the bands (or use the arrow keys) to
+        compare any moment.
+      </p>
 
       <p className="mt-5 max-w-[60ch] text-[17px] leading-relaxed">
         {!workday ? null : sameZone ? (

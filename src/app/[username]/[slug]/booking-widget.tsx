@@ -24,11 +24,12 @@ import { groupSlotsByDate } from "@/lib/scheduling/group-slots";
 import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
+import type { GuestDetailsForm } from "@/lib/validation/booking";
 import { DaylightBand } from "./daylight-band";
 import { FactsPanel, type EventInfo } from "./facts-panel";
 import { MonthCalendar } from "./month-calendar";
 import { useHour12 } from "@/components/daylight/preferences";
-import { Confirmation, GuestForm, RescheduleConfirm, type Booked } from "./steps";
+import { Confirmation, EMPTY_DETAILS, GuestForm, RescheduleConfirm, type Booked } from "./steps";
 import { TimeList } from "./time-list";
 
 export type { EventInfo } from "./facts-panel";
@@ -171,6 +172,9 @@ function Scheduler({
   const [step, setStep] = useState<"pick" | "details">("pick");
   const [booked, setBooked] = useState<Booked | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [draft, setDraft] = useState<GuestDetailsForm>(EMPTY_DETAILS);
+  // True right after coming back from the details step, so the list puts focus on the chosen time.
+  const [returned, setReturned] = useState(false);
 
   // The month as the GUEST sees it, turned into UTC instants for the API.
   const { from, to } = monthRangeInZone(visible, timeZone);
@@ -196,11 +200,23 @@ function Scheduler({
 
   const aside =
     layout === "embedded" ? null : <FactsPanel event={event} timeZone={timeZone} hour12={hour12} />;
-  const slotGone = () =>
+  const slotGone = (typed?: GuestDetailsForm) =>
     go("step-back", () => {
+      if (typed) setDraft(typed);
       setStep("pick");
       setSelectedSlot(null);
-      setNotice("Someone just booked that time. Pick another one.");
+      setReturned(true);
+      setNotice(
+        typed
+          ? "Someone just booked that time. Pick another one: your details are kept."
+          : "Someone just booked that time. Pick another one.",
+      );
+    });
+  const backToTimes = (typed?: GuestDetailsForm) =>
+    go("step-back", () => {
+      if (typed) setDraft(typed);
+      setStep("pick");
+      setReturned(true);
     });
 
   if (booked) {
@@ -327,7 +343,7 @@ function Scheduler({
                       token={reschedule.token}
                       currentStartsAt={reschedule.currentStartsAt}
                       currentEndsAt={reschedule.currentEndsAt}
-                      onBack={() => go("step-back", () => setStep("pick"))}
+                      onBack={backToTimes}
                       onMoved={(b) => {
                         go("step-forward", () => setBooked(b));
                         reschedule.onMoved?.();
@@ -347,7 +363,8 @@ function Scheduler({
                       hour12={hour12}
                       username={event.username}
                       slug={event.slug}
-                      onBack={() => go("step-back", () => setStep("pick"))}
+                      onBack={backToTimes}
+                      draft={draft}
                       onBooked={(b) => go("step-forward", () => setBooked(b))}
                       onSlotGone={slotGone}
                     />
@@ -355,9 +372,12 @@ function Scheduler({
                 </div>
               ) : (
                 <div className="flex min-w-0 flex-col gap-2">
-                  <h3 className="text-lg font-semibold">
-                    {activeDate ? formatDateKey(activeDate) : formatMonth(visible)}
-                  </h3>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-semibold">
+                      {activeDate ? formatDateKey(activeDate) : formatMonth(visible)}
+                    </h3>
+                    <HourToggle hour12={hour12} onChange={setHour12} />
+                  </div>
                   {calendar.isError ? (
                     <div className="text-sm">
                       <p className="text-destructive">Couldn&apos;t load times.</p>
@@ -375,7 +395,11 @@ function Scheduler({
                       hostTimeZone={event.hostTimeZone}
                       hour12={hour12}
                       selected={selectedSlot}
-                      onSelect={setSelectedSlot}
+                      onSelect={(slot) => {
+                        setSelectedSlot(slot);
+                        setReturned(false);
+                      }}
+                      focusOnMount={returned}
                       onContinue={(slot) =>
                         go("step-forward", () => {
                           setSelectedSlot(slot);
@@ -400,12 +424,7 @@ function Scheduler({
            * of the incoming list.
            */}
           <div className={phoneHidden} style={{ viewTransitionName: "booking-display-options" }}>
-            <DisplayOptions
-              timeZone={timeZone}
-              onTimeZoneChange={onTimeZoneChange}
-              hour12={hour12}
-              onHour12Change={setHour12}
-            />
+            <DisplayOptions timeZone={timeZone} onTimeZoneChange={onTimeZoneChange} />
           </div>
         </div>
       }
@@ -416,13 +435,9 @@ function Scheduler({
 function DisplayOptions({
   timeZone,
   onTimeZoneChange,
-  hour12,
-  onHour12Change,
 }: {
   timeZone: string;
   onTimeZoneChange: (tz: string) => void;
-  hour12: boolean;
-  onHour12Change: (v: boolean) => void;
 }) {
   const detected = useSyncExternalStore(
     () => () => {},
@@ -439,25 +454,6 @@ function DisplayOptions({
         id="guest-timezone"
         className="max-w-xs flex-1"
       />
-      <div role="radiogroup" aria-label="Clock format" className="flex rounded-lg border p-0.5">
-        {[true, false].map((value) => (
-          <button
-            key={String(value)}
-            type="button"
-            role="radio"
-            aria-checked={hour12 === value}
-            onClick={() => onHour12Change(value)}
-            className={cn(
-              "focus-visible:ring-ring/50 rounded-md px-3 py-1.5 text-sm font-medium outline-none focus-visible:ring-[3px]",
-              hour12 === value
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {value ? "12h" : "24h"}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -467,6 +463,34 @@ function Skeleton() {
     <div className="flex flex-col gap-6" aria-busy="true">
       <div className="bg-muted h-[7.5rem] animate-pulse rounded-xl" />
       <div className="bg-muted h-72 animate-pulse rounded-lg" />
+    </div>
+  );
+}
+
+/**
+ * Beside the date, where the times are read: a 24-hour reader looks for it
+ * there, not in the page footer. The default already follows the browser.
+ */
+function HourToggle({ hour12, onChange }: { hour12: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Clock format" className="flex shrink-0 rounded-lg border p-0.5">
+      {[true, false].map((value) => (
+        <button
+          key={String(value)}
+          type="button"
+          role="radio"
+          aria-checked={hour12 === value}
+          onClick={() => onChange(value)}
+          className={cn(
+            "focus-visible:ring-ring/50 rounded-md px-3 py-1.5 text-sm font-medium outline-none focus-visible:ring-[3px]",
+            hour12 === value
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {value ? "12h" : "24h"}
+        </button>
+      ))}
     </div>
   );
 }

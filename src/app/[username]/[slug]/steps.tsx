@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, type Path } from "react-hook-form";
 import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
 import { Button } from "@/components/ui/button";
@@ -30,12 +30,32 @@ function When({ slot, timeZone, hour12 }: { slot: Booked | Slot; timeZone: strin
   );
 }
 
+/**
+ * Where keyboard focus goes when a step appears: the first field on wide
+ * screens (start typing straight away), the heading on phones (focusing an
+ * input would open the keyboard and jump the page before they've read it).
+ * Either way focus isn't lost: the "Continue" button it was on has gone.
+ */
+function useStepFocus(focusField: (() => void) | null) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusField && window.matchMedia("(min-width: 1024px)").matches) focusField();
+    else headingRef.current?.focus();
+    // Mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return headingRef;
+}
+
+export const EMPTY_DETAILS: GuestDetailsForm = { guestName: "", guestEmail: "", guestNotes: "" };
+
 export function GuestForm({
   slot,
   timeZone,
   hour12,
   username,
   slug,
+  draft,
   onBack,
   onBooked,
   onSlotGone,
@@ -45,18 +65,21 @@ export function GuestForm({
   hour12: boolean;
   username: string;
   slug: string;
-  onBack: () => void;
+  /** What they typed last time (they went back, or the time was taken): never make them type it twice. */
+  draft: GuestDetailsForm;
+  onBack: (draft: GuestDetailsForm) => void;
   onBooked: (b: Booked) => void;
-  onSlotGone: () => void;
+  onSlotGone: (draft: GuestDetailsForm) => void;
 }) {
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
   const form = useForm<GuestDetailsForm>({
     resolver: zodResolver(guestDetailsSchema),
-    defaultValues: { guestName: "", guestEmail: "", guestNotes: "" },
+    defaultValues: draft,
     mode: "onTouched",
   });
   const { register, formState, setError } = form;
+  const headingRef = useStepFocus(() => form.setFocus("guestName"));
 
   const onSubmit = form.handleSubmit(async () => {
     setFormError(null);
@@ -73,7 +96,7 @@ export function GuestForm({
     if (result.ok) {
       onBooked({ startsAt: new Date(result.booking.startsAt), endsAt: new Date(result.booking.endsAt) });
     } else if (result.error === "slot_unavailable") {
-      onSlotGone();
+      onSlotGone(form.getValues());
     } else if (result.error === "invalid") {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
         if (messages?.[0]) setError(field as Path<GuestDetailsForm>, { message: messages[0] });
@@ -85,11 +108,19 @@ export function GuestForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex max-w-lg flex-col gap-5">
-      <Button type="button" variant="ghost" size="sm" className="-ml-2 self-start" onClick={onBack}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="-ml-2 self-start"
+        onClick={() => onBack(form.getValues())}
+      >
         <ArrowLeft /> Other times
       </Button>
       <div>
-        <h2 className="text-2xl font-semibold">Your details</h2>
+        <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold outline-none">
+          Your details
+        </h2>
         <p className="text-muted-foreground mt-1">
           <When slot={slot} timeZone={timeZone} hour12={hour12} /> ({cityName(timeZone)})
         </p>
@@ -151,6 +182,7 @@ export function RescheduleConfirm({
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
   const current = { startsAt: new Date(currentStartsAt), endsAt: new Date(currentEndsAt) };
+  const headingRef = useStepFocus(null);
 
   async function confirm() {
     setPending(true);
@@ -167,7 +199,9 @@ export function RescheduleConfirm({
       <Button type="button" variant="ghost" size="sm" className="-ml-2 self-start" onClick={onBack}>
         <ArrowLeft /> Other times
       </Button>
-      <h2 className="text-2xl font-semibold">Move your meeting?</h2>
+      <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold outline-none">
+        Move your meeting?
+      </h2>
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
         <dt className="text-muted-foreground">From</dt>
         <dd className="text-muted-foreground line-through">

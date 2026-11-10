@@ -283,3 +283,13 @@
     animation-delay: 0s !important;
   }
 }
+
+/* A short "pop" for confirmations (copied). Reduced motion turns it off with the rest. */
+@keyframes pop {
+  40% {
+    transform: scale(1.04);
+  }
+}
+@utility animate-pop {
+  animation: pop 240ms var(--ease-out);
+}

@@ -6,6 +6,7 @@ import {
   daytimeOverlap,
   nearestToDaytime,
   nowPosition,
+  splitByDaytime,
   offsetDifference,
   partOfDay,
   utcOffsetMinutes,
@@ -152,5 +153,38 @@ describe("nearestToDaytime", () => {
     const near = nearestToDaytime(segments, "2026-11-08", "America/New_York");
     expect(near.startsAfter).toEqual(new Date("2026-11-09T03:00:00Z"));
     expect(near.endsBefore).toBeNull();
+  });
+});
+
+describe("splitByDaytime", () => {
+  // Sakif's Tuesday (Dhaka 09:00–17:00) seen from London: 3:00 AM–10:30 AM slots.
+  const slots = Array.from({ length: 16 }, (_, i) => {
+    const start = new Date(Date.UTC(2026, 10, 10, 3, i * 30));
+    return { start, end: new Date(start.getTime() + 30 * 60_000) };
+  });
+
+  it("London: the 3–7:30 AM slots go before, 8 AM onwards is daytime", () => {
+    const { before, daytime, after } = splitByDaytime(slots, "Europe/London");
+    expect(before).toHaveLength(10);
+    expect(daytime[0]!.start.toISOString()).toBe("2026-11-10T08:00:00.000Z");
+    expect(daytime).toHaveLength(6);
+    expect(after).toEqual([]);
+  });
+
+  it("New York: nothing in daytime, so nothing is folded away", () => {
+    const { before, daytime, after } = splitByDaytime(slots, "America/New_York");
+    expect(before).toEqual([]);
+    expect(daytime).toHaveLength(16);
+    expect(after).toEqual([]);
+  });
+
+  it("a slot that ends after 8 PM goes after", () => {
+    const evening = [
+      { start: new Date("2026-11-10T19:00:00Z"), end: new Date("2026-11-10T19:30:00Z") },
+      { start: new Date("2026-11-10T19:45:00Z"), end: new Date("2026-11-10T20:15:00Z") },
+    ];
+    const { daytime, after } = splitByDaytime(evening, "Europe/London");
+    expect(daytime).toHaveLength(1);
+    expect(after).toHaveLength(1);
   });
 });

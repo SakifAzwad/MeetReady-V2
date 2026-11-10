@@ -1,8 +1,16 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { formatTime } from "@/lib/scheduling/calendar";
-import { cityName, PART_OF_DAY_LABEL, partOfDay, type PartOfDay } from "@/lib/scheduling/daylight";
+import { formatTime, formatTimeRange } from "@/lib/scheduling/calendar";
+import {
+  cityName,
+  PART_OF_DAY_LABEL,
+  partOfDay,
+  splitByDaytime,
+  type PartOfDay,
+} from "@/lib/scheduling/daylight";
 import type { Slot } from "@/lib/scheduling/generate-slots";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +27,11 @@ const DOT: Record<PartOfDay, string> = {
  * Two clocks per row (from direction A): the guest's time big, the host's
  * beside it. Click a row to select it; the selected row shows "Continue".
  * Grouped by part of the GUEST's day, in time order.
+ *
+ * Times outside the guest's daytime (8 AM–8 PM) are folded into one line
+ * above and below, so the first time anyone reads is a sensible one. If none
+ * are in daytime, nothing is folded. A folded group opens by itself when it
+ * holds the selected time.
  */
 export function TimeList({
   slots,
@@ -29,6 +42,7 @@ export function TimeList({
   onSelect,
   onContinue,
   label,
+  focusOnMount = false,
 }: {
   slots: Slot[];
   timeZone: string;
@@ -38,10 +52,139 @@ export function TimeList({
   onSelect: (slot: Slot) => void;
   onContinue: (slot: Slot) => void;
   label: string;
+  /** Coming back from the details step: put keyboard focus back on the chosen time. */
+  focusOnMount?: boolean;
 }) {
   const showHost = slots[0]
     ? formatTime(slots[0].start, hostTimeZone) !== formatTime(slots[0].start, timeZone)
     : false;
+  const { before, daytime, after } = splitByDaytime(slots, timeZone);
+  // Which folds are open, per day (label), so changing day folds them again.
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const holds = (group: Slot[]) =>
+    !!selected && group.some((s) => s.start.getTime() === selected.start.getTime());
+  const isOpen = (which: "before" | "after", group: Slot[]) => open.has(`${label}:${which}`) || holds(group);
+  const toggle = (which: "before" | "after") =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      const key = `${label}:${which}`;
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const groupRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusOnMount) return;
+    const root = groupRef.current;
+    const target =
+      root?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]') ?? root?.querySelector("button");
+    target?.focus();
+    // Mount only: focus once when the list comes back, not on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const rows = (group: Slot[], continuesFrom?: Slot) => (
+    <Rows
+      slots={group}
+      continuesPart={continuesFrom ? partOfDay(continuesFrom.start, timeZone) : undefined}
+      timeZone={timeZone}
+      hostTimeZone={hostTimeZone}
+      hour12={hour12}
+      selected={selected}
+      onSelect={onSelect}
+      onContinue={onContinue}
+      showHost={showHost}
+    />
+  );
+
+  return (
+    <div ref={groupRef} role="group" aria-label={label} className="flex flex-col">
+      {before.length > 0 && (
+        <Fold
+          open={isOpen("before", before)}
+          onToggle={() => toggle("before")}
+          text={foldText(before, "earlier", timeZone, hour12)}
+        >
+          {rows(before)}
+        </Fold>
+      )}
+      {/* With the fold open, 7:30 and 8:00 AM are both "Morning": don't head them twice. */}
+      {rows(daytime, before.length > 0 && isOpen("before", before) ? before.at(-1) : undefined)}
+      {after.length > 0 && (
+        <Fold
+          open={isOpen("after", after)}
+          onToggle={() => toggle("after")}
+          text={foldText(after, "later", timeZone, hour12)}
+        >
+          {rows(after)}
+        </Fold>
+      )}
+    </div>
+  );
+}
+
+/** "Show 10 earlier times, 3:00–7:30 AM" */
+function foldText(group: Slot[], which: "earlier" | "later", timeZone: string, hour12: boolean): string {
+  const n = group.length;
+  const range = formatTimeRange(group[0]!.start, group.at(-1)!.start, timeZone, hour12);
+  return `${n} ${which} ${n === 1 ? "time" : "times"}, ${n === 1 ? formatTime(group[0]!.start, timeZone, hour12) : range}`;
+}
+
+/** A disclosure: button with aria-expanded controlling the region under it. */
+function Fold({
+  open,
+  onToggle,
+  text,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  text: string;
+  children: React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={onToggle}
+        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 my-1 flex items-center gap-2 self-start rounded-md py-1.5 pr-2 text-sm outline-none focus-visible:ring-[3px]"
+      >
+        <ChevronRight aria-hidden className={cn("size-4 transition-transform", open && "rotate-90")} />
+        {open ? "Hide" : "Show"} {text}
+      </button>
+      <div id={id} hidden={!open} className={cn(open && "animate-in-down")}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Rows({
+  slots,
+  timeZone,
+  hostTimeZone,
+  hour12,
+  selected,
+  onSelect,
+  onContinue,
+  showHost,
+  continuesPart,
+}: {
+  slots: Slot[];
+  timeZone: string;
+  hostTimeZone: string;
+  hour12: boolean;
+  selected: Slot | null;
+  onSelect: (slot: Slot) => void;
+  onContinue: (slot: Slot) => void;
+  showHost: boolean;
+  /** The part of day the rows just above ended in; if these start in the same part, skip the heading. */
+  continuesPart?: PartOfDay;
+}) {
   const groups: { part: PartOfDay; slots: Slot[] }[] = [];
   for (const slot of slots) {
     const part = partOfDay(slot.start, timeZone);
@@ -51,13 +194,15 @@ export function TimeList({
   }
 
   return (
-    <div role="group" aria-label={label} className="flex flex-col">
-      {groups.map((g) => (
+    <>
+      {groups.map((g, gi) => (
         <div key={`${g.part}-${g.slots[0]!.start.toISOString()}`} className="flex flex-col">
-          <p className="text-muted-foreground mt-3 mb-1 flex items-center gap-2 text-[13px] first:mt-0">
-            <span aria-hidden className={cn("size-2 rounded-full", DOT[g.part])} />
-            {PART_OF_DAY_LABEL[g.part]}
-          </p>
+          {!(gi === 0 && g.part === continuesPart) && (
+            <p className="text-muted-foreground mt-3 mb-1 flex items-center gap-2 text-[13px] first:mt-0">
+              <span aria-hidden className={cn("size-2 rounded-full", DOT[g.part])} />
+              {PART_OF_DAY_LABEL[g.part]}
+            </p>
+          )}
           <ul className="flex flex-col">
             {g.slots.map((slot) => {
               const isSelected = selected?.start.getTime() === slot.start.getTime();
@@ -104,6 +249,6 @@ export function TimeList({
           </ul>
         </div>
       ))}
-    </div>
+    </>
   );
 }

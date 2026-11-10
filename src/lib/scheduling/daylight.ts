@@ -1,5 +1,5 @@
 import type { Interval } from "./intervals";
-import { addDaysToKey, wallTimeToInstant, type DateKey } from "./time";
+import { addDaysToKey, dateKeyInZone, wallTimeToInstant, type DateKey } from "./time";
 
 /*
  * The booking page's daylight band: the GUEST's day from midnight to
@@ -69,7 +69,7 @@ export function partOfDay(instant: Date, timeZone: string): PartOfDay {
 }
 
 export const PART_OF_DAY_LABEL: Record<PartOfDay, string> = {
-  early: "Before sunrise",
+  early: "Early hours",
   morning: "Morning",
   afternoon: "Afternoon",
   evening: "Evening",
@@ -170,4 +170,30 @@ export function nearestToDaytime(
     if (s.start >= end && (!startsAfter || s.start < startsAfter)) startsAfter = s.start;
   }
   return { endsBefore, startsAfter };
+}
+
+/** Does the whole slot fall inside the guest's daytime (8 AM–8 PM their time)? */
+export function isInDaytime(slot: Interval, timeZone: string): boolean {
+  const { start, end } = daytimeBounds(dateKeyInZone(slot.start, timeZone), timeZone);
+  return slot.start >= start && slot.end <= end;
+}
+
+/**
+ * Splits a day's slots into the ones before the guest's daytime, inside it,
+ * and after it. The booking page shows `daytime` first and folds the others
+ * away, so the first time a guest reads is 8:00 AM, not 3:00 AM. If nothing
+ * is in daytime, everything stays visible (folding it all would hide the day).
+ */
+export function splitByDaytime<T extends Interval>(
+  slots: readonly T[],
+  timeZone: string,
+): { before: T[]; daytime: T[]; after: T[] } {
+  const daytime = slots.filter((s) => isInDaytime(s, timeZone));
+  if (daytime.length === 0) return { before: [], daytime: [...slots], after: [] };
+  const first = daytime[0]!.start;
+  return {
+    before: slots.filter((s) => !isInDaytime(s, timeZone) && s.start < first),
+    daytime,
+    after: slots.filter((s) => !isInDaytime(s, timeZone) && s.start > first),
+  };
 }

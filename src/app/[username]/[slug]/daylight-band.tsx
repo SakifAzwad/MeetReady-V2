@@ -1,9 +1,11 @@
 "use client";
 
-import { Band, BandTicks } from "@/components/daylight/band";
+import { BandTicks } from "@/components/daylight/band";
+import { ScrubBand, useScrub } from "@/components/daylight/scrub";
 import { formatTime, formatTimeRange } from "@/lib/scheduling/calendar";
 import {
   bandSegments,
+  dayBounds,
   daytimeBounds,
   daytimeOverlap,
   nearestToDaytime,
@@ -12,6 +14,8 @@ import {
   offsetDifference,
 } from "@/lib/scheduling/daylight";
 import type { Interval } from "@/lib/scheduling/intervals";
+import { momentReadout } from "@/lib/scheduling/readout";
+import { skyGradient, sunSummary } from "@/lib/scheduling/sky";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { useMinuteClock } from "@/components/daylight/preferences";
 
@@ -40,6 +44,21 @@ export function DaylightBand({
   const now = useMinuteClock();
   const segments = bandSegments(windows, day, timeZone);
   const nowAt = now ? nowPosition(now, day, timeZone) : null;
+  const range = dayBounds(day, timeZone);
+  const sky = skyGradient(timeZone, range);
+  const sun = sunSummary(timeZone, day, hour12);
+  // Start the keyboard marker at the host's first hour that day (or now, or noon).
+  const scrub = useScrub(range, () => segments[0]?.left ?? nowAt);
+  const readout = scrub.instant
+    ? momentReadout({
+        instant: scrub.instant,
+        guestZone: timeZone,
+        hostZone: hostTimeZone,
+        hostName,
+        windows,
+        hour12,
+      })
+    : null;
   const firstName = hostName.split(" ")[0];
   const difference = offsetDifference(
     hostTimeZone,
@@ -107,8 +126,27 @@ export function DaylightBand({
       </div>
 
       {/* Decorative for screen readers: the sentence below says the same thing in words. */}
-      <Band segments={segments} nowAt={nowAt} highlights={bandSegments(overlap, day, timeZone)} />
-      <BandTicks hour12={hour12} />
+      <ScrubBand
+        scrub={scrub}
+        segments={segments}
+        nowAt={nowAt}
+        gradient={sky}
+        highlights={bandSegments(overlap, day, timeZone)}
+        slider={{ label: `Compare times with ${firstName}`, valueText: readout?.text ?? null }}
+        badge={readout?.lines.map((line, i) => (
+          <span key={line} className={i === readout.lines.length - 1 ? "block font-semibold" : "block"}>
+            {line}
+          </span>
+        ))}
+      />
+      <div className="flex flex-col gap-0.5">
+        <BandTicks hour12={hour12} />
+        {sun && (
+          <p className="text-muted-foreground text-xs">
+            {sun} in {cityName(timeZone)}. Hover or drag along the band to compare any moment.
+          </p>
+        )}
+      </div>
 
       <p className="mt-1 text-[15px]">{sentence}</p>
       {daytimeNote && <p className="text-muted-foreground text-[15px]">{daytimeNote}</p>}

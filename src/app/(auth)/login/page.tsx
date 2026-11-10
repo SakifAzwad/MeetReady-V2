@@ -6,6 +6,7 @@ import { Logo } from "@/components/brand/logo";
 import { Band } from "@/components/daylight/band";
 import { PageTransition } from "@/components/motion";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { skyGradient } from "@/lib/scheduling/sky";
 import { getSession } from "@/server/auth/session";
 import { GoogleSignInButton } from "./google-sign-in-button";
 
@@ -47,8 +48,8 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
             </p>
             {/* On a light card: the bands' night ends would vanish into the navy panel. */}
             <div className="bg-card text-card-foreground flex flex-col gap-3 rounded-2xl p-5">
-              <SampleRow label="You, in Dhaka" shiftHours={6} />
-              <SampleRow label="A guest in London" />
+              <SampleRow label="You, in Dhaka" zone="Asia/Dhaka" />
+              <SampleRow label="A guest in London" zone="Europe/London" />
             </div>
             <p className="text-primary-foreground/70 max-w-[46ch] text-sm leading-relaxed">
               9 AM–5 PM in Dhaka is 3–11 AM in London. Your booking page shows that before anyone picks a
@@ -61,16 +62,21 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
   );
 }
 
-/** Illustrative: a 9–5 Dhaka day on a London timeline (3–11 AM). */
-function SampleRow({ label, shiftHours = 0 }: { label: string; shiftHours?: number }) {
+/**
+ * Illustrative: a 9–5 Dhaka day on a London timeline (3–11 AM), with the real
+ * skies for a fixed November date (fixed, so this static page reads no clock).
+ */
+// London is on GMT in November, so its day is exactly the UTC day. Written out rather than
+// dayBounds(): that goes through TZDate, which reads the clock, and this page is static.
+const SAMPLE_DAY = { start: new Date("2026-11-09T00:00:00Z"), end: new Date("2026-11-10T00:00:00Z") };
+function SampleRow({ label, zone }: { label: string; zone: string }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-muted-foreground text-sm">{label}</span>
-      <Band segments={[{ left: 12.5, width: 33.33 }]} shiftHours={shiftHours} />
+      <Band segments={[{ left: 12.5, width: 33.33 }]} gradient={skyGradient(zone, SAMPLE_DAY)} />
     </div>
   );
 }
-
 async function SignIn({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
   const { next } = await searchParams;
   const destination = safeRedirectPath(typeof next === "string" ? next : undefined);

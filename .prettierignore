@@ -5,3 +5,6 @@ package-lock.json
 
 # Generated (compact on purpose): scripts/generate-zones.mjs
 src/lib/scheduling/zone-data.generated.ts
+
+# Browser scripts kept as-is until they become Playwright tests
+e2e/harness/

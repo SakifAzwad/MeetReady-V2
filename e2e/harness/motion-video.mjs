@@ -1,0 +1,20 @@
+import { chromium } from "playwright-core";
+import { readFileSync } from "node:fs";
+const BASE = "http://localhost:3000";
+const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, timezoneId: "Europe/London", recordVideo: { dir: "/tmp/vid", size: { width: 1280, height: 800 } } });
+const p = await ctx.newPage();
+const w = (ms) => p.waitForTimeout(ms);
+await p.goto(BASE); await p.getByText(/ now$/).first().waitFor(); await w(1500);
+await p.getByRole("button", { name: "Tokyo" }).click(); await w(1400);
+await p.getByRole("button", { name: "New York" }).click(); await w(1400);
+await p.getByRole("button", { name: "London" }).click(); await w(1200);
+await p.getByRole("link", { name: "Log in" }).first().click(); await p.getByRole("button", { name: "Continue with Google" }).waitFor(); await w(1500);
+await ctx.addCookies([{ name: "better-auth.session_token", value: readFileSync("/tmp/session-cookie.txt", "utf8"), url: BASE }]);
+await p.goto(BASE + "/dashboard"); await p.getByText("Your booking page").waitFor(); await w(1200);
+for (const name of ["Bookings", "Event types", "Availability", "Home"]) { await p.getByRole("link", { name, exact: true }).click(); await w(1100); }
+await p.goto(BASE + "/sakif/intro"); const g = p.getByRole("group", { name: /^Times on/ }); await g.waitFor(); await w(1000);
+await g.locator("button[aria-pressed]:visible").nth(2).click(); await w(700);
+await p.getByRole("button", { name: "Continue" }).click(); await p.getByLabel("Name").waitFor(); await w(1300);
+await p.getByRole("button", { name: /Other times/ }).click(); await w(1300);
+await ctx.close(); await browser.close();

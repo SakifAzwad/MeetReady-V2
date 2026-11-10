@@ -14,7 +14,8 @@ const eslintConfig = defineConfig([
   },
   // Must be last: turns off ESLint rules that fight with Prettier's formatting.
   prettier,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "drizzle/meta/**"]),
+  // e2e/harness: throwaway browser scripts, kept for reference until they become Playwright tests.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "drizzle/meta/**", "e2e/harness/**"]),
 ]);
 
 export default eslintConfig;

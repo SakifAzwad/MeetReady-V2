@@ -1,0 +1,33 @@
+import { chromium } from "playwright-core";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import os from "node:os"; import path from "node:path";
+const BASE = "http://localhost:3000", out = "/home/claude/e2e/shots", prefix = process.argv[2] ?? "a";
+const errors = [];
+const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] });
+async function shot(name, url, { host = true, dark = false, viewport = { width: 1280, height: 900 }, wait, file } = {}) {
+  const ctx = await browser.newContext({ viewport, timezoneId: "Asia/Dhaka", locale: "en-US", colorScheme: dark ? "dark" : "light" });
+  if (host) await ctx.addCookies([{ name: "better-auth.session_token", value: readFileSync("/tmp/session-cookie.txt", "utf8"), url: BASE }]);
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`${name}: ${e}`));
+  p.on("console", (m) => m.type() === "error" && !m.text().includes("404") && errors.push(`${name}: ${m.text()}`));
+  if (file) await p.goto(`file://${file}`); else await p.goto(`${BASE}${url}`);
+  if (wait) await p.getByText(wait).first().waitFor();
+  await p.waitForTimeout(400);
+  await p.screenshot({ path: `${out}/${prefix}-${name}.png`, fullPage: true });
+  const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  console.log(`${name}: overflow ${overflow}px`);
+  await ctx.close();
+}
+await shot("dashboard", "/dashboard", { wait: "Your booking page" });
+await shot("bookings", "/dashboard/bookings", { wait: /Upcoming|No upcoming/ });
+await shot("event-types", "/dashboard/event-types", { wait: "New event type" });
+await shot("availability", "/dashboard/availability", { wait: /Monday/ });
+await shot("new-event", "/dashboard/event-types/new", { wait: "Title" });
+await shot("login", "/login", { host: false, wait: "Continue with Google" });
+await shot("bookings-mobile", "/dashboard/bookings", { viewport: { width: 390, height: 844 }, wait: /Upcoming|No upcoming/ });
+await shot("dashboard-dark", "/dashboard", { dark: true, wait: "Your booking page" });
+const OUTBOX = path.join(os.tmpdir(), "meetready-emails");
+const mails = existsSync(OUTBOX) ? readdirSync(OUTBOX).filter((f) => f.endsWith(".html")).sort() : [];
+if (mails[0]) await shot("email", null, { host: false, viewport: { width: 700, height: 900 }, file: path.join(OUTBOX, mails[0]) });
+console.log("emails:", mails.slice(0, 4), "errors:", errors.length ? errors : "none");
+await browser.close();

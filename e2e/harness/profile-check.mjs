@@ -1,0 +1,15 @@
+import { chromium } from "playwright-core";
+import pg from "pg";
+const db = new pg.Client("postgresql://postgres@127.0.0.1:5432/meetready_e2e"); await db.connect();
+const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] });
+const page = await (await browser.newContext()).newPage();
+await db.query("update event_types set is_active = false");
+await page.goto("http://localhost:3000/sakif");
+await page.getByText("No meetings available to book right now.").waitFor({ timeout: 10000 });
+console.log("switched off: profile says no meetings ✓");
+await db.query("update event_types set is_active = true");
+await page.goto("http://localhost:3000/sakif");
+await page.getByRole("link", { name: /Intro call/ }).waitFor();
+console.log("switched on: profile lists Intro call ✓");
+await page.screenshot({ path: "/home/claude/e2e/shots/b0-profile.png" });
+await browser.close(); await db.end();

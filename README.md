@@ -52,6 +52,7 @@ npm run dev
 - [Day 9: Real daylight and scrubbing](docs/day-09.md): NOAA sunrise/sunset on every band (polar cases
   tested), hover/drag/keyboard time comparison, night times folded away, focus and 12h/24h fixes.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
+- [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.
 
 ## Credits
 

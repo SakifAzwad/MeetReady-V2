@@ -1,0 +1,27 @@
+import { chromium } from "playwright-core";
+import { readFileSync } from "node:fs";
+const BASE = "http://localhost:3000";
+const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, timezoneId: "Europe/London", locale: "en-US", recordVideo: { dir: "/tmp/vid9", size: { width: 1280, height: 800 } } });
+await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+const p = await ctx.newPage(); const w = (ms) => p.waitForTimeout(ms);
+await p.goto(BASE); await p.getByText(/ now$/).first().waitFor(); await p.mouse.wheel(0, 260); await w(1000);
+const hero = p.getByRole("slider", { name: "Compare times, Sakif and you" }); const b = await hero.boundingBox();
+for (let i = 0; i <= 60; i++) { await p.mouse.move(b.x + (b.width * i) / 60, b.y + b.height / 2); await w(55); }
+await p.mouse.move(b.x + b.width * 0.6, b.y - 200); await w(500);
+await p.getByRole("button", { name: "Tokyo" }).click(); await w(1300);
+await p.getByRole("button", { name: "Sydney" }).click(); await w(1300);
+await p.goto(`${BASE}/sakif/intro`); const g = p.getByRole("group", { name: /^Times on/ }); await g.waitFor(); await p.mouse.wheel(0, 120); await w(1200);
+await g.getByRole("button", { name: /earlier time/ }).click(); await w(1000);
+await g.getByRole("button", { name: /earlier time/ }).click(); await w(600);
+await p.getByRole("radio", { name: "24h" }).click(); await w(1000);
+await p.getByRole("radio", { name: "12h" }).click(); await w(600);
+const s = p.getByRole("slider", { name: /Compare times/ }); await s.focus(); for (let i = 0; i < 24; i++) { await p.keyboard.press("ArrowRight"); await w(70); } await w(800);
+await g.locator("button[aria-pressed]:visible").first().click(); await w(500);
+await p.getByRole("button", { name: "Continue" }).click(); await p.getByLabel("Name").waitFor(); await w(400);
+await p.keyboard.type("Ada Lovelace", { delay: 70 }); await w(800);
+await ctx.addCookies([{ name: "better-auth.session_token", value: readFileSync("/tmp/session-cookie.txt", "utf8"), url: BASE }]);
+await p.goto(`${BASE}/dashboard`); await p.getByText("Your booking page").waitFor(); await w(900);
+await p.getByRole("button", { name: "Copy link" }).click(); await w(1500);
+await p.mouse.wheel(0, 300); await w(1500);
+await ctx.close(); await browser.close();

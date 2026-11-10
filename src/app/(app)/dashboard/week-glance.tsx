@@ -8,6 +8,7 @@ import { formatDateKey, formatTimeRange } from "@/lib/scheduling/calendar";
 import { dayLoad, type DayLoad } from "@/lib/scheduling/day-load";
 import { bandSegments, cityName, dayBounds, nowPosition } from "@/lib/scheduling/daylight";
 import { availabilityWindows } from "@/lib/scheduling/generate-slots";
+import { skyGradient } from "@/lib/scheduling/sky";
 import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
@@ -173,7 +174,12 @@ function DayRow({
       <span className={day === today ? "font-semibold" : "text-muted-foreground"}>
         {dayLabel(day, today)}
       </span>
-      <Band segments={hours} nowAt={nowAt} className="h-8 rounded-lg">
+      <Band
+        segments={hours}
+        nowAt={nowAt}
+        gradient={skyGradient(tz, dayBounds(day, tz))}
+        className="h-8 rounded-lg"
+      >
         {booked.map((m) => (
           <span
             key={m.left}

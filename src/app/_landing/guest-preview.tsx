@@ -8,7 +8,7 @@ import { DaylightBand } from "@/app/[username]/[slug]/daylight-band";
 import { FactsPanel } from "@/app/[username]/[slug]/facts-panel";
 import { TimeList } from "@/app/[username]/[slug]/time-list";
 import { formatDateKey, formatTime } from "@/lib/scheduling/calendar";
-import { cityName, dayBounds } from "@/lib/scheduling/daylight";
+import { cityName, dayBounds, isInDaytime } from "@/lib/scheduling/daylight";
 import { availabilityWindows, generateSlots, type Slot } from "@/lib/scheduling/generate-slots";
 import { addDaysToKey, dateKeyInZone, wallTimeToInstant } from "@/lib/scheduling/time";
 import { HOST, useBrowserZone } from "./hero-bands";
@@ -68,6 +68,10 @@ export function GuestPreview() {
     busy: [booked("10:00", "11:00"), booked("14:00", "15:00")],
   });
 
+  // With daytime times, the list folds the rest away itself. Without any (New York),
+  // nothing is folded, so cap the sample at a few rows to keep the section short.
+  const shown = slots.some((s) => isInDaytime(s, zone)) ? slots : slots.slice(0, SHOWN);
+
   return (
     <div className="bg-card overflow-hidden rounded-2xl border shadow-[0_24px_60px_-30px_rgb(24_33_58/0.35)]">
       <div className="text-muted-foreground flex items-center justify-center border-b px-4 py-2.5 text-xs">
@@ -111,7 +115,7 @@ export function GuestPreview() {
             <div>
               <h4 className="mb-2 text-lg font-semibold">{formatDateKey(day)}</h4>
               <TimeList
-                slots={slots.slice(0, SHOWN)}
+                slots={shown}
                 timeZone={zone}
                 hostTimeZone={HOST.timeZone}
                 hour12={hour12}
@@ -120,8 +124,10 @@ export function GuestPreview() {
                 onContinue={setPicked}
                 label={`Sample times on ${formatDateKey(day)}`}
               />
-              {slots.length > SHOWN && (
-                <p className="text-muted-foreground mt-3 text-sm">and {slots.length - SHOWN} more times</p>
+              {slots.length > shown.length && (
+                <p className="text-muted-foreground mt-3 text-sm">
+                  and {slots.length - shown.length} more times
+                </p>
               )}
             </div>
           )}

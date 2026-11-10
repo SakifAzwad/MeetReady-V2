@@ -12,12 +12,25 @@ import { useSyncExternalStore } from "react";
 const KEY = "meetready:hour12";
 const EVENT = "meetready:prefs";
 
+/**
+ * The visitor's own clock style, from the browser's locale: en-US says h12,
+ * en-GB and de-DE say h23. So most of Europe gets 24-hour times without
+ * having to find a toggle.
+ */
+export function browserPrefers12h(): boolean {
+  const cycle = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hourCycle;
+  return cycle === "h11" || cycle === "h12";
+}
+
+/** An explicit choice (stored) wins; otherwise the browser's locale decides. */
 function read(): boolean {
   try {
-    return window.localStorage.getItem(KEY) !== "24";
+    const stored = window.localStorage.getItem(KEY);
+    if (stored) return stored !== "24";
   } catch {
-    return true; // storage can be blocked (private mode, embedded frames)
+    // storage can be blocked (private mode, embedded frames): fall through to the locale
   }
+  return browserPrefers12h();
 }
 
 function subscribe(onChange: () => void) {

@@ -1,8 +1,9 @@
 "use client";
 
-import { CalendarSearch, Check, Copy } from "lucide-react";
+import { CalendarSearch } from "lucide-react";
 import { useId, useState, useTransition } from "react";
 import { useHour12 } from "@/components/daylight/preferences";
+import { CopyButton } from "@/components/copy-button";
 import { TimezoneCombobox } from "@/components/timezone-combobox";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,7 +35,6 @@ export function ShareTimes({
   const [zone, setZone] = useState(hostTimeZone);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
 
   if (eventTypes.length === 0) {
@@ -47,7 +47,6 @@ export function ShareTimes({
 
   function suggest() {
     setError(null);
-    setCopied(false);
     startTransition(async () => {
       const r = await suggestTimesAction({ eventTypeId, timeZone: zone });
       if (!r.ok) {
@@ -73,17 +72,6 @@ export function ShareTimes({
         }),
       );
     });
-  }
-
-  async function copy() {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Blocked clipboard: the text is selectable in the box.
-    }
   }
 
   return (
@@ -131,10 +119,7 @@ export function ShareTimes({
             className="bg-background text-[15px] leading-relaxed"
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={copy} aria-live="polite">
-              {copied ? <Check /> : <Copy />}
-              {copied ? "Copied" : "Copy message"}
-            </Button>
+            <CopyButton text={text} label="Copy message" />
             <p className="text-muted-foreground text-sm">
               These times are free now but not held. If one gets taken, your link is at the bottom.
             </p>

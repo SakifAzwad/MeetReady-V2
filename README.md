@@ -49,6 +49,9 @@ npm run dev
   previews, a full landing page, account menu, 404/error pages, and view transitions that explain each change.
 - [Day 8: UX upgrades from review](docs/day-08.md): timezone search from tz database data, the booking form
   in place, "in your daytime", week paging with booked/free hours, and "share times by text".
+- [Day 9: Real daylight and scrubbing](docs/day-09.md): NOAA sunrise/sunset on every band (polar cases
+  tested), hover/drag/keyboard time comparison, night times folded away, focus and 12h/24h fixes.
+- [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 
 ## Credits
 

@@ -56,8 +56,10 @@ export function createOutboxSender(dir: string): EmailSender {
     async send(m) {
       await mkdir(dir, { recursive: true });
       const base = path.join(dir, `${Date.now()}-${m.to.replace(/[^a-z0-9]+/gi, "_")}`);
-      await writeFile(`${base}.html`, m.html);
+      // The .ics first, the .html last: whoever reads the folder (you, or the
+      // E2E tests) looks for .html files, so an email is never seen half-written.
       if (m.ics) await writeFile(`${base}.ics`, m.ics.content);
+      await writeFile(`${base}.html`, m.html);
       console.warn(`[email] No RESEND_API_KEY: saved "${m.subject}" to ${m.to} as ${base}.html`);
     },
   };

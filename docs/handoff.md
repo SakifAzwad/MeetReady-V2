@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 10)
+# Handoff: starting a new chat (after Day 11)
 
-Read this first in a new chat. It replaces the long Days 1–10 conversations. Details live in `docs/day-01.md` …
-`docs/day-10.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–11 conversations. Details live in `docs/day-01.md` …
+`docs/day-11.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–10):**
+- **Built (Days 1–11):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -16,18 +16,18 @@ Read this first in a new chat. It replaces the long Days 1–10 conversations. D
     page, motion.
   - Custom booking questions (Day 10): text, pick one, pick several, checkbox. Questions are jsonb on the event
     type; answers are a snapshot on the booking; a `questionsVersion` check catches questions edited mid-booking.
-- **Numbers:** 357 tests; typecheck, lint, format, `drizzle-kit check` and build all green. 5 migrations
-  (0000–0004). **Not deployed.**
+  - Browser tests in CI (Day 11): 12 Playwright tests (booking, race, manage, questions, phone) against the
+    production build and real Postgres, in a separate `e2e` job.
+- **Numbers:** 357 unit tests + 12 E2E tests; typecheck, lint, format, `drizzle-kit check` and build all green.
+  5 migrations (0000–0004). **Not deployed.**
 - **Repo:** `SakifAzwad/MeetReady-V2`. Sakif applies each day from a zip, then commits and pushes. The new chat
   must clone the repo; it can't see the old machine.
 
 ## Next (from `docs/backlog.md`)
 
-Phase 1 is complete.
-
-1. **Browser tests in CI:** turn `e2e/harness/` scripts into Playwright tests.
-2. Deploy (Vercel + Neon). Set env vars before the build; decide the `/unknown-username` 200-vs-404 issue.
-3. Then rate limiting, Google Calendar sync, reminders, AI features.
+1. **Deploy** (Vercel + Neon). Set env vars before the build; decide the `/unknown-username` 200-vs-404 issue;
+   Sentry; run the E2E suite against the preview URL.
+2. Then rate limiting, Google Calendar sync, reminders, AI features.
 
 ## How Sakif works
 
@@ -53,6 +53,8 @@ Phase 1 is complete.
   - React Email + Resend; with no `RESEND_API_KEY`, emails go to a dev outbox folder.
   - Tailwind 4, Radix, self-hosted Bricolage Grotesque and Figtree.
 - **Commands:** `npm test` (PGlite; set `TEST_DATABASE_URL` to also run the race tests on real Postgres),
+  `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
+  `E2E_BROWSER_CHANNEL=chrome`),
   `npm run typecheck`, `lint`, `format:check`, `npx drizzle-kit check`, `npm run build`. CI runs the same, with a
   Postgres 17 service.
 - **Env** (`.env.example` holds names only, never values): `DATABASE_URL`, `BETTER_AUTH_SECRET`,
@@ -77,6 +79,9 @@ Phase 1 is complete.
   `.optional()` (Day 10 story).
 - **Nested form errors:** use `fieldErrorsByPath`, not `z.flattenError` (first path segment only).
 - **`useFieldArray.update()` remounts the row:** put focus back yourself.
+- **E2E tests:** each test makes its own host (fixtures); never share data between tests. No retries: run new
+  tests with `--repeat-each 3` and fix flakes at the cause. Playwright starts `webServer` before `globalSetup`.
+- **Env files:** `KEY=` arrives as `""`, not missing. Optional env vars use `emptyAsUnset`.
 - **Browser scripts:** use `locale: "en-US"` when checking AM/PM text. Don't depend on "today"; pick a fixed
   day. Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".
   Empty the email outbox at the start.

@@ -8,3 +8,8 @@ src/lib/scheduling/zone-data.generated.ts
 
 # Browser scripts kept as-is until they become Playwright tests
 e2e/harness/
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/

@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
       "no-console": ["error", { allow: ["warn", "error"] }],
     },
   },
+  {
+    // Playwright fixtures receive a callback named `use`, which the React hooks
+    // rule mistakes for React's use() hook. There's no React in e2e/.
+    files: ["e2e/**"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
+  },
   // Must be last: turns off ESLint rules that fight with Prettier's formatting.
   prettier,
   // e2e/harness: throwaway browser scripts, kept for reference until they become Playwright tests.

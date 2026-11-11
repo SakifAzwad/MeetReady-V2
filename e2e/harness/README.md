@@ -1,5 +1,9 @@
 # Browser check scripts (Days 3–10)
 
+> **Day 11:** the booking, race, manage, questions and phone checks are now real Playwright tests in `e2e/*.spec.ts`,
+> run in CI on every push (`npm run test:e2e`). `booking-check`, `manage-check`, `day10-check` and `mobile-check` are
+> kept only for reference. The rest (design screenshots, motion videos, the Day 3/8/9 UI checks) are still scripts.
+
 The scripts used to verify each day in a real browser against the production build and real Postgres.
 They're **reference material, not CI tests yet**: written quickly, with hard-coded paths from the build machine
 (`/home/claude/meetready`, `/tmp/secret.txt`, `/tmp/session-cookie.txt`). The "browser tests in CI" day turns

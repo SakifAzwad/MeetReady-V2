@@ -11,6 +11,14 @@ import {
   updateEventType,
 } from "./event-types";
 
+const QUESTION = {
+  id: "2c4e6a8b-0d1f-4a3c-9e5b-7d9f1b3d5f7a",
+  type: "choice" as const,
+  label: "Your role",
+  required: true,
+  options: ["Engineer", "Founder"],
+};
+
 const ALICE = "alice";
 const BOB = "bob";
 
@@ -102,6 +110,16 @@ describe("event types data access", () => {
       expect((await getEventType(db, ALICE, aliceEventId))?.title).toBe("Intro call");
     });
 
+    it("can't have its booking questions replaced", async () => {
+      await updateEventType(db, ALICE, aliceEventId, input({ questions: [QUESTION] }));
+      const hijack = { ...QUESTION, label: "Your password", type: "text" as const, multiline: false };
+      expect(await updateEventType(db, BOB, aliceEventId, input({ questions: [hijack] }))).toEqual({
+        ok: false,
+        error: "not_found",
+      });
+      expect((await getEventType(db, ALICE, aliceEventId))?.questions).toEqual([QUESTION]);
+    });
+
     it("can't be turned off", async () => {
       expect(await setEventTypeActive(db, BOB, aliceEventId, false)).toEqual({
         ok: false,
@@ -109,6 +127,24 @@ describe("event types data access", () => {
       });
       expect((await getEventType(db, ALICE, aliceEventId))?.isActive).toBe(true);
     });
+  });
+
+  it("saves booking questions with the event type, in order, and replaces them on update", async () => {
+    const second = {
+      id: "8f6d4b2a-0e9c-4a7b-8c5d-3e1f9a7b5c3d",
+      type: "checkbox" as const,
+      label: "NDA",
+      required: false,
+    };
+    const created = await createEventType(db, ALICE, input({ questions: [QUESTION, second] }));
+    if (!created.ok) throw new Error("setup failed");
+    expect((await getEventType(db, ALICE, created.id))?.questions.map((q) => q.label)).toEqual([
+      "Your role",
+      "NDA",
+    ]);
+
+    await updateEventType(db, ALICE, created.id, input({ questions: [second] }));
+    expect((await getEventType(db, ALICE, created.id))?.questions).toEqual([second]);
   });
 
   it("turns an event type off and on", async () => {

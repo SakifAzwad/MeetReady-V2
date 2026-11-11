@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
+import { BookingAnswers } from "@/components/booking-answers";
 import { Badge, Card } from "@/components/ui/card";
 import { db } from "@/db";
 import { cityName } from "@/lib/scheduling/daylight";
@@ -131,6 +132,7 @@ function BookingRow({
             </p>
           )}
           {b.guestNotes && <p className="mt-2 text-sm whitespace-pre-line">&ldquo;{b.guestNotes}&rdquo;</p>}
+          <BookingAnswers answers={b.answers} className="mt-3" />
           <div className="mt-2 flex flex-wrap gap-2">
             {inProgress && <Badge className="border-primary/40 text-primary">Happening now</Badge>}
             {b.rescheduledAt && <Badge>Rescheduled</Badge>}

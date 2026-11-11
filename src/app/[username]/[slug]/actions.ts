@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { bookingRequestSchema, type GuestDetailsForm } from "@/lib/validation/booking";
+import type { Question } from "@/lib/validation/questions";
 import { createBooking } from "@/server/booking";
 import { emailContext } from "@/server/email";
 import { notifyBookingConfirmed } from "@/server/email/notifications";
@@ -11,7 +12,15 @@ import { notifyBookingConfirmed } from "@/server/email/notifications";
 export type BookSlotResult =
   | { ok: true; booking: { startsAt: string; endsAt: string } }
   | { ok: false; error: "slot_unavailable" | "not_found" }
-  | { ok: false; error: "invalid"; fieldErrors: Partial<Record<keyof GuestDetailsForm, string[]>> };
+  | {
+      ok: false;
+      error: "invalid";
+      fieldErrors: Partial<Record<keyof GuestDetailsForm, string[]>>;
+      /** First message per question id. */
+      answerErrors?: Record<string, string>;
+    }
+  /** The host changed the questions while the guest typed: the form rebuilds from these. */
+  | { ok: false; error: "questions_changed"; questions: Question[]; questionsVersion: string };
 
 /*
  * Public action: guests have no account. Everything in `input` is untrusted,
@@ -28,6 +37,13 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
   }
 
   const result = await createBooking(db, parsed.data, new Date());
+  if (!result.ok && result.error === "invalid_answers") {
+    return { ok: false, error: "invalid", fieldErrors: {}, answerErrors: result.answerErrors };
+  }
+  if (!result.ok && result.error === "questions_changed") {
+    const { questions, questionsVersion } = result;
+    return { ok: false, error: "questions_changed", questions, questionsVersion };
+  }
   if (!result.ok) {
     // "slot_taken" (lost a race at the database) and "slot_unavailable" (failed
     // the re-check) mean the same thing to a guest: pick another time.

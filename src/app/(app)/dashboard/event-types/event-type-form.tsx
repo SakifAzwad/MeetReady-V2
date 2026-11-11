@@ -20,6 +20,7 @@ import {
   type EventTypeInput,
 } from "@/lib/validation/event-type";
 import { createEventTypeAction, updateEventTypeAction, type EventTypeActionResult } from "./actions";
+import { QuestionsEditor } from "./questions-editor";
 
 const DURATION_PRESETS = [15, 30, 45, 60];
 const NOTICE_OPTIONS = [0, 30, 60, 120, 240, 720, 1440, 2880];
@@ -297,6 +298,8 @@ export function EventTypeForm(props: Props) {
           />
         </div>
       </Card>
+
+      <QuestionsEditor control={control} register={register} errors={errors} />
 
       {formError && (
         <p role="alert" className="text-destructive text-sm">

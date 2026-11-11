@@ -51,6 +51,9 @@ npm run dev
   in place, "in your daytime", week paging with booked/free hours, and "share times by text".
 - [Day 9: Real daylight and scrubbing](docs/day-09.md): NOAA sunrise/sunset on every band (polar cases
   tested), hover/drag/keyboard time comparison, night times folded away, focus and 12h/24h fixes.
+- [Day 10: Custom booking questions](docs/day-10.md): questions as jsonb on the event type, answers stored as a
+  snapshot, one Zod schema built from the questions on both sides, and an ETag-style version for questions that
+  change mid-booking.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.
 

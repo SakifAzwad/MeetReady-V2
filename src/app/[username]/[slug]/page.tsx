@@ -33,6 +33,7 @@ async function BookingCard({ params }: { params: Params }) {
   if (!eventType) notFound();
 
   // Only display data crosses to the client: no host email, no booking rules.
+  // The questions are public by nature: the guest has to read them to answer.
   return (
     <BookingWidget
       event={{
@@ -45,6 +46,7 @@ async function BookingCard({ params }: { params: Params }) {
         hostTimeZone: eventType.hostTimeZone,
         locationLabel: LOCATION_LABELS[eventType.locationType],
       }}
+      questions={{ questions: eventType.questions, questionsVersion: eventType.questionsVersion }}
     />
   );
 }

@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   smallint,
@@ -15,6 +16,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { BookingAnswer, Question } from "@/lib/validation/questions";
 
 /*
  * Conventions
@@ -137,6 +139,12 @@ export const eventTypes = pgTable(
     maxBookingsPerDay: integer(),
     /** Soft "delete": past bookings keep pointing at the event type. */
     isActive: boolean().notNull().default(true),
+    /**
+     * Custom booking questions (Day 10), in display order. jsonb, not a table:
+     * they're only ever read and saved together with the event type. Zod
+     * (questionsSchema) checks the shape; the CHECK below is the last guard.
+     */
+    questions: jsonb().$type<Question[]>().notNull().default([]),
     ...timestamps,
   },
   (t) => [
@@ -155,6 +163,10 @@ export const eventTypes = pgTable(
     ),
     check("event_types_slug_check", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
     check("event_types_color_check", sql`${t.color} ~ '^#[0-9a-fA-F]{6}$'`),
+    check(
+      "event_types_questions_check",
+      sql`jsonb_typeof(${t.questions}) = 'array' and jsonb_array_length(${t.questions}) <= 10`,
+    ),
   ],
 );
 
@@ -228,6 +240,12 @@ export const bookings = pgTable(
     /** For showing the guest their own times in emails. */
     guestTimeZone: text().notNull(),
     guestNotes: text(),
+    /**
+     * Answers to the event type's questions, as a snapshot: each one copies the
+     * question's label and type, so editing or deleting a question later never
+     * changes what a past booking says.
+     */
+    answers: jsonb().$type<BookingAnswer[]>().notNull().default([]),
     startsAt: timestamp({ withTimezone: true }).notNull(),
     endsAt: timestamp({ withTimezone: true }).notNull(),
     status: bookingStatus().notNull().default("confirmed"),
@@ -253,6 +271,7 @@ export const bookings = pgTable(
     check("bookings_time_order_check", sql`${t.endsAt} > ${t.startsAt}`),
     // A cancelled booking always says when; a confirmed one never does.
     check("bookings_cancellation_check", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`),
+    check("bookings_answers_check", sql`jsonb_typeof(${t.answers}) = 'array'`),
     // The no-double-booking EXCLUDE constraint is in a custom migration
     // (drizzle/0001_bookings_no_overlap.sql): Drizzle can't express EXCLUDE yet.
   ],

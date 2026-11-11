@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -198,6 +198,27 @@ describe("database schema", () => {
           .values({ userId: "host-1", title: "Again", slug: "intro-call", durationMinutes: 30 }),
       );
       expect(code).toBe(UNIQUE_VIOLATION);
+    });
+
+    it("questions and answers must be JSON arrays, and at most 10 questions", async () => {
+      // Zod already enforces this; the constraint catches whatever skips Zod (a script, a bug).
+      const setQuestions = (value: unknown) =>
+        db
+          .update(eventTypes)
+          .set({ questions: sql`${JSON.stringify(value)}::jsonb` })
+          .where(eq(eventTypes.id, eventTypeId));
+      expect(await pgErrorCode(setQuestions({ not: "an array" }))).toBe(CHECK_VIOLATION);
+      expect(await pgErrorCode(setQuestions(Array.from({ length: 11 }, () => ({}))))).toBe(CHECK_VIOLATION);
+      expect(await pgErrorCode(setQuestions([]))).toBeUndefined();
+
+      const code = await pgErrorCode(
+        db.insert(bookings).values(
+          booking("2026-11-09T14:00:00Z", "2026-11-09T14:30:00Z", {
+            answers: sql`'"text"'::jsonb` as never,
+          }),
+        ),
+      );
+      expect(code).toBe(CHECK_VIOLATION);
     });
   });
 });

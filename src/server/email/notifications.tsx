@@ -96,6 +96,7 @@ export async function notifyBookingConfirmed(ctx: Context, bookingId: string, ma
         location,
         guestEmail: b.guestEmail,
         guestNotes: b.guestNotes,
+        answers: b.answers,
         actionUrl: `${ctx.appUrl}/dashboard/bookings`,
       },
       b.hostTimeZone,

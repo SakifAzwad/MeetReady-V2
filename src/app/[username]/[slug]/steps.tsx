@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useForm, type Path } from "react-hook-form";
+import { useForm, type Path, type Resolver } from "react-hook-form";
 import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -13,7 +13,9 @@ import { formatDateKey, formatTime } from "@/lib/scheduling/calendar";
 import type { Slot } from "@/lib/scheduling/generate-slots";
 import { dateKeyInZone } from "@/lib/scheduling/time";
 import { guestDetailsSchema, type GuestDetailsForm } from "@/lib/validation/booking";
+import { answersSchema, initialAnswers, type Answers, type Question } from "@/lib/validation/questions";
 import { bookSlotAction } from "./actions";
+import { QuestionFields } from "./question-fields";
 import { cityName } from "@/lib/scheduling/daylight";
 
 export type Booked = { startsAt: Date; endsAt: Date };
@@ -47,7 +49,13 @@ function useStepFocus(focusField: (() => void) | null) {
   return headingRef;
 }
 
-export const EMPTY_DETAILS: GuestDetailsForm = { guestName: "", guestEmail: "", guestNotes: "" };
+/** Everything the guest types: their details plus answers to the host's questions. */
+export type GuestDraft = GuestDetailsForm & { answers: Answers };
+
+export const EMPTY_DETAILS: GuestDraft = { guestName: "", guestEmail: "", guestNotes: "", answers: {} };
+
+/** The host's questions, and which version of them the form was built from. */
+export type BookingQuestions = { questions: Question[]; questionsVersion?: string };
 
 export function GuestForm({
   slot,
@@ -56,9 +64,12 @@ export function GuestForm({
   username,
   slug,
   draft,
+  questions: { questions, questionsVersion },
+  notice,
   onBack,
   onBooked,
   onSlotGone,
+  onQuestionsChanged,
 }: {
   slot: Slot;
   timeZone: string;
@@ -66,16 +77,23 @@ export function GuestForm({
   username: string;
   slug: string;
   /** What they typed last time (they went back, or the time was taken): never make them type it twice. */
-  draft: GuestDetailsForm;
-  onBack: (draft: GuestDetailsForm) => void;
+  draft: GuestDraft;
+  questions: BookingQuestions;
+  /** Shown above the form, e.g. after the host changed the questions. */
+  notice?: string | null;
+  onBack: (draft: GuestDraft) => void;
   onBooked: (b: Booked) => void;
-  onSlotGone: (draft: GuestDetailsForm) => void;
+  onSlotGone: (draft: GuestDraft) => void;
+  onQuestionsChanged: (questions: Required<BookingQuestions>, draft: GuestDraft) => void;
 }) {
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
-  const form = useForm<GuestDetailsForm>({
-    resolver: zodResolver(guestDetailsSchema),
-    defaultValues: draft,
+  // Mounted once per version of the questions (the widget keys it), so the
+  // schema and defaults are built once. Same answersSchema the server runs.
+  const [schema] = useState(() => guestDetailsSchema.extend({ answers: answersSchema(questions) }));
+  const form = useForm<GuestDraft>({
+    resolver: zodResolver(schema) as unknown as Resolver<GuestDraft>,
+    defaultValues: { ...draft, answers: initialAnswers(questions, draft.answers) },
     mode: "onTouched",
   });
   const { register, formState, setError } = form;
@@ -89,6 +107,7 @@ export function GuestForm({
       slug,
       startsAt: slot.start.toISOString(),
       guestTimeZone: timeZone,
+      questionsVersion,
     });
     // Either way the free times have changed: refetch them.
     await queryClient.invalidateQueries({ queryKey: ["calendar", username, slug] });
@@ -97,9 +116,15 @@ export function GuestForm({
       onBooked({ startsAt: new Date(result.booking.startsAt), endsAt: new Date(result.booking.endsAt) });
     } else if (result.error === "slot_unavailable") {
       onSlotGone(form.getValues());
+    } else if (result.error === "questions_changed") {
+      onQuestionsChanged(result, form.getValues());
     } else if (result.error === "invalid") {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        if (messages?.[0]) setError(field as Path<GuestDetailsForm>, { message: messages[0] });
+        if (messages?.[0]) setError(field as Path<GuestDraft>, { message: messages[0] });
+      }
+      for (const [questionId, message] of Object.entries(result.answerErrors ?? {})) {
+        if (questionId) setError(`answers.${questionId}`, { message });
+        else setFormError("Your answers don't match this form any more. Reload the page and try again.");
       }
     } else {
       setFormError("This meeting type isn't available any more.");
@@ -125,6 +150,11 @@ export function GuestForm({
           <When slot={slot} timeZone={timeZone} hour12={hour12} /> ({cityName(timeZone)})
         </p>
       </div>
+      {notice && (
+        <p role="status" className="bg-muted rounded-md px-3 py-2 text-sm">
+          {notice}
+        </p>
+      )}
       <Field id="guestName" label="Name" error={formState.errors.guestName?.message}>
         {(aria) => <Input {...aria} autoComplete="name" {...register("guestName")} />}
       </Field>
@@ -136,6 +166,7 @@ export function GuestForm({
       >
         {(aria) => <Input {...aria} type="email" autoComplete="email" {...register("guestEmail")} />}
       </Field>
+      <QuestionFields questions={questions} register={register} errors={formState.errors} />
       <Field
         id="guestNotes"
         label="Anything to share before the meeting?"

@@ -13,6 +13,8 @@ import { createMemorySender, type EmailMessage, type EmailSender } from "./sende
 // Host in Dhaka (09:00–17:00 Monday = 03:00–11:00 UTC); guest in London (UTC in November).
 const NOW = new Date("2026-11-01T00:00:00Z");
 const APP = "https://meetready.test";
+const COMPANY = "3f1c2a7e-8b4d-4c9a-9e2f-1a2b3c4d5e6f";
+const TOPICS = "7a9b8c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 describe("booking emails", () => {
   let db: Database;
@@ -43,6 +45,16 @@ describe("booking emails", () => {
         locationValue: "https://us05web.zoom.us/j/123",
         minimumNoticeMinutes: 0,
         bookingWindowDays: null,
+        questions: [
+          { id: COMPANY, type: "text", label: "Company", required: true, multiline: false },
+          {
+            id: TOPICS,
+            type: "multi_choice",
+            label: "Topics",
+            required: false,
+            options: ["Pricing", "Hiring", "Roadmap"],
+          },
+        ],
       }),
     );
     const r = await createBooking(
@@ -55,6 +67,7 @@ describe("booking emails", () => {
         guestEmail: "ada@example.com",
         guestTimeZone: "Europe/London",
         guestNotes: "<script>alert('x')</script> Let's talk about the role",
+        answers: { [COMPANY]: "Acme Corp", [TOPICS]: ["Roadmap", "Hiring"] },
       },
       NOW,
     );
@@ -87,6 +100,20 @@ describe("booking emails", () => {
     expect(guest.ics?.content).toContain(`UID:${bookingId}@meetready`);
     expect(guest.ics?.content).toContain("SEQUENCE:0");
     expect(guest.ics?.content).toContain("LOCATION:https://us05web.zoom.us/j/123");
+  });
+
+  it("booking answers go to the host's email only, never the guest's email or the invite", async () => {
+    const sender = createMemorySender();
+    await notifyBookingConfirmed({ db, sender, appUrl: APP, now: NOW }, bookingId, token);
+    const guest = to(sender.sent, "ada@example.com");
+    const host = to(sender.sent, "sakif@example.com");
+
+    expect(host.text).toContain("Company");
+    expect(host.text).toContain("Acme Corp");
+    expect(host.text).toContain("Hiring, Roadmap"); // the host's option order, not the click order
+    for (const leak of [guest.text, guest.html, guest.ics?.content, host.ics?.content]) {
+      expect(leak).not.toContain("Acme Corp");
+    }
   });
 
   it("escapes guest-supplied text in the host's email (no HTML injection)", async () => {

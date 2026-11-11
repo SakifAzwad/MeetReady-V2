@@ -70,20 +70,45 @@ test("two guests confirm the same time at once: exactly one gets it", async ({ h
   expect(rows[0].n).toBe(1);
 });
 
-test("switched-off event types and unknown hosts are not found", async ({ host, newGuest, db }) => {
+test("pages that don't exist return a real 404 status, not just a not-found page", async ({
+  host,
+  newGuest,
+  db,
+}) => {
   const guest = await newGuest();
-  await guest.goto("/nobody-here-at-all");
-  await expect(guest.getByRole("heading", { name: "This page could not be found." })).toBeVisible();
+  const notFound = guest.getByRole("heading", { name: "This page could not be found." });
+  const statusOf = async (path: string) => (await guest.goto(path))?.status();
+
+  // proxy.ts checks the database before the page streams (Day 12), so these are 404s, not "200 + noindex".
+  expect(await statusOf("/nobody-here-at-all")).toBe(404);
+  await expect(notFound).toBeVisible();
+  expect(await statusOf(`/${host.username}/no-such-meeting`)).toBe(404);
+  expect(await statusOf("/Not%20A%20Username")).toBe(404);
+  expect(await statusOf(`/${host.username}`)).toBe(200);
+  expect(await statusOf(`/${host.username.toUpperCase()}/INTRO`)).toBe(200); // URLs are case-insensitive
 
   await db.query("update event_types set is_active = false where id = $1", [host.eventTypeId]);
-  await guest.goto(`/${host.username}/intro`);
-  await expect(guest.getByRole("heading", { name: "This page could not be found." })).toBeVisible();
-  await guest.goto(`/${host.username}`);
+  expect(await statusOf(`/${host.username}/intro`)).toBe(404);
+  await expect(notFound).toBeVisible();
+  // The profile still exists, with nothing to book.
+  expect(await statusOf(`/${host.username}`)).toBe(200);
   await expect(guest.getByText("No meetings available to book right now.")).toBeVisible();
+});
+
+test("security headers are on every response", async ({ request, host }) => {
+  for (const path of ["/", `/${host.username}/intro`, "/api/slots"]) {
+    const headers = (await request.get(path)).headers();
+    expect(headers["content-security-policy"], path).toBe("frame-ancestors 'none'");
+    expect(headers["x-frame-options"], path).toBe("DENY");
+    expect(headers["x-content-type-options"], path).toBe("nosniff");
+    expect(headers["referrer-policy"], path).toBe("strict-origin-when-cross-origin");
+  }
 });
 
 test("the slots API rejects bad input", async ({ request, host }) => {
   const base = `/api/slots?username=${host.username}&slug=intro`;
+  // Dates that don't parse are a 400, not a crash (Day 12 story).
+  expect((await request.get(`${base}&from=bad&to=bad`)).status()).toBe(400);
   // A two-year range is refused (at most 62 days per request).
   expect((await request.get(`${base}&from=2026-11-01T00:00:00Z&to=2028-11-01T00:00:00Z`)).status()).toBe(400);
   expect(

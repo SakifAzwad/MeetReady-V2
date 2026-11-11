@@ -63,6 +63,9 @@ export const cancelRequestSchema = z.object({
 
 const MAX_RANGE_DAYS = 62;
 
+/** For refinements that read several fields: run only if every field parsed. */
+const noIssuesYet = (payload: { issues: readonly unknown[] }) => payload.issues.length === 0;
+
 /** GET /api/slots query. The range is capped so one request can't ask for years of slots. */
 export const slotsQuerySchema = z
   .object({
@@ -73,8 +76,13 @@ export const slotsQuerySchema = z
     /** Guest's manage token when rescheduling: their own booking shouldn't block the new time. */
     reschedule: z.string().max(64).optional(),
   })
-  .refine((q) => q.to > q.from, { message: "`to` must be after `from`", path: ["to"] })
+  // `when`: only compare the dates once both parsed. Zod 4 runs an object's
+  // refinements even after a field failed its format check, and hands them
+  // the raw string: "bad".getTime() threw, and the API answered 500 instead
+  // of 400 (Day 12 story; never-throws.property.test.ts guards every schema).
+  .refine((q) => q.to > q.from, { message: "`to` must be after `from`", path: ["to"], when: noIssuesYet })
   .refine((q) => q.to.getTime() - q.from.getTime() <= MAX_RANGE_DAYS * 86_400_000, {
     message: `Range can be at most ${MAX_RANGE_DAYS} days`,
     path: ["to"],
+    when: noIssuesYet,
   });

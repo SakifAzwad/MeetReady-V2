@@ -59,4 +59,10 @@ describe("slotsQuerySchema", () => {
     expect(slotsQuerySchema.safeParse({ ...q, to: "2026-10-01T00:00:00Z" }).success).toBe(false);
     expect(slotsQuerySchema.safeParse({ ...q, to: "2027-11-01T00:00:00Z" }).success).toBe(false);
   });
+
+  it("answers bad dates with an error instead of throwing (the API's 500 on Day 12)", () => {
+    const result = slotsQuerySchema.safeParse({ ...q, from: "bad", to: "bad" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => i.path.join("."))).toEqual(["from", "to"]);
+  });
 });

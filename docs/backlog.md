@@ -1,35 +1,36 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 11).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 12).
 
 ## Next, in order
 
-1. **Deploy:** Vercel and Neon. Environment variables must be set **before** the build (Day 7 story: the landing
-   page is static). Then:
-   - decide on the `/unknown-username` status (see Known issues);
-   - add error monitoring (Sentry);
-   - run the E2E suite against the preview URL (Playwright's `baseURL` already makes that a config change).
-2. **Rate limiting** on the public booking routes (and later the AI routes). Upstash Redis is planned. This
-   needs to be in place before the slot hold below.
-3. **Google Calendar sync for hosts:** busy times from the host's calendar block slots, and bookings get a Meet
+1. **Go live:** follow [deploy.md](deploy.md) (Sakif), then confirm the smoke test passes on the real domain.
+2. **Error monitoring with Sentry:** agreed as its own small step right after the deploy works. Server and browser
+   errors with source maps; no session replay (privacy) and no tracing at first (free-tier quota).
+3. **Rate limiting** on the public booking routes (and later the AI routes). Upstash Redis is planned. This
+   needs to be in place before the slot hold below. Matters more now that the site is public.
+4. **Google Calendar sync for hosts:** busy times from the host's calendar block slots, and bookings get a Meet
    link.
-4. **Reminder emails** (a day and an hour before) with Inngest, plus email retries.
-5. **AI features:** booking assistant, MCP server, meeting brief (see the full list below). The booking
+5. **Reminder emails** (a day and an hour before) with Inngest, plus email retries.
+6. **AI features:** booking assistant, MCP server, meeting brief (see the full list below). The booking
    questions feed the meeting brief: the answers are what the host should read before the call.
 
-Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11).
+Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
+code and runbook (Day 12).
 
 ## Ideas from reviews, deferred
 
-| Idea                                                                             | From   | Why it waits                                                                                                                                                                                                                                          | When                              |
-| -------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| **5-minute slot hold** while a guest types                                       | Day 9  | Good interview piece (expiring holds, same race tests as booking, Postgres only). But the page is public with no login: without rate limits a script could hold every slot. Abandoned holds also hide free times for 5 minutes.                       | With rate limiting, around deploy |
-| **Guest calendar overlay** ("check my conflicts")                                | Day 9  | Reuses the host Google Calendar sync, which matters more and comes first. Calendar access is a sensitive Google permission: until the app passes Google's review, users see an "unverified app" warning. Must stay optional, read-only, never stored. | After host Google Calendar sync   |
-| **Guest edits their answers** when rescheduling                                  | Day 10 | The manage page shows answers read-only. Editing needs a form there and a host notification ("Ada changed her answers"). Rarely needed: notes cover it.                                                                                               | With Phase 2 webhooks             |
-| **Conditional questions** ("ask B only if A = Founder")                          | Day 10 | Turns a list into a small rules engine (and its validation). It's what routing forms do, so it belongs there.                                                                                                                                         | With routing forms (Phase 3)      |
-| **More E2E coverage:** onboarding, availability editor, guest timezone switching | Day 11 | The four specs cover the flows where a break costs a booking. These pages are covered by unit tests and the Day 3/8/9 scripts; porting them is mechanical.                                                                                            | When one of them changes next     |
-| **Preferred hours** (was: "focus / open for meetings" tags)                      | Day 8  | Reshaped: focus time that guests mustn't book is simply not-available hours. The real feature is "bookable, but shown first": it needs a schema change and editor work.                                                                               | With AI smart slot ranking        |
+| Idea                                                                             | From   | Why it waits                                                                                                                                                                                                                                          | When                                              |
+| -------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **5-minute slot hold** while a guest types                                       | Day 9  | Good interview piece (expiring holds, same race tests as booking, Postgres only). But the page is public with no login: without rate limits a script could hold every slot. Abandoned holds also hide free times for 5 minutes.                       | With rate limiting, around deploy                 |
+| **Guest calendar overlay** ("check my conflicts")                                | Day 9  | Reuses the host Google Calendar sync, which matters more and comes first. Calendar access is a sensitive Google permission: until the app passes Google's review, users see an "unverified app" warning. Must stay optional, read-only, never stored. | After host Google Calendar sync                   |
+| **Guest edits their answers** when rescheduling                                  | Day 10 | The manage page shows answers read-only. Editing needs a form there and a host notification ("Ada changed her answers"). Rarely needed: notes cover it.                                                                                               | With Phase 2 webhooks                             |
+| **Conditional questions** ("ask B only if A = Founder")                          | Day 10 | Turns a list into a small rules engine (and its validation). It's what routing forms do, so it belongs there.                                                                                                                                         | With routing forms (Phase 3)                      |
+| **More E2E coverage:** onboarding, availability editor, guest timezone switching | Day 11 | The four specs cover the flows where a break costs a booking. These pages are covered by unit tests and the Day 3/8/9 scripts; porting them is mechanical.                                                                                            | When one of them changes next                     |
+| **Script Content-Security-Policy** (nonces)                                      | Day 12 | Headers stop framing and sniffing already. A strict script CSP needs a nonce per request, which conflicts with prerendered static shells; Next's hash-based option is still young.                                                                    | After Sentry (CSP violation reports can go there) |
+| **A custom domain** (emails to every guest)                                      | Day 12 | About $10/year; Resend's test sender only reaches the owner's address until a domain is verified. No code change: env vars and DNS.                                                                                                                   | Whenever Sakif buys one                           |
+| **Preferred hours** (was: "focus / open for meetings" tags)                      | Day 8  | Reshaped: focus time that guests mustn't book is simply not-available hours. The real feature is "bookable, but shown first": it needs a schema change and editor work.                                                                               | With AI smart slot ranking                        |
 
 ## Decided against
 
@@ -71,9 +72,8 @@ Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests
 
 ## Known issues
 
-- **`/nobody` returns 200, not 404** (Day 7). The username route streams before the lookup finishes, so
-  `notFound()` can only swap the content and add `noindex`. Nothing is indexed, but the status is wrong.
-  Decide on deploy day: check the username before streaming.
+- **`/booking/{made-up-token}` returns 200** with the not-found page and `noindex` (Day 12). Profile and booking
+  pages got real 404s from Proxy; the manage page didn't, because its URL is private and never linked publicly.
 - **Sun times use each timezone's main city** (Day 9). Someone in Chattogram sees Dhaka's sunrise, a few
   minutes off. Knowing the exact town would need a location permission, which isn't worth it for colours.
 - **The hero's colours no longer slide between cities** (Day 9). Real skies are per-city gradients, and CSS can't

@@ -1,0 +1,42 @@
+name: Smoke test (production)
+
+# Vercel tells GitHub about each deployment. When a PRODUCTION deployment
+# succeeds, check the live site with read-only tests (playwright.smoke.config.ts):
+# the things only a real deploy can break, like a missing env var or a
+# migration that didn't run.
+#
+# Setup (once): repository Settings -> Secrets and variables -> Actions ->
+# Variables: PRODUCTION_URL (e.g. https://meetready.vercel.app) and, optionally,
+# DEMO_BOOKING_PATH (e.g. /sakif/intro).
+on:
+  deployment_status:
+
+jobs:
+  smoke:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # The production domain, not the deployment's own URL: Vercel's
+      # deployment protection puts a login page in front of those.
+      SMOKE_URL: ${{ vars.PRODUCTION_URL }}
+      SMOKE_DEMO_PATH: ${{ vars.DEMO_BOOKING_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --config playwright.smoke.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

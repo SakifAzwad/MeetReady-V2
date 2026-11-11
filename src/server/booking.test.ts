@@ -6,7 +6,13 @@ import { EVENT_TYPE_DEFAULTS, eventTypeSchema } from "@/lib/validation/event-typ
 import type { QuestionFormValues } from "@/lib/validation/questions";
 import { createTestDb } from "@/test/db";
 import { saveDateOverride, saveWeeklySchedule } from "./availability";
-import { createBooking, getBookableSlots, getPublicEventType, getPublicProfile } from "./booking";
+import {
+  createBooking,
+  getBookableSlots,
+  getPublicEventType,
+  getPublicProfile,
+  publicPageExists,
+} from "./booking";
 import { createEventType, setEventTypeActive, updateEventType } from "./event-types";
 import { getBookingByToken, rescheduleBookingByToken } from "./manage-booking";
 
@@ -73,6 +79,19 @@ describe("public booking", () => {
       expect(await getPublicEventType(db, "alice", "intro")).toBeNull();
       expect(await getPublicEventType(db, "nobody", "intro")).toBeNull();
       expect(await getPublicProfile(db, "newbie")).toBeNull();
+    });
+
+    it("publicPageExists matches what the pages would show (it decides the 404 status in proxy.ts)", async () => {
+      expect(await publicPageExists(db, "alice")).toBe(true);
+      expect(await publicPageExists(db, "ALICE", "Intro")).toBe(true);
+      expect(await publicPageExists(db, "alice", "nope")).toBe(false);
+      expect(await publicPageExists(db, "nobody")).toBe(false);
+      expect(await publicPageExists(db, "nobody", "intro")).toBe(false);
+
+      const [row] = await db.select().from(eventTypes).where(eq(eventTypes.slug, "intro"));
+      await setEventTypeActive(db, "alice", row!.id, false);
+      expect(await publicPageExists(db, "alice", "intro")).toBe(false); // switched off
+      expect(await publicPageExists(db, "alice")).toBe(true); // the profile still exists, with nothing to book
     });
 
     it("profile lists only active event types", async () => {

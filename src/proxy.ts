@@ -1,33 +1,71 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
+import { db } from "@/db";
+import { publicPageExists } from "@/server/booking";
 
 /*
- * Optimistic redirects only (Next.js 16 renamed middleware.ts to proxy.ts).
+ * Two jobs, both done before the page renders (Next.js 16 renamed
+ * middleware.ts to proxy.ts; it runs on Node.js).
  *
- * This checks that a session cookie EXISTS. It does not check that the cookie
- * is valid or unexpired: that needs a database query, and proxy runs on every
- * request including prefetches. The real check is requireUser() in each page
- * and action. Proxy just saves a logged-out visitor a pointless render and
- * sends them straight to /login.
+ * 1. Optimistic login redirects for /dashboard and /onboarding.
+ *    This checks that a session cookie EXISTS, not that it's valid: that's
+ *    requireUser() in each page and action. A forged cookie gets past this
+ *    file, then gets stopped there. Never rely on proxy alone for security.
  *
- * So a forged cookie gets past this file, then gets stopped by requireUser().
- * Never rely on proxy alone for security.
+ * 2. Real 404s for public pages that don't exist (/nobody, /sakif/nope).
+ *    Those pages stream: the "200 OK" goes out with the static shell, before
+ *    the lookup inside <Suspense> can say "not found". The page then shows
+ *    the not-found UI with `noindex`, but the status is wrong for crawlers,
+ *    link checkers and monitoring (Day 7 finding). So proxy asks the database
+ *    first, and if the page doesn't exist it serves the not-found page with a
+ *    404 status instead. The pages are unchanged and still do their own lookup.
  */
 const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
 
-export function proxy(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
-  const hasSessionCookie = getSessionCookie(request) !== null;
+/** First path segments that are the app's own routes, never a username. */
+const APP_ROUTES = new Set(["dashboard", "onboarding", "login", "api", "booking", "_next"]);
 
-  if (!hasSessionCookie && PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
+/** Same rule as usernameSchema; anything else can't be a profile, so no query is needed. */
+const USERNAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export async function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  if (PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
+    if (getSessionCookie(request) !== null) return NextResponse.next();
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname + search);
     return NextResponse.redirect(loginUrl);
   }
 
+  // /{username} or /{username}/{slug}
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length === 0 || segments.length > 2) return NextResponse.next();
+  if (APP_ROUTES.has(segments[0]!) || segments[0]!.includes(".")) return NextResponse.next(); // routes, files
+  if (!(await isPublicPage(segments))) {
+    // Serve Next's own not-found page (app/not-found.tsx), which answers 404.
+    // The address bar keeps the URL the visitor typed. (A rewrite to the SAME
+    // URL with `{ status: 404 }` doesn't work: the page's streamed response
+    // sets its own 200. Day 12 story.)
+    return NextResponse.rewrite(new URL("/_not-found", request.url));
+  }
   return NextResponse.next();
 }
 
+async function isPublicPage([rawUsername, rawSlug]: string[]): Promise<boolean> {
+  let username: string;
+  let slug: string | undefined;
+  try {
+    username = decodeURIComponent(rawUsername!).toLowerCase();
+    slug = rawSlug === undefined ? undefined : decodeURIComponent(rawSlug).toLowerCase();
+  } catch {
+    return false; // malformed %-encoding
+  }
+  if (username.length < 3 || username.length > 30 || !USERNAME.test(username)) return false;
+  return publicPageExists(db, username, slug);
+}
+
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*"],
+  // Everything except Next's assets and files with an extension (icons, images).
+  matcher: ["/((?!_next/|.*\\.[a-zA-Z0-9]+$).*)"],
 };

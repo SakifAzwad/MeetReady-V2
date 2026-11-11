@@ -18,6 +18,7 @@ const channel = process.env.E2E_BROWSER_CHANNEL || undefined;
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  testIgnore: "smoke/**", // live-deployment checks: playwright.smoke.config.ts
   // Every test seeds its own host (see e2e/fixtures.ts), so tests can run in
   // parallel without seeing each other's bookings.
   fullyParallel: true,

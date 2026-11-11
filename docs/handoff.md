@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 11)
+# Handoff: starting a new chat (after Day 12)
 
-Read this first in a new chat. It replaces the long Days 1–11 conversations. Details live in `docs/day-01.md` …
-`docs/day-11.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–12 conversations. Details live in `docs/day-01.md` …
+`docs/day-12.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–11):**
+- **Built (Days 1–12):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -18,16 +18,22 @@ Read this first in a new chat. It replaces the long Days 1–11 conversations. D
     type; answers are a snapshot on the booking; a `questionsVersion` check catches questions edited mid-booking.
   - Browser tests in CI (Day 11): 12 Playwright tests (booking, race, manage, questions, phone) against the
     production build and real Postgres, in a separate `e2e` job.
-- **Numbers:** 357 unit tests + 12 E2E tests; typecheck, lint, format, `drizzle-kit check` and build all green.
-  5 migrations (0000–0004). **Not deployed.**
+  - Deploy-ready (Day 12): migrations in the Vercel build (direct connection, advisory lock), real 404s from
+    `proxy.ts`, security headers, app URL from Vercel's variables, smoke tests after each production deploy.
+    Runbook: `docs/deploy.md`.
+- **Numbers:** 384 unit tests + 13 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  build all green. 5 migrations (0000–0004).
+- **Deploy in progress:** Sakif follows `docs/deploy.md`. Neon project `meetready`, AWS US East 1, Postgres 18;
+  target URL `meetready.vercel.app`.
 - **Repo:** `SakifAzwad/MeetReady-V2`. Sakif applies each day from a zip, then commits and pushes. The new chat
   must clone the repo; it can't see the old machine.
 
 ## Next (from `docs/backlog.md`)
 
-1. **Deploy** (Vercel + Neon). Set env vars before the build; decide the `/unknown-username` 200-vs-404 issue;
-   Sentry; run the E2E suite against the preview URL.
-2. Then rate limiting, Google Calendar sync, reminders, AI features.
+1. Finish the live deploy (Sakif, `docs/deploy.md`); check the smoke workflow passes.
+2. **Sentry** (Sakif asked to do it as its own step after the deploy), then rate limiting, Google Calendar sync,
+   reminders, AI features.
+3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -56,9 +62,11 @@ Read this first in a new chat. It replaces the long Days 1–11 conversations. D
   `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
   `E2E_BROWSER_CHANNEL=chrome`),
   `npm run typecheck`, `lint`, `format:check`, `npx drizzle-kit check`, `npm run build`. CI runs the same, with a
-  Postgres 17 service.
-- **Env** (`.env.example` holds names only, never values): `DATABASE_URL`, `BETTER_AUTH_SECRET`,
-  `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID/SECRET`, optional `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`.
+  Postgres 18 service (same major version as Neon). Smoke tests against a live URL:
+  `SMOKE_URL=https://… npx playwright test --config playwright.smoke.config.ts`.
+- **Env** (`.env.example` holds names only, never values): `DATABASE_URL` (+ `DATABASE_URL_UNPOOLED` for
+  migrations), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (derived on Vercel), `GOOGLE_CLIENT_ID/SECRET`, optional
+  `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`. Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
 
@@ -81,6 +89,10 @@ Read this first in a new chat. It replaces the long Days 1–11 conversations. D
 - **`useFieldArray.update()` remounts the row:** put focus back yourself.
 - **E2E tests:** each test makes its own host (fixtures); never share data between tests. No retries: run new
   tests with `--repeat-each 3` and fix flakes at the cause. Playwright starts `webServer` before `globalSetup`.
+- **Zod 4 runs object refinements after a field fails its FORMAT check, with the raw value.** Refinements that
+  read several fields use `when: noIssuesYet`; `never-throws.property.test.ts` covers every input schema.
+- **Streaming pages send 200 first.** Real 404s for public pages come from `proxy.ts` (rewrite to `/_not-found`).
+- **Migrations are additive** (they run before the build; old code serves until the new build is live).
 - **Env files:** `KEY=` arrives as `""`, not missing. Optional env vars use `emptyAsUnset`.
 - **Browser scripts:** use `locale: "en-US"` when checking AM/PM text. Don't depend on "today"; pick a fixed
   day. Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".

@@ -72,6 +72,9 @@ npm run test:e2e                                                       # wipes a
   change mid-booking.
 - [Day 11: Browser tests in CI](docs/day-11.md): Playwright against the production build and real Postgres, a
   fresh host per test so everything runs in parallel, signed-in sessions without Google, and the bugs it found.
+- [Day 12: Ready to deploy](docs/day-12.md): migrations on deploy (direct connection, advisory lock), real 404s
+  from Proxy, security headers, the app URL from Vercel, smoke tests on the live site, and a Zod 4 trap.
+- [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.
 

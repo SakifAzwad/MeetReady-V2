@@ -109,6 +109,38 @@ export function questionsVersion(questions: Question[]): string {
   return createHash("sha256").update(JSON.stringify(questions)).digest("hex").slice(0, 16);
 }
 
+/**
+ * Does this public page exist? `/{username}` needs an onboarded host;
+ * `/{username}/{slug}` also needs an active event type with that slug.
+ *
+ * Called from proxy.ts BEFORE the page renders, because a streamed page has
+ * already sent "200 OK" by the time its own lookup (inside <Suspense>) says
+ * "not found". One indexed query; the page still does its own lookup.
+ */
+export async function publicPageExists(db: Database, username: string, slug?: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: user.id })
+    .from(user)
+    .leftJoin(
+      eventTypes,
+      slug === undefined
+        ? sql`false`
+        : and(
+            eq(eventTypes.userId, user.id),
+            eq(eventTypes.slug, slug.toLowerCase()),
+            eq(eventTypes.isActive, true),
+          ),
+    )
+    .where(
+      and(
+        eq(user.username, username.toLowerCase()),
+        slug === undefined ? undefined : isNotNull(eventTypes.id),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
 /** A host's public profile: name and active event types. */
 export async function getPublicProfile(db: Database, username: string) {
   const [host] = await db

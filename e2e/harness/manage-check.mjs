@@ -6,6 +6,8 @@ import pg from "pg";
 
 const BASE = "http://localhost:3000";
 const OUTBOX = path.join(os.tmpdir(), "meetready-emails");
+// Start empty: emails left by another script point at bookings a reseeded database no longer has.
+if (existsSync(OUTBOX)) rmSync(OUTBOX, { recursive: true });
 const out = "/home/claude/e2e/shots";
 const step = (s) => console.log("•", s);
 const errors = [];

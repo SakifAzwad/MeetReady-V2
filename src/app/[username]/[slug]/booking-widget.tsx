@@ -24,12 +24,19 @@ import { groupSlotsByDate } from "@/lib/scheduling/group-slots";
 import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { cn } from "@/lib/utils";
-import type { GuestDetailsForm } from "@/lib/validation/booking";
 import { DaylightBand } from "./daylight-band";
 import { FactsPanel, type EventInfo } from "./facts-panel";
 import { MonthCalendar } from "./month-calendar";
 import { useHour12 } from "@/components/daylight/preferences";
-import { Confirmation, EMPTY_DETAILS, GuestForm, RescheduleConfirm, type Booked } from "./steps";
+import {
+  Confirmation,
+  EMPTY_DETAILS,
+  GuestForm,
+  RescheduleConfirm,
+  type Booked,
+  type BookingQuestions,
+  type GuestDraft,
+} from "./steps";
 import { TimeList } from "./time-list";
 
 export type { EventInfo } from "./facts-panel";
@@ -46,6 +53,8 @@ type Reschedule = {
 
 type Props = {
   event: EventInfo;
+  /** The host's booking questions (not needed when rescheduling: answers are kept). */
+  questions?: BookingQuestions;
   /** Reschedule mode (guest manage page): pick a new time for an existing booking. */
   reschedule?: Reschedule;
   /** "embedded" drops the facts panel, for pages that show their own. */
@@ -155,6 +164,7 @@ async function fetchCalendar(
 
 function Scheduler({
   event,
+  questions,
   reschedule,
   layout,
   timeZone,
@@ -172,7 +182,12 @@ function Scheduler({
   const [step, setStep] = useState<"pick" | "details">("pick");
   const [booked, setBooked] = useState<Booked | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [draft, setDraft] = useState<GuestDetailsForm>(EMPTY_DETAILS);
+  const [draft, setDraft] = useState<GuestDraft>(EMPTY_DETAILS);
+  // Starts as the server rendered them; replaced if the host changes them mid-booking.
+  const [bookingQuestions, setBookingQuestions] = useState<BookingQuestions>(
+    () => questions ?? { questions: [] },
+  );
+  const [formNotice, setFormNotice] = useState<string | null>(null);
   // True right after coming back from the details step, so the list puts focus on the chosen time.
   const [returned, setReturned] = useState(false);
 
@@ -200,9 +215,10 @@ function Scheduler({
 
   const aside =
     layout === "embedded" ? null : <FactsPanel event={event} timeZone={timeZone} hour12={hour12} />;
-  const slotGone = (typed?: GuestDetailsForm) =>
+  const slotGone = (typed?: GuestDraft) =>
     go("step-back", () => {
       if (typed) setDraft(typed);
+      setFormNotice(null);
       setStep("pick");
       setSelectedSlot(null);
       setReturned(true);
@@ -212,9 +228,10 @@ function Scheduler({
           : "Someone just booked that time. Pick another one.",
       );
     });
-  const backToTimes = (typed?: GuestDetailsForm) =>
+  const backToTimes = (typed?: GuestDraft) =>
     go("step-back", () => {
       if (typed) setDraft(typed);
+      setFormNotice(null);
       setStep("pick");
       setReturned(true);
     });
@@ -358,6 +375,8 @@ function Scheduler({
                     />
                   ) : (
                     <GuestForm
+                      // A new version of the questions mounts a fresh form (schema and defaults rebuilt).
+                      key={bookingQuestions.questionsVersion ?? "questions"}
                       slot={inDetails}
                       timeZone={timeZone}
                       hour12={hour12}
@@ -365,8 +384,17 @@ function Scheduler({
                       slug={event.slug}
                       onBack={backToTimes}
                       draft={draft}
+                      questions={bookingQuestions}
+                      notice={formNotice}
                       onBooked={(b) => go("step-forward", () => setBooked(b))}
                       onSlotGone={slotGone}
+                      onQuestionsChanged={(current, typed) => {
+                        setDraft(typed);
+                        setBookingQuestions(current);
+                        setFormNotice(
+                          `${event.hostName.split(" ")[0]} just changed these questions. Check your answers and confirm again: what still fits is kept.`,
+                        );
+                      }}
                     />
                   )}
                 </div>

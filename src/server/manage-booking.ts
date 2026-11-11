@@ -4,6 +4,7 @@ import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { addMinutes } from "@/lib/scheduling/intervals";
+import type { BookingAnswer } from "@/lib/validation/questions";
 import { getBookableSlots, getPublicEventType } from "./booking";
 import { hashManageToken, manageTokenSchema } from "./manage-token";
 
@@ -26,6 +27,7 @@ export type BookingDetails = {
   guestEmail: string;
   guestTimeZone: string;
   guestNotes: string | null;
+  answers: BookingAnswer[];
   cancelledBy: "host" | "guest" | null;
   cancellationReason: string | null;
   eventTypeId: string;
@@ -52,6 +54,7 @@ const detailsColumns = {
   guestEmail: bookings.guestEmail,
   guestTimeZone: bookings.guestTimeZone,
   guestNotes: bookings.guestNotes,
+  answers: bookings.answers,
   cancelledBy: bookings.cancelledBy,
   cancellationReason: bookings.cancellationReason,
   eventTypeId: eventTypes.id,
@@ -209,6 +212,7 @@ export type HostBookingRow = {
   guestEmail: string;
   guestTimeZone: string;
   guestNotes: string | null;
+  answers: BookingAnswer[];
   status: "confirmed" | "cancelled";
   cancelledBy: "host" | "guest" | null;
   cancellationReason: string | null;
@@ -233,6 +237,7 @@ export async function listHostBookings(
       guestEmail: bookings.guestEmail,
       guestTimeZone: bookings.guestTimeZone,
       guestNotes: bookings.guestNotes,
+      answers: bookings.answers,
       status: bookings.status,
       cancelledBy: bookings.cancelledBy,
       cancellationReason: bookings.cancellationReason,

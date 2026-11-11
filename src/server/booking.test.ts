@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { EVENT_TYPE_DEFAULTS, eventTypeSchema } from "@/lib/validation/event-type";
+import type { QuestionFormValues } from "@/lib/validation/questions";
 import { createTestDb } from "@/test/db";
 import { saveDateOverride, saveWeeklySchedule } from "./availability";
 import { createBooking, getBookableSlots, getPublicEventType, getPublicProfile } from "./booking";
-import { createEventType, setEventTypeActive } from "./event-types";
+import { createEventType, setEventTypeActive, updateEventType } from "./event-types";
+import { getBookingByToken, rescheduleBookingByToken } from "./manage-booking";
 
 // Host in Dhaka (UTC+6). Monday 9 Nov 2026, 09:00–12:00 Dhaka = 03:00–06:00 UTC.
 const NOW = new Date("2026-11-01T00:00:00Z");
@@ -166,6 +168,115 @@ describe("public booking", () => {
       const [row] = await db.select().from(eventTypes).where(eq(eventTypes.slug, "intro"));
       await setEventTypeActive(db, "alice", row!.id, false);
       expect(await createBooking(db, request("04:00"), NOW)).toEqual({ ok: false, error: "not_found" });
+    });
+  });
+  describe("booking questions (Day 10)", () => {
+    const COMPANY = "0b6f2d4e-1c3a-4e5f-8a7b-9c0d1e2f3a4b";
+    const ROLE = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
+    const QUESTIONS: QuestionFormValues[] = [
+      { id: COMPANY, type: "text", label: "Company", required: true, multiline: false },
+      { id: ROLE, type: "choice", label: "Role", required: false, options: ["Engineer", "Founder"] },
+    ];
+    let eventTypeId: string;
+    let version: string;
+
+    beforeEach(async () => {
+      eventTypeId = await addEventType(db, "alice", { title: "Pitch", slug: "pitch", questions: QUESTIONS });
+      version = (await getPublicEventType(db, "alice", "pitch"))!.questionsVersion;
+    });
+
+    const ask = (answers: Record<string, unknown>, extra: { questionsVersion?: string } = {}) =>
+      createBooking(db, { ...request("04:00"), slug: "pitch", answers, ...extra }, NOW);
+    const count = async () => db.$count(bookings);
+
+    it("shows the questions on the public event type, with a version", async () => {
+      const et = await getPublicEventType(db, "alice", "pitch");
+      expect(et?.questions.map((q) => q.label)).toEqual(["Company", "Role"]);
+      expect(et?.questionsVersion).toMatch(/^[0-9a-f]{16}$/);
+    });
+
+    it("stores a snapshot of the answers: label and type copied, in question order", async () => {
+      const result = await ask({ [ROLE]: "Founder", [COMPANY]: " Acme " }, { questionsVersion: version });
+      if (!result.ok) throw new Error(result.error);
+      const [row] = await db.select().from(bookings).where(eq(bookings.id, result.booking.id));
+      expect(row?.answers).toEqual([
+        { questionId: COMPANY, label: "Company", type: "text", value: "Acme" },
+        { questionId: ROLE, label: "Role", type: "choice", value: "Founder" },
+      ]);
+    });
+
+    it("re-checks answers on the server and books nothing if they break the rules", async () => {
+      // A guest can skip the browser's checks and send anything.
+      expect(await ask({ [ROLE]: "CEO" })).toEqual({
+        ok: false,
+        error: "invalid_answers",
+        answerErrors: { [COMPANY]: "Please answer this", [ROLE]: "Pick one of the options" },
+      });
+      // Answers to an event type without questions are rejected too, not silently dropped.
+      expect(
+        await createBooking(db, { ...request("04:00"), answers: { [COMPANY]: "Acme" } }, NOW),
+      ).toMatchObject({
+        ok: false,
+        error: "invalid_answers",
+      });
+      expect(await count()).toBe(0);
+    });
+
+    it("tells the guest when the host changed the questions while they were typing", async () => {
+      const changed = [
+        ...QUESTIONS,
+        { id: "9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b", type: "checkbox", label: "NDA signed", required: true },
+      ];
+      await updateEventType(
+        db,
+        "alice",
+        eventTypeId,
+        eventTypeSchema.parse({
+          ...EVENT_TYPE_DEFAULTS,
+          title: "Pitch",
+          slug: "pitch",
+          minimumNoticeMinutes: 0,
+          bookingWindowDays: null,
+          questions: changed,
+        }),
+      );
+
+      const stale = await ask({ [COMPANY]: "Acme" }, { questionsVersion: version });
+      expect(stale).toMatchObject({ ok: false, error: "questions_changed" });
+      if (stale.ok || stale.error !== "questions_changed") throw new Error("expected questions_changed");
+      expect(stale.questions.map((q) => q.label)).toEqual(["Company", "Role", "NDA signed"]);
+      expect(await count()).toBe(0);
+
+      // Answering the current questions with the current version works.
+      const answers = { [COMPANY]: "Acme", [changed[2]!.id]: true };
+      expect((await ask(answers, { questionsVersion: stale.questionsVersion })).ok).toBe(true);
+    });
+
+    it("past bookings keep their answers when questions are renamed or deleted, and through a reschedule", async () => {
+      const result = await ask({ [COMPANY]: "Acme", [ROLE]: "Engineer" });
+      if (!result.ok) throw new Error(result.error);
+
+      await updateEventType(
+        db,
+        "alice",
+        eventTypeId,
+        eventTypeSchema.parse({
+          ...EVENT_TYPE_DEFAULTS,
+          title: "Pitch",
+          slug: "pitch",
+          minimumNoticeMinutes: 0,
+          bookingWindowDays: null,
+          questions: [{ ...QUESTIONS[0]!, label: "Organisation" }], // renamed one, deleted the other
+        }),
+      );
+      const moved = await rescheduleBookingByToken(db, result.manageToken, at("05:00"), NOW);
+      expect(moved.ok).toBe(true);
+
+      const details = await getBookingByToken(db, result.manageToken);
+      expect(details?.answers.map((a) => [a.label, a.value])).toEqual([
+        ["Company", "Acme"],
+        ["Role", "Engineer"],
+      ]);
     });
   });
 });

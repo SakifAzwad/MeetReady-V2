@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 9)
+# Handoff: starting a new chat (after Day 10)
 
-Read this first in a new chat. It replaces the long Days 1–9 conversation. Details live in `docs/day-01.md` …
-`docs/day-09.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–10 conversations. Details live in `docs/day-01.md` …
+`docs/day-10.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–9):**
+- **Built (Days 1–10):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -14,18 +14,20 @@ Read this first in a new chat. It replaces the long Days 1–9 conversation. Det
   - Emails with `.ics` invites; guest cancel/reschedule through hashed token links; host dashboard.
   - The "Daylight" design: real sunrise/sunset, scrubbing, timezone search, share-as-text, week view, landing
     page, motion.
-- **Numbers:** 331 tests; typecheck, lint, format, `drizzle-kit check` and build all green. 4 migrations
-  (0000–0003). **Not deployed.**
+  - Custom booking questions (Day 10): text, pick one, pick several, checkbox. Questions are jsonb on the event
+    type; answers are a snapshot on the booking; a `questionsVersion` check catches questions edited mid-booking.
+- **Numbers:** 357 tests; typecheck, lint, format, `drizzle-kit check` and build all green. 5 migrations
+  (0000–0004). **Not deployed.**
 - **Repo:** `SakifAzwad/MeetReady-V2`. Sakif applies each day from a zip, then commits and pushes. The new chat
   must clone the repo; it can't see the old machine.
 
 ## Next (from `docs/backlog.md`)
 
-1. **Day 10: custom booking questions** (text, choice, checkbox per event type). This is the last Phase 1
-   feature.
-2. Browser tests in CI: turn `e2e/harness/` scripts into Playwright tests.
-3. Deploy (Vercel + Neon). Set env vars before the build; decide the `/unknown-username` 200-vs-404 issue.
-4. Then rate limiting, Google Calendar sync, reminders, AI features.
+Phase 1 is complete.
+
+1. **Browser tests in CI:** turn `e2e/harness/` scripts into Playwright tests.
+2. Deploy (Vercel + Neon). Set env vars before the build; decide the `/unknown-username` 200-vs-404 issue.
+3. Then rate limiting, Google Calendar sync, reminders, AI features.
 
 ## How Sakif works
 
@@ -71,5 +73,10 @@ Read this first in a new chat. It replaces the long Days 1–9 conversation. Det
   feeds both slots and bands.
 - **Colour means time of day only.** UI actions are navy. No emoji, no middle-dot meta strings, no all-caps
   labels.
+- **Zod 4 skips a missing optional key entirely, refinements included.** Required fields must not be
+  `.optional()` (Day 10 story).
+- **Nested form errors:** use `fieldErrorsByPath`, not `z.flattenError` (first path segment only).
+- **`useFieldArray.update()` remounts the row:** put focus back yourself.
 - **Browser scripts:** use `locale: "en-US"` when checking AM/PM text. Don't depend on "today"; pick a fixed
-  day.
+  day. Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".
+  Empty the email outbox at the start.

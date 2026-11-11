@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { questionsSchema } from "./questions";
 
 /*
  * One schema for: the event type form (instant feedback), the server action
@@ -69,6 +70,8 @@ export const eventTypeSchema = z
     minimumNoticeMinutes: int("Minimum notice", 0, 60 * 24 * 30),
     bookingWindowDays: int("Booking window", 1, 365).nullable(),
     maxBookingsPerDay: int("Max per day", 1, 100).nullable(),
+    /** Extra fields on the booking form (Day 10). Name, email and notes are always asked. */
+    questions: questionsSchema,
   })
   .superRefine((value, ctx) => {
     // What "location details" means depends on the location type.
@@ -116,4 +119,5 @@ export const EVENT_TYPE_DEFAULTS: EventTypeFormValues = {
   minimumNoticeMinutes: 60,
   bookingWindowDays: 60,
   maxBookingsPerDay: null,
+  questions: [],
 };

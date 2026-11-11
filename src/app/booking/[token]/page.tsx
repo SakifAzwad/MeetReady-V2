@@ -1,6 +1,7 @@
 import { CalendarX2, Clock, MapPin, User } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { BookingAnswers } from "@/components/booking-answers";
 import { Reveal } from "@/components/motion";
 import { PoweredBy } from "@/components/site/powered-by";
 import { db } from "@/db";
@@ -44,6 +45,11 @@ async function BookingPanel({ params }: { params: Params }) {
   const cancelled = booking.status === "cancelled";
   const started = booking.startsAt <= now;
   const changeable = !cancelled && !started && booking.eventActive && booking.hostUsername !== null;
+  // Their answers, read-only, plus their notes. A reschedule keeps both.
+  const shared = [
+    ...booking.answers,
+    ...(booking.guestNotes ? [{ questionId: "notes", label: "Notes", value: booking.guestNotes }] : []),
+  ];
 
   return (
     <div className="bg-card grid w-full max-w-4xl overflow-hidden rounded-xl border shadow-sm md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
@@ -67,6 +73,12 @@ async function BookingPanel({ params }: { params: Params }) {
         <p className="text-muted-foreground text-sm">
           {formatMinutes(booking.durationMinutes)}, booked by {booking.guestName}
         </p>
+        {shared.length > 0 && (
+          <section className="flex flex-col gap-2 border-t pt-4">
+            <h2 className="text-sm font-medium">What you shared</h2>
+            <BookingAnswers answers={shared} />
+          </section>
+        )}
       </aside>
 
       {cancelled ? (

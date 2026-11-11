@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, eq, gt, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
@@ -11,6 +12,7 @@ import {
 import { addMinutes, type Interval } from "@/lib/scheduling/intervals";
 import { addDaysToKey, dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import type { BookingRequest } from "@/lib/validation/booking";
+import { answersSchema, toAnswerSnapshot, type Question } from "@/lib/validation/questions";
 import { getAvailability } from "./availability";
 import { newManageToken } from "./manage-token";
 
@@ -35,6 +37,10 @@ export type PublicEventType = {
   durationMinutes: number;
   locationType: (typeof eventTypes.$inferSelect)["locationType"];
   color: string;
+  /** Custom booking questions. Public: the guest has to see them to answer them. */
+  questions: Question[];
+  /** Fingerprint of `questions`, sent back with the booking (see questionsVersion()). */
+  questionsVersion: string;
   // Booking rules: used by generateSlots on the server, not sent to the browser.
   rules: {
     slotIntervalMinutes: number | null;
@@ -78,6 +84,8 @@ export async function getPublicEventType(
     durationMinutes: et.durationMinutes,
     locationType: et.locationType,
     color: et.color,
+    questions: et.questions,
+    questionsVersion: questionsVersion(et.questions),
     rules: {
       slotIntervalMinutes: et.slotIntervalMinutes,
       bufferBeforeMinutes: et.bufferBeforeMinutes,
@@ -87,6 +95,18 @@ export async function getPublicEventType(
       maxBookingsPerDay: et.maxBookingsPerDay,
     },
   };
+}
+
+/**
+ * A short fingerprint of an event type's questions, like an HTTP ETag. The
+ * booking page gets it with the questions and sends it back with the answers;
+ * if it no longer matches, the host changed the questions while the guest was
+ * typing. Any change counts (a renamed label, a new option), because the
+ * guest answered what they saw. Postgres returns jsonb with its keys in a
+ * fixed order, so the same questions always give the same fingerprint.
+ */
+export function questionsVersion(questions: Question[]): string {
+  return createHash("sha256").update(JSON.stringify(questions)).digest("hex").slice(0, 16);
 }
 
 /** A host's public profile: name and active event types. */
@@ -214,7 +234,11 @@ export async function getBookingCalendar(
 
 export type BookingResult =
   | { ok: true; booking: { id: string; startsAt: Date; endsAt: Date }; manageToken: string }
-  | { ok: false; error: "not_found" | "slot_unavailable" | "slot_taken" };
+  | { ok: false; error: "not_found" | "slot_unavailable" | "slot_taken" }
+  /** The guest's answers break the rules: first message per question id ("" = not about one question). */
+  | { ok: false; error: "invalid_answers"; answerErrors: Record<string, string> }
+  /** The form was built from older questions: here are the current ones. */
+  | { ok: false; error: "questions_changed"; questions: Question[]; questionsVersion: string };
 
 /**
  * Books a slot. Three layers, each covering what the one before can't:
@@ -248,6 +272,23 @@ export async function createBooking(
       const eventType = await getPublicEventType(tx, request.username, request.slug);
       if (!eventType) return { ok: false, error: "not_found" } as const;
 
+      // Answers are checked against the questions as they are NOW, before the
+      // lock: a bad request shouldn't make other guests of this host wait.
+      if (request.questionsVersion !== undefined && request.questionsVersion !== eventType.questionsVersion) {
+        return {
+          ok: false,
+          error: "questions_changed",
+          questions: eventType.questions,
+          questionsVersion: eventType.questionsVersion,
+        } as const;
+      }
+      const answers = answersSchema(eventType.questions).safeParse(request.answers ?? {});
+      if (!answers.success) {
+        const answerErrors: Record<string, string> = {};
+        for (const issue of answers.error.issues) answerErrors[String(issue.path[0] ?? "")] ??= issue.message;
+        return { ok: false, error: "invalid_answers", answerErrors } as const;
+      }
+
       // (2) Take this host's lock before reading their bookings.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${eventType.hostId}, 0))`);
 
@@ -271,6 +312,8 @@ export async function createBooking(
           guestEmail: request.guestEmail,
           guestTimeZone: request.guestTimeZone,
           guestNotes: request.guestNotes || null,
+          // A snapshot: label and type are copied, so later edits to the questions don't change it.
+          answers: toAnswerSnapshot(eventType.questions, answers.data),
           startsAt: start,
           endsAt: addMinutes(start, eventType.durationMinutes),
         })

@@ -56,5 +56,6 @@ function toFormValues(et: EventType): EventTypeFormValues {
     minimumNoticeMinutes: et.minimumNoticeMinutes,
     bookingWindowDays: et.bookingWindowDays,
     maxBookingsPerDay: et.maxBookingsPerDay,
+    questions: et.questions,
   };
 }

@@ -4,7 +4,8 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { eventTypeSchema, type EventTypeFormValues } from "@/lib/validation/event-type";
+import { fieldErrorsByPath } from "@/lib/validation/errors";
+import { eventTypeSchema } from "@/lib/validation/event-type";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { createEventType, setEventTypeActive, updateEventType } from "@/server/event-types";
 
@@ -18,7 +19,8 @@ import { createEventType, setEventTypeActive, updateEventType } from "@/server/e
 
 export type EventTypeActionResult = {
   ok: false;
-  fieldErrors?: Partial<Record<keyof EventTypeFormValues, string[]>>;
+  /** Keyed by form field path, e.g. "slug" or "questions.2.label". */
+  fieldErrors?: Record<string, string[]>;
   formError?: string;
 };
 
@@ -30,7 +32,7 @@ const SLUG_TAKEN: EventTypeActionResult = {
 export async function createEventTypeAction(values: unknown): Promise<EventTypeActionResult> {
   const user = await requireOnboardedUser();
   const parsed = eventTypeSchema.safeParse(values);
-  if (!parsed.success) return { ok: false, fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsByPath(parsed.error) };
 
   const result = await createEventType(db, user.id, parsed.data);
   if (!result.ok) return SLUG_TAKEN;
@@ -41,7 +43,7 @@ export async function createEventTypeAction(values: unknown): Promise<EventTypeA
 export async function updateEventTypeAction(id: unknown, values: unknown): Promise<EventTypeActionResult> {
   const user = await requireOnboardedUser();
   const parsed = eventTypeSchema.safeParse(values);
-  if (!parsed.success) return { ok: false, fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsByPath(parsed.error) };
 
   const result = await updateEventType(db, user.id, String(id), parsed.data);
   if (!result.ok) {

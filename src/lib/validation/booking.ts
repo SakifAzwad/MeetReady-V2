@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { timeZoneSchema } from "./onboarding";
+import { QUESTION_LIMITS } from "./questions";
 
 /*
  * Guests have no account, so everything they send is untrusted input. These
@@ -23,6 +24,24 @@ export const bookingRequestSchema = guestDetailsSchema.extend({
   // "2026-11-09T10:00" would be ambiguous: 10:00 where?
   startsAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
   guestTimeZone: timeZoneSchema,
+  /**
+   * Answers to the host's questions, keyed by question id. Only the outline is
+   * checked here (an object, not too many keys): the real rules depend on the
+   * event type's questions, so createBooking() checks them against the
+   * current ones with answersSchema().
+   */
+  answers: z
+    .record(z.string().max(64), z.unknown())
+    .refine((a) => Object.keys(a).length <= QUESTION_LIMITS.questions, "Too many answers")
+    .optional(),
+  /**
+   * Which version of the questions the form was built from (like an HTTP
+   * ETag). If the host changed them while the guest was typing, the server
+   * says so instead of storing answers to questions the guest never saw.
+   * Optional so other callers (tests, a future API) can skip it: the answers
+   * are fully validated either way.
+   */
+  questionsVersion: z.string().max(64).optional(),
 });
 
 export type BookingRequest = z.output<typeof bookingRequestSchema>;

@@ -10,12 +10,13 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { formatAnswer, type BookingAnswer } from "@/lib/validation/questions";
 
 /*
  * One template for every booking email: confirmed / rescheduled / cancelled,
  * to the guest or the host. React Email turns it into email-safe HTML (inline
- * styles, tables) plus a plain-text version. Guest-supplied text (name, notes)
- * is escaped by React like any JSX, so a guest can't inject HTML into the
+ * styles, tables) plus a plain-text version. Guest-supplied text (name, notes,
+ * answers) is escaped by React like any JSX, so a guest can't inject HTML into the
  * host's inbox.
  */
 
@@ -31,6 +32,8 @@ export type BookingEmailProps = {
   location?: string;
   guestEmail?: string;
   guestNotes?: string | null;
+  /** Answers to the host's booking questions (host emails only). */
+  answers?: BookingAnswer[];
   cancelledBy?: "host" | "guest" | null;
   cancellationReason?: string | null;
   /** Guest: manage link (cancel/reschedule). Host: dashboard link. */
@@ -135,6 +138,15 @@ export function BookingEmail(p: BookingEmailProps) {
               <Text style={{ ...styles.value, whiteSpace: "pre-line" }}>{p.guestNotes}</Text>
             </>
           )}
+
+          {p.audience === "host" &&
+            !cancelled &&
+            p.answers?.map((a) => (
+              <Section key={a.questionId}>
+                <Text style={styles.label}>{a.label}</Text>
+                <Text style={{ ...styles.value, whiteSpace: "pre-line" }}>{formatAnswer(a)}</Text>
+              </Section>
+            ))}
 
           {cancelled && p.cancellationReason && (
             <>

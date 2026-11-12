@@ -174,6 +174,32 @@ token in `/booking/…` URLs. See `src/lib/monitoring.ts` and the Day 13 doc.
 
 **Local development sends nothing,** because there's no DSN in `.env.local`.
 
+## 11. Rate limiting (Upstash Redis), added on Day 14
+
+Without this step the limits still work, but per server instance only (a warning says so in the function logs).
+
+1. Vercel → the `meetreadyv2` project → **Storage** → **Create Database** → **Upstash for Redis** (from the
+   Marketplace).
+   - **Region:** US East (N. Virginia), `us-east-1`: the same place as the functions and Neon, so a limit check
+     costs a few milliseconds.
+   - **Plan:** Free.
+   - **Connect it** to `meetreadyv2` for **Production and Preview**. Keep the default variable names (no custom
+     prefix).
+2. Check Settings → Environment Variables now has `KV_REST_API_URL` and `KV_REST_API_TOKEN`. The app reads those
+   (or `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`). The other ones the integration adds (`KV_URL`,
+   `REDIS_URL`, the read-only token) aren't used. **The token is a secret.**
+3. **Redeploy** production.
+4. **Check it works** (PowerShell; this blocks your own IP from the slots API for about a minute):
+
+   ```powershell
+   1..61 | % { curl.exe -s -o NUL -w "%{http_code}`n" "https://meetreadyv2.vercel.app/api/slots?username=x&slug=y&from=bad&to=bad" } | Group-Object
+   ```
+
+   Expect 60 × `400` (bad parameters, on purpose: no database work) and 1 × `429`. Then Upstash's **Data Browser**
+   shows keys like `meetready:production:slots:…`: hashes, never an IP.
+
+**Previews share the database** but not the counters: keys are prefixed with the environment.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.
@@ -192,5 +218,11 @@ the new column and write to both; later, drop the old one.
   no trailing slash).
 - **"Access blocked: app not verified" or "not a test user":** step 6.2, publish the app.
 - **The site works, but emails never arrive:** step 7. The test sender only reaches your own address.
+- **A guest says "Too many attempts":** it clears by itself (at most an hour for the email limit). To clear it
+  now: Upstash → Data Browser → delete the `meetready:production:…` keys. They're hashed, so delete by limit name.
+- **Function logs say "rate limits are per instance only":** step 11's variables are missing for that
+  environment.
+- **Sentry shows "Rate limit store timed out" or a Redis error:** Upstash is slow or down. Bookings still work
+  (limits fail open); check Upstash's status page.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo
   a migration, which is another reason migrations stay additive.

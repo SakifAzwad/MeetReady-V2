@@ -23,6 +23,7 @@ import type { Slot } from "@/lib/scheduling/generate-slots";
 import { groupSlotsByDate } from "@/lib/scheduling/group-slots";
 import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
+import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { cn } from "@/lib/utils";
 import { DaylightBand } from "./daylight-band";
 import { FactsPanel, type EventInfo } from "./facts-panel";
@@ -136,6 +137,13 @@ function Shell({
 
 type CalendarData = { slots: Slot[]; windows: Interval[] };
 
+/** The slots API said 429: retrying straight away would only extend the wait. */
+class RateLimitedError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super("Slots request rate limited");
+  }
+}
+
 async function fetchCalendar(
   event: EventInfo,
   from: Date,
@@ -150,6 +158,7 @@ async function fetchCalendar(
   });
   if (rescheduleToken) params.set("reschedule", rescheduleToken);
   const res = await fetch(`/api/slots?${params}`);
+  if (res.status === 429) throw new RateLimitedError(Number(res.headers.get("Retry-After")) || 60);
   if (!res.ok) throw new Error(`Slots request failed: ${res.status}`);
   const body = (await res.json()) as {
     slots: { start: string; end: string }[];
@@ -203,6 +212,8 @@ function Scheduler({
       reschedule?.token ?? null,
     ],
     queryFn: () => fetchCalendar(event, from, to, reschedule?.token),
+    // TanStack retries 3 times by default; on a 429 that only spends more of the limit.
+    retry: (failures, error) => !(error instanceof RateLimitedError) && failures < 3,
   });
 
   const byDate = useMemo(
@@ -408,7 +419,11 @@ function Scheduler({
                   </div>
                   {calendar.isError ? (
                     <div className="text-sm">
-                      <p className="text-destructive">Couldn&apos;t load times.</p>
+                      <p className="text-destructive">
+                        {calendar.error instanceof RateLimitedError
+                          ? tooManyAttempts(calendar.error.retryAfterSeconds)
+                          : "Couldn't load times."}
+                      </p>
                       <Button variant="link" className="px-0" onClick={() => calendar.refetch()}>
                         Try again
                       </Button>

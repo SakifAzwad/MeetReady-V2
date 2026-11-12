@@ -9,6 +9,7 @@ import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
+import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { formatDateKey, formatTime } from "@/lib/scheduling/calendar";
 import type { Slot } from "@/lib/scheduling/generate-slots";
 import { dateKeyInZone } from "@/lib/scheduling/time";
@@ -109,6 +110,12 @@ export function GuestForm({
       guestTimeZone: timeZone,
       questionsVersion,
     });
+    if (!result.ok && result.error === "rate_limited") {
+      // Nothing changed on the server, so no refetch (it would only spend the slots limit).
+      // The form stays as it is: everything typed is kept for the retry.
+      setFormError(tooManyAttempts(result.retryAfterSeconds));
+      return;
+    }
     // Either way the free times have changed: refetch them.
     await queryClient.invalidateQueries({ queryKey: ["calendar", username, slug] });
 
@@ -212,12 +219,19 @@ export function RescheduleConfirm({
 }) {
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const current = { startsAt: new Date(currentStartsAt), endsAt: new Date(currentEndsAt) };
   const headingRef = useStepFocus(null);
 
   async function confirm() {
     setPending(true);
+    setError(null);
     const result = await rescheduleByTokenAction({ token, startsAt: slot.start.toISOString() });
+    if (!result.ok && result.error === "rate_limited") {
+      setPending(false);
+      setError(tooManyAttempts(result.retryAfterSeconds));
+      return;
+    }
     await queryClient.invalidateQueries({ queryKey: ["calendar"] });
     setPending(false);
     if (result.ok) onMoved({ startsAt: slot.start, endsAt: slot.end });
@@ -243,6 +257,11 @@ export function RescheduleConfirm({
           <When slot={slot} timeZone={timeZone} hour12={hour12} />
         </dd>
       </dl>
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
       <Button size="lg" onClick={confirm} disabled={pending} className="self-start">
         {pending ? "Moving…" : "Confirm new time"}
       </Button>

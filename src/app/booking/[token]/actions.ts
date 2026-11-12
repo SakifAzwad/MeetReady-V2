@@ -6,19 +6,28 @@ import { cancelRequestSchema, rescheduleRequestSchema } from "@/lib/validation/b
 import { emailContext } from "@/server/email";
 import { notifyBookingCancelled, notifyBookingRescheduled } from "@/server/email/notifications";
 import { cancelBookingByToken, rescheduleBookingByToken } from "@/server/manage-booking";
+import { rateLimit } from "@/server/rate-limit";
 
 /*
  * Guest actions. No login: the manage token from the email IS the
  * authorisation, and it only ever reaches one booking (WHERE token hash = …).
+ *
+ * Rate limit (Day 14): 10 changes per hour per token, cancel and reschedule
+ * together. Each change emails the host, so a leaked or scripted link could
+ * otherwise flood their inbox. Keyed by token, not IP: that's the thing being
+ * abused, and guessing tokens isn't a risk (256 random bits).
  */
 
 export type ManageActionResult =
   | { ok: true; startsAt?: string; endsAt?: string }
-  | { ok: false; error: "not_found" | "not_changeable" | "slot_unavailable" | "invalid" };
+  | { ok: false; error: "not_found" | "not_changeable" | "slot_unavailable" | "invalid" }
+  | { ok: false; error: "rate_limited"; retryAfterSeconds: number };
 
 export async function cancelByTokenAction(input: unknown): Promise<ManageActionResult> {
   const parsed = cancelRequestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
+  const limited = await rateLimit([["manage", parsed.data.token]]);
+  if (!limited.ok) return { ok: false, error: "rate_limited", retryAfterSeconds: limited.retryAfterSeconds };
 
   const result = await cancelBookingByToken(db, parsed.data.token, parsed.data.reason, new Date());
   if (!result.ok) return result;
@@ -31,6 +40,8 @@ export async function rescheduleByTokenAction(input: unknown): Promise<ManageAct
   const parsed = rescheduleRequestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
   const { token, startsAt } = parsed.data;
+  const limited = await rateLimit([["manage", token]]);
+  if (!limited.ok) return { ok: false, error: "rate_limited", retryAfterSeconds: limited.retryAfterSeconds };
 
   const result = await rescheduleBookingByToken(db, token, startsAt, new Date());
   if (!result.ok) {

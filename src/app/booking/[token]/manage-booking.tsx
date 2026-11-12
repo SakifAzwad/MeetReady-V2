@@ -7,6 +7,7 @@ import { BookingWidget } from "@/app/[username]/[slug]/booking-widget";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/input";
+import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { cancelByTokenAction } from "./actions";
 
 type Props = {
@@ -114,7 +115,9 @@ function CancelForm({ token, onBack }: { token: string; onBack: () => void }) {
       setError(
         result.error === "not_changeable"
           ? "This booking can't be cancelled any more (already cancelled or started)."
-          : "Something went wrong. Please try again.",
+          : result.error === "rate_limited"
+            ? tooManyAttempts(result.retryAfterSeconds)
+            : "Something went wrong. Please try again.",
       );
     }
   }

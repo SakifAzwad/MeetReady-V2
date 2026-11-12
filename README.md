@@ -6,7 +6,6 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 **Live:** [meetreadyv2.vercel.app](https://meetreadyv2.vercel.app) · try a booking page:
 [meetreadyv2.vercel.app/sakifazwad18/intro](https://meetreadyv2.vercel.app/sakifazwad18/intro)
 
-> v2: a solo rebuild of a 2024 university group project. See [Credits](#credits).
 
 ## Stack
 

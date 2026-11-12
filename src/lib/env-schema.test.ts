@@ -55,4 +55,24 @@ describe("parseEnv", () => {
       expect(() => parseEnv({ ...base, BETTER_AUTH_URL: undefined })).toThrow();
     });
   });
+
+  describe("Redis for rate limiting", () => {
+    it("is optional: unset or empty means limits are kept in memory", () => {
+      expect(parseEnv(base).REDIS).toBeUndefined();
+      expect(parseEnv({ ...base, KV_REST_API_URL: "", KV_REST_API_TOKEN: "" }).REDIS).toBeUndefined();
+    });
+
+    it("takes Vercel Marketplace's names or Upstash's own", () => {
+      const redis = { url: "https://us1-x.upstash.io", token: "t" };
+      expect(parseEnv({ ...base, KV_REST_API_URL: redis.url, KV_REST_API_TOKEN: "t" }).REDIS).toEqual(redis);
+      expect(
+        parseEnv({ ...base, UPSTASH_REDIS_REST_URL: redis.url, UPSTASH_REDIS_REST_TOKEN: "t" }).REDIS,
+      ).toEqual(redis);
+    });
+
+    it("rejects half a pair at startup", () => {
+      expect(() => parseEnv({ ...base, KV_REST_API_URL: "https://us1-x.upstash.io" })).toThrow();
+      expect(() => parseEnv({ ...base, KV_REST_API_TOKEN: "t" })).toThrow();
+    });
+  });
 });

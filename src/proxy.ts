@@ -1,7 +1,9 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/db";
+import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { publicPageExists } from "@/server/booking";
+import { ipOf, rateLimit } from "@/server/rate-limit";
 
 /*
  * Two jobs, both done before the page renders (Next.js 16 renamed
@@ -19,6 +21,10 @@ import { publicPageExists } from "@/server/booking";
  *    link checkers and monitoring (Day 7 finding). So proxy asks the database
  *    first, and if the page doesn't exist it serves the not-found page with a
  *    404 status instead. The pages are unchanged and still do their own lookup.
+ *
+ *    That lookup is also an oracle: 404 or not tells whether a username
+ *    exists. So it's rate-limited per IP (Day 14), and ONLY this branch:
+ *    app routes, files and the dashboard never wait on the limiter.
  */
 const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
 
@@ -52,6 +58,19 @@ export async function proxy(request: NextRequest) {
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0 || segments.length > 2) return NextResponse.next();
   if (APP_ROUTES.has(segments[0]!) || segments[0]!.includes(".")) return NextResponse.next(); // routes, files
+
+  const limited = await rateLimit([["pages", ipOf(request.headers)]]);
+  if (!limited.ok) {
+    // Plain text: a person browsing never gets here (120 pages a minute); a script reads the status.
+    return new NextResponse(tooManyAttempts(limited.retryAfterSeconds), {
+      status: 429,
+      headers: {
+        "Retry-After": String(limited.retryAfterSeconds),
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
   if (!(await isPublicPage(segments))) {
     // Serve Next's own not-found page (app/not-found.tsx), which answers 404.
     // The address bar keeps the URL the visitor typed. (A rewrite to the SAME

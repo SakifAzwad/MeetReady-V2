@@ -24,6 +24,10 @@ import { BASE_URL, E2E_AUTH_SECRET, E2E_DATABASE_URL, OUTBOX } from "./support/c
  *    timezone), like two people on two laptops.
  *  - Console errors: every page is watched, and any console or page error
  *    fails the test, even if the assertions passed.
+ *  - Its own IP: rate limits (Day 14) count per IP, and every test runs from
+ *    127.0.0.1. So each test, and each guest in it, sends its own random
+ *    `x-forwarded-for`, which the app trusts off Vercel (on Vercel, Vercel
+ *    overwrites it). Without this, tests would use up each other's limits.
  */
 
 export type Host = {
@@ -41,7 +45,21 @@ type Fixtures = {
   consoleErrors: string[];
 };
 
+/** A random private IPv4 address: one "visitor" for the rate limits. */
+export const randomIp = () => `10.${[0, 0, 0].map(() => Math.floor(Math.random() * 256)).join(".")}`;
+
+/** Context options for a visitor with an IP of their own. */
+const asVisitor = (): BrowserContextOptions => ({
+  baseURL: BASE_URL,
+  extraHTTPHeaders: { "x-forwarded-for": randomIp() },
+});
+
 export const test = base.extend<Fixtures, { db: pg.Pool }>({
+  // The built-in `page` and `request` of each test get their own IP too.
+  extraHTTPHeaders: async ({}, use) => {
+    await use({ "x-forwarded-for": randomIp() });
+  },
+
   db: [
     async ({}, use) => {
       const pool = new pg.Pool({ connectionString: E2E_DATABASE_URL, max: 4 });
@@ -70,7 +88,7 @@ export const test = base.extend<Fixtures, { db: pg.Pool }>({
   },
 
   hostPage: async ({ browser, host, consoleErrors }, use) => {
-    const context = await browser.newContext({ baseURL: BASE_URL });
+    const context = await browser.newContext(asVisitor());
     await signInAs(context, host);
     const page = await context.newPage();
     watch(page, consoleErrors);
@@ -81,7 +99,7 @@ export const test = base.extend<Fixtures, { db: pg.Pool }>({
   newGuest: async ({ browser, consoleErrors }, use) => {
     const contexts: Awaited<ReturnType<typeof browser.newContext>>[] = [];
     await use(async (options = {}) => {
-      const context = await browser.newContext({ baseURL: BASE_URL, ...options });
+      const context = await browser.newContext({ ...asVisitor(), ...options });
       contexts.push(context);
       const page = await context.newPage();
       watch(page, consoleErrors);

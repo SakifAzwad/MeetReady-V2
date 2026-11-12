@@ -21,6 +21,20 @@ function vercelUrl(source: Record<string, string | undefined>): string | undefin
   return host ? `https://${host}` : undefined;
 }
 
+/**
+ * Upstash Redis for rate limiting (Day 14). Vercel's Marketplace integration
+ * sets KV_REST_API_URL/TOKEN (the old Vercel KV names); a database created on
+ * upstash.com gives UPSTASH_REDIS_REST_URL/TOKEN. Either pair works, like
+ * Redis.fromEnv(). Unset = rate limits are kept in memory (dev, tests).
+ */
+function redisConfig(source: Record<string, string | undefined>) {
+  const pick = (a: string, b: string) => source[a] || source[b] || undefined;
+  return {
+    url: pick("UPSTASH_REDIS_REST_URL", "KV_REST_API_URL"),
+    token: pick("UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_TOKEN"),
+  };
+}
+
 export function parseEnv(source: Record<string, string | undefined>) {
   return z
     .object({
@@ -41,6 +55,17 @@ export function parseEnv(source: Record<string, string | undefined>) {
       EMAIL_FROM: emptyAsUnset(z.string().min(3).default("MeetReady <onboarding@resend.dev>")),
       /** Optional: a real booking page to link from the landing page, e.g. "/sakifazwad18/intro". */
       DEMO_BOOKING_PATH: emptyAsUnset(z.string().startsWith("/").optional()),
+      /** Rate-limit store (see redisConfig): both or neither, so a half-pasted pair fails at startup, not per request. */
+      REDIS: z.preprocess(
+        () => redisConfig(source),
+        z.union(
+          [
+            z.object({ url: z.url(), token: z.string().min(1) }),
+            z.object({ url: z.undefined(), token: z.undefined() }).transform(() => undefined),
+          ],
+          { error: "Set both the Redis REST URL and token, or neither" },
+        ),
+      ),
     })
     .parse(source);
 }

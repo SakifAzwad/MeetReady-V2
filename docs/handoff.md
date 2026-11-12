@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 13)
+# Handoff: starting a new chat (after Day 14)
 
-Read this first in a new chat. It replaces the long Days 1–13 conversations. Details live in `docs/day-01.md` …
-`docs/day-13.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–14 conversations. Details live in `docs/day-01.md` …
+`docs/day-14.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–13):**
+- **Built (Days 1–14):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -24,7 +24,12 @@ Read this first in a new chat. It replaces the long Days 1–13 conversations. D
   - Error monitoring (Day 13): Sentry v11 on server and browser via the `/monitoring` tunnel; privacy in
     `src/lib/monitoring.ts` (`DATA_COLLECTION` all off + `scrubEvent`); errors only, no replay. Needs runbook step 10
     on Vercel to go live. The UI shows the real address (`appHost`), never `meetready.app`.
-- **Numbers:** 394 unit tests + 13 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  - Rate limiting (Day 14): `src/server/rate-limit/`. Upstash Redis sliding window in production, the same
+    algorithm in memory for dev/tests. Limits in `LIMITS`: book 5/10 min per IP + 3/hour per guest inbox, manage
+    10/hour per token, slots 60/min per IP, proxy username lookups 120/min per IP. Fails open (reported to
+    Sentry, throttled). Keys are HMAC hashes. Friendly "Try again in N minutes" (typed details kept); `429` +
+    `Retry-After` on the API. Needs runbook step 11 to use Redis.
+- **Numbers:** 423 unit tests + 15 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
   build all green. 5 migrations (0000–0004).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -34,9 +39,10 @@ Read this first in a new chat. It replaces the long Days 1–13 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. Sakif: Sentry account + env vars (runbook step 10). Then **rate limiting**, Google Calendar sync, reminders, AI
-   features. (The smoke workflow and GitHub variables are set up and passing.)
-2. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. Sakif: Upstash via the Vercel Marketplace (runbook step 11), then redeploy. Sentry (step 10) is live.
+2. Then his pick: the 5-minute slot hold (unblocked by rate limits) or Google Calendar sync; then reminders, AI
+   features (the AI routes get their own line in `LIMITS`).
+3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -50,6 +56,10 @@ Read this first in a new chat. It replaces the long Days 1–13 conversations. D
   in `docs/backlog.md`.
 - **Usage is limited.** Keep checks light on non-UI days: unit tests plus one browser run. No videos unless the
   UI changes.
+- **Repo access from a chat:** the repo is public, so `git clone` works, but Claude can't push (his GitHub isn't
+  linked). That's fine: delivery is a zip. In the cloud workspace, E2E runs with the installed Chrome
+  (`E2E_BROWSER_CHANNEL=chrome`; Playwright's download is blocked) and the local Postgres 16
+  (`service postgresql start`, password `postgres`).
 
 ## Stack and commands
 
@@ -61,6 +71,7 @@ Read this first in a new chat. It replaces the long Days 1–13 conversations. D
   - Better Auth (Google, database sessions).
   - React Email + Resend; with no `RESEND_API_KEY`, emails go to a dev outbox folder.
   - Tailwind 4, Radix, self-hosted Bricolage Grotesque and Figtree.
+  - Sentry v11 (errors only); Upstash Redis + `@upstash/ratelimit` (rate limits).
 - **Commands:** `npm test` (PGlite; set `TEST_DATABASE_URL` to also run the race tests on real Postgres),
   `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
   `E2E_BROWSER_CHANNEL=chrome`),
@@ -70,7 +81,8 @@ Read this first in a new chat. It replaces the long Days 1–13 conversations. D
 - **Env** (`.env.example` holds names only, never values): `DATABASE_URL` (+ `DATABASE_URL_UNPOOLED` for
   migrations), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (derived on Vercel), `GOOGLE_CLIENT_ID/SECRET`, optional
   `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`, `NEXT_PUBLIC_SENTRY_DSN` (+ build-time `SENTRY_ORG`,
-  `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`). Local dev uses the Neon `dev` branch, never `production`.
+  `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`), `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or the `UPSTASH_REDIS_REST_*`
+  names; both or neither). Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
 
@@ -105,3 +117,7 @@ Read this first in a new chat. It replaces the long Days 1–13 conversations. D
 - **Browser scripts:** use `locale: "en-US"` when checking AM/PM text. Don't depend on "today"; pick a fixed
   day. Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".
   Empty the email outbox at the start.
+- **Rate limits are shared state.** Every E2E visitor sends its own random `x-forwarded-for` (fixtures), which the
+  app trusts off Vercel; on Vercel, Vercel overwrites it. A new public endpoint gets a line in `LIMITS`.
+- **Next's route announcer is an empty `role="alert"`** on every page: find messages by text, not by role alone.
+- **Edits made on GitHub's website skip the pre-commit hook:** run `npm run format` before the next commit.

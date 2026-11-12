@@ -9,7 +9,7 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 ## Stack
 
 Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +
-`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · PGlite (in-process Postgres for tests) · GitHub Actions
+`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · Upstash Redis (rate limits) · PGlite (in-process Postgres for tests) · GitHub Actions
 
 ## Getting started
 
@@ -78,6 +78,8 @@ npm run test:e2e                                                       # wipes a
 - [Day 13: Error monitoring](docs/day-13.md): Sentry on server and browser, a privacy scrubber proven against
   real reports (tokens, emails, query values), Sentry v11's collect-everything defaults turned off, and the app's
   real address in the UI.
+- [Day 14: Rate limiting](docs/day-14.md): Upstash Redis with a sliding window, limits keyed by what's abused
+  (IP, guest inbox, manage token), fail open with reporting, hashed keys, IPv6 per /64, and one IP per E2E visitor.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

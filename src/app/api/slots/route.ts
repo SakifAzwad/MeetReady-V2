@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { slotsQuerySchema } from "@/lib/validation/booking";
 import { getBookingCalendar, getPublicEventType } from "@/server/booking";
 import { getBookingByToken } from "@/server/manage-booking";
+import { ipOf, rateLimit, tooManyRequests } from "@/server/rate-limit";
 
 /**
  * GET /api/slots?username=sakif&slug=intro&from=<ISO>&to=<ISO>
@@ -13,8 +14,14 @@ import { getBookingByToken } from "@/server/manage-booking";
  * can run in parallel, safe to retry). Server actions are POST and queue
  * one after another. Public: no session; only active event types of
  * onboarded hosts are visible.
+ *
+ * Rate limit (Day 14): 60 per minute per IP, checked first. Each call
+ * computes a month of availability; a page load makes one or two.
  */
 export async function GET(request: NextRequest) {
+  const limited = await rateLimit([["slots", ipOf(request.headers)]]);
+  if (!limited.ok) return tooManyRequests(limited.retryAfterSeconds);
+
   const parsed = slotsQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!parsed.success) {
     return Response.json({ error: z.flattenError(parsed.error).fieldErrors }, { status: 400 });

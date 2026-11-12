@@ -1,6 +1,7 @@
 # Day 12: Ready to deploy (Vercel + Neon)
 
-**Result:** the code side of deploying, plus a runbook for the clicks ([deploy.md](deploy.md)).
+**Result:** the code side of deploying, plus a runbook for the clicks ([deploy.md](deploy.md)). **Live since
+12 Nov 2026 at <https://meetreadyv2.vercel.app>** (demo: `/sakifazwad18/intro`).
 
 - **Tests:** 384 unit tests (27 new), 13 E2E tests and 6 new smoke tests all pass. Typecheck, lint, format,
   `drizzle-kit check` and the production build are green.
@@ -62,7 +63,7 @@ docs/deploy.md                  # the runbook
 
 - The app needs its public URL for sign-in callbacks, email links and social previews.
 - **On Vercel it's derived:**
-  - production uses `VERCEL_PROJECT_PRODUCTION_URL` (`meetready.vercel.app`);
+  - production uses `VERCEL_PROJECT_PRODUCTION_URL` (`meetreadyv2.vercel.app`);
   - a preview uses its own `VERCEL_URL`.
 - **Why:** one less variable to type, and a preview's email links point at the preview and its database branch,
   not at production.
@@ -169,5 +170,5 @@ docs/deploy.md                  # the runbook
 
 ## Next
 
-1. **You:** follow [deploy.md](deploy.md).
-2. **Then:** error monitoring with Sentry (agreed: its own small step), then rate limiting.
+1. **Done:** deployed by following [deploy.md](deploy.md); live at <https://meetreadyv2.vercel.app>.
+2. **Next:** error monitoring with Sentry (agreed: its own small step), then rate limiting.

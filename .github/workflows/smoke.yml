@@ -6,8 +6,8 @@ name: Smoke test (production)
 # migration that didn't run.
 #
 # Setup (once): repository Settings -> Secrets and variables -> Actions ->
-# Variables: PRODUCTION_URL (e.g. https://meetready.vercel.app) and, optionally,
-# DEMO_BOOKING_PATH (e.g. /sakif/intro).
+# Variables: PRODUCTION_URL (https://meetreadyv2.vercel.app) and, optionally,
+# DEMO_BOOKING_PATH (/sakifazwad18/intro).
 on:
   deployment_status:
 

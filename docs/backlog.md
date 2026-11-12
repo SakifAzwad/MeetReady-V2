@@ -5,7 +5,7 @@ One list for everything deferred or decided against, so nothing from the reviews
 
 ## Next, in order
 
-1. **Go live:** follow [deploy.md](deploy.md) (Sakif), then confirm the smoke test passes on the real domain.
+1. **Confirm the live checks:** the smoke workflow passes on <https://meetreadyv2.vercel.app>.
 2. **Error monitoring with Sentry:** agreed as its own small step right after the deploy works. Server and browser
    errors with source maps; no session replay (privacy) and no tracing at first (free-tier quota).
 3. **Rate limiting** on the public booking routes (and later the AI routes). Upstash Redis is planned. This
@@ -17,7 +17,7 @@ One list for everything deferred or decided against, so nothing from the reviews
    questions feed the meeting brief: the answers are what the host should read before the call.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
-code and runbook (Day 12).
+code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026.
 
 ## Ideas from reviews, deferred
 

@@ -1,5 +1,9 @@
 # Deploying MeetReady (Vercel + Neon)
 
+> **Live since 12 Nov 2026:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`, Neon project
+> `meetready`, AWS US East 1). Demo booking page: `/sakifazwad18/intro`. The steps below are how it was set up;
+> the domain and demo path are the real ones.
+
 A one-time runbook. Secrets are pasted by you into Vercel, Neon and GitHub, never into the repo or a chat. Each
 step says **why**, so it can be explained later. Expect about 30–40 minutes.
 
@@ -28,8 +32,8 @@ step says **why**, so it can be explained later. Expect about 30–40 minutes.
 ## 1. Create the Vercel project
 
 1. Vercel → **Add New → Project** → import `SakifAzwad/MeetReady-V2`.
-2. **Project name:** `meetready`. This gives `meetready.vercel.app` if nobody has it. If it's taken, Vercel adds a
-   suffix; you can choose another free `*.vercel.app` name in step 5.
+2. **Project name:** `meetreadyv2` (`meetready.vercel.app` was taken). The name becomes the free domain
+   `meetreadyv2.vercel.app`.
 3. **Framework:** Next.js, detected automatically. Leave the build command alone: `vercel.json` sets it.
 4. Click **Deploy**. **The first build will fail** with `migrate: set DATABASE_URL`. That's expected: the database
    gets connected in the next step.
@@ -37,7 +41,7 @@ step says **why**, so it can be explained later. Expect about 30–40 minutes.
 ## 2. Connect Neon (with a branch per preview)
 
 1. Neon → project `meetready` → **Integrations** → **Vercel** → **Add**. Sign in to Vercel if asked.
-2. Choose the Vercel project `meetready`, and the Neon project `meetready` with the `production` branch for
+2. Choose the Vercel project `meetreadyv2`, and the Neon project `meetready` with the `production` branch for
    **Production**.
 3. Turn on **"Create a branch for each preview deployment"** and **"Automatically delete obsolete branches"**.
 
@@ -86,16 +90,15 @@ time (Day 7 story). A variable added later needs a redeploy.
 
 ## 5. Domain
 
-Vercel → **Settings → Domains**. You should see `meetready.vercel.app`. If you see a suffixed name instead, edit it
-to any free `*.vercel.app` name. Use that exact URL in every step below.
+Vercel → **Settings → Domains**. You should see `meetreadyv2.vercel.app`. Use that exact URL in every step below.
 
 ## 6. Google sign-in
 
 Google Cloud Console → the project you used on Day 2.
 
 1. **APIs & Services → Credentials** → your OAuth client:
-   - **Authorized JavaScript origins:** add `https://meetready.vercel.app`.
-   - **Authorized redirect URIs:** add `https://meetready.vercel.app/api/auth/callback/google`.
+   - **Authorized JavaScript origins:** add `https://meetreadyv2.vercel.app`.
+   - **Authorized redirect URIs:** add `https://meetreadyv2.vercel.app/api/auth/callback/google`.
    - Keep the `localhost` entries for local development.
 2. **OAuth consent screen** (Google Auth Platform → **Audience**) → **Publish app**, so the status says **In
    production**.
@@ -117,20 +120,20 @@ not code.
 
 ## 8. Your own booking page
 
-1. On the live site: **Continue with Google** → onboarding (username `sakif`, timezone Asia/Dhaka) → set your
-   availability → create the event type `intro`.
+1. On the live site: **Continue with Google** → onboarding (username `sakifazwad18`, timezone Asia/Dhaka) → set
+   your availability → create the event type `intro`.
 2. Book it once yourself, with your own email: you should get the guest and host emails with invites.
-3. Vercel: `DEMO_BOOKING_PATH` = `/sakif/intro` (Production) → **redeploy**. The landing page's "See a live booking
-   page" link now points there. It needs the redeploy because the landing page is static.
+3. Vercel: `DEMO_BOOKING_PATH` = `/sakifazwad18/intro` (Production) → **redeploy**. The landing page's "See a
+   live booking page" link now points there. It needs the redeploy because the landing page is static.
 
 ## 9. Smoke test after every production deploy
 
 GitHub → repo **Settings → Secrets and variables → Actions → Variables**:
 
-| Variable            | Value                          |
-| ------------------- | ------------------------------ |
-| `PRODUCTION_URL`    | `https://meetready.vercel.app` |
-| `DEMO_BOOKING_PATH` | `/sakif/intro`                 |
+| Variable            | Value                            |
+| ------------------- | -------------------------------- |
+| `PRODUCTION_URL`    | `https://meetreadyv2.vercel.app` |
+| `DEMO_BOOKING_PATH` | `/sakifazwad18/intro`            |
 
 From the next production deploy on, the **Smoke test (production)** workflow runs by itself. Check the Actions
 tab.

@@ -7,10 +7,11 @@ import { defineConfig, devices } from "@playwright/test";
  * migration, wrong headers on the real domain. They never write data, so
  * they're safe against production.
  *
- *   SMOKE_URL=https://meetready.vercel.app npx playwright test --config playwright.smoke.config.ts
+ *   SMOKE_URL=https://meetreadyv2.vercel.app npx playwright test --config playwright.smoke.config.ts
  */
 const baseURL = process.env.SMOKE_URL;
-if (!baseURL) throw new Error("Set SMOKE_URL to the deployment to check, e.g. https://meetready.vercel.app");
+if (!baseURL)
+  throw new Error("Set SMOKE_URL to the deployment to check, e.g. https://meetreadyv2.vercel.app");
 
 export default defineConfig({
   testDir: "./e2e/smoke",

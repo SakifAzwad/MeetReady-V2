@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import Link from "next/link";
 import { useEffect } from "react";
 import { Logo } from "@/components/brand/logo";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
  * Error boundary for every page under the root layout. Says what happened
  * and what to do, without internals: `error.message` is replaced by Next.js
  * in production for server errors, and `digest` is the id to look up in the
- * server logs.
+ * server logs and in Sentry.
  */
 export default function ErrorPage({
   error,
@@ -19,7 +20,11 @@ export default function ErrorPage({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error); // lands in the browser console now; in Sentry once monitoring is added
+    console.error(error);
+    // A server error arrives here with only a `digest` (Next hides the message):
+    // the server already reported the real one (instrumentation.ts), so sending
+    // it again would only add a duplicate with less detail.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   return (

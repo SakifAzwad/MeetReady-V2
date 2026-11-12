@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { EVENT_TYPE_DEFAULTS } from "@/lib/validation/event-type";
 import { requireOnboardedUser } from "@/server/auth/session";
+import { appHost } from "@/lib/env";
 import { EventTypeForm } from "../event-type-form";
 import { PageTransition } from "@/components/motion";
 
@@ -22,5 +23,12 @@ export default function NewEventTypePage() {
 
 async function NewEventTypeForm() {
   const user = await requireOnboardedUser();
-  return <EventTypeForm mode="create" username={user.username} defaultValues={EVENT_TYPE_DEFAULTS} />;
+  return (
+    <EventTypeForm
+      mode="create"
+      username={user.username}
+      appHost={appHost}
+      defaultValues={EVENT_TYPE_DEFAULTS}
+    />
+  );
 }

@@ -34,9 +34,10 @@ const LOCATION_PLACEHOLDER: Record<string, string> = {
   in_person: "Street, city",
 };
 
+/** `appHost`: e.g. "meetreadyv2.vercel.app", for the "Guests book at …" hint. */
 type Props =
-  | { mode: "create"; username: string; defaultValues: EventTypeFormValues }
-  | { mode: "edit"; username: string; defaultValues: EventTypeFormValues; id: string };
+  | { mode: "create"; username: string; appHost: string; defaultValues: EventTypeFormValues }
+  | { mode: "edit"; username: string; appHost: string; defaultValues: EventTypeFormValues; id: string };
 
 export function EventTypeForm(props: Props) {
   const { username, defaultValues } = props;
@@ -104,7 +105,7 @@ export function EventTypeForm(props: Props) {
         <Field
           id="slug"
           label="Link"
-          hint={`Guests book at meetready.app/${username}/${slug || "…"}`}
+          hint={`Guests book at ${props.appHost}/${username}/${slug || "…"}`}
           error={errors.slug?.message}
         >
           {(aria) => (

@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: profile ? `Book a meeting with ${profile.name}` : "Not found" };
 }
 
-/** A host's public page: meetready.app/{username}, listing their active event types. */
+/** A host's public page: meetreadyv2.vercel.app/{username}, listing their active event types. */
 export default function ProfilePage({ params }: { params: Params }) {
   return (
     <main className="flex flex-1 flex-col items-center gap-10 px-4 py-12 sm:py-20">

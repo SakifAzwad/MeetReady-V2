@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { requireUser } from "@/server/auth/session";
 import { suggestUsername } from "@/server/users";
+import { appHost } from "@/lib/env";
 import { OnboardingForm } from "./onboarding-form";
 import { PageTransition } from "@/components/motion";
 
@@ -31,5 +32,5 @@ async function OnboardingFormForUser() {
 
   // The timezone picker searches the browser's own zone list when opened, so
   // nothing needs to be sent from here (Day 3 sent ~420 names to keep a <select> in sync).
-  return <OnboardingForm suggestedUsername={suggestUsername(user.email)} />;
+  return <OnboardingForm suggestedUsername={suggestUsername(user.email)} appHost={appHost} />;
 }

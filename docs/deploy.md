@@ -141,6 +141,39 @@ tab.
 **Why variables, not secrets:** these aren't secret, and GitHub shows variables in logs, which helps when
 something fails.
 
+## 10. Error monitoring (Sentry), added on Day 13
+
+1. [sentry.io](https://sentry.io) → sign up (the free **Developer** plan) → **Create project** → platform **Next.js**,
+   name `meetreadyv2`. For alerts, pick "Alert me on every new issue": you get an email the first time each new
+   error happens.
+2. Collect four values:
+   - **DSN:** Project → Settings → **Client Keys (DSN)**. It looks like `https://…@o….ingest.sentry.io/…`.
+     It's public by design: it ships in the browser code and only allows _sending_ errors.
+   - **Org slug** and **project slug:** from the URL, `sentry.io/organizations/<org>/projects/<project>/`.
+   - **Auth token:** Settings → **Auth Tokens** (Organization Tokens) → **Create**. **This one is a secret:** it lets
+     the build upload source maps.
+3. Vercel → Settings → Environment Variables, for **Production and Preview**:
+
+   | Name                     | Value          |
+   | ------------------------ | -------------- |
+   | `NEXT_PUBLIC_SENTRY_DSN` | the DSN        |
+   | `SENTRY_ORG`             | the org slug   |
+   | `SENTRY_PROJECT`         | `meetreadyv2`  |
+   | `SENTRY_AUTH_TOKEN`      | the auth token |
+
+4. **Redeploy.** The build log should show source maps being uploaded.
+5. **Check it works, with no test route in the app:**
+   1. Open <https://meetreadyv2.vercel.app>, then the browser's DevTools console.
+   2. Run `setTimeout(() => { throw new Error("Sentry check") })`.
+   3. Within a minute, Sentry → **Issues** shows "Sentry check", tagged `production`, with the page URL and a
+      readable stack trace.
+   4. Resolve the issue afterwards.
+
+**What's never sent:** cookies, IP addresses, request bodies, guest emails, database query values, and the manage
+token in `/booking/…` URLs. See `src/lib/monitoring.ts` and the Day 13 doc.
+
+**Local development sends nothing,** because there's no DSN in `.env.local`.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

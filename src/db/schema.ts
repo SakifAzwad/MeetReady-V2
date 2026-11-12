@@ -48,7 +48,7 @@ export const user = pgTable(
     email: text().notNull().unique(),
     emailVerified: boolean().notNull().default(false),
     image: text(),
-    /** Public booking URL: meetready.app/{username}. Null until onboarding. */
+    /** Public booking URL: meetreadyv2.vercel.app/{username}. Null until onboarding. */
     username: varchar({ length: 30 }).unique(),
     /** IANA name, e.g. "Asia/Dhaka". Availability rules are interpreted in this zone. */
     timeZone: text().notNull().default("UTC"),
@@ -121,7 +121,7 @@ export const eventTypes = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     title: varchar({ length: 120 }).notNull(),
-    /** URL part: meetready.app/{username}/{slug}. Unique per host, not globally. */
+    /** URL part: meetreadyv2.vercel.app/{username}/{slug}. Unique per host, not globally. */
     slug: varchar({ length: 80 }).notNull(),
     description: text(),
     durationMinutes: integer().notNull(),

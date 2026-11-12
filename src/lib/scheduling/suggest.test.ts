@@ -52,7 +52,7 @@ describe("formatAvailabilityText", () => {
     durationMinutes: 30,
     hostZone: "Asia/Dhaka",
     hostCity: "Dhaka",
-    link: "https://meetready.app/sakif/intro",
+    link: "https://meetreadyv2.vercel.app/sakif/intro",
   };
 
   it("writes the message in the recipient's time, with the host's beside it", () => {
@@ -70,7 +70,7 @@ describe("formatAvailabilityText", () => {
         "Tue 10 Nov, 8:00 AM (2:00 PM for me in Dhaka)",
         "Wed 11 Nov, 8:00 AM (2:00 PM for me in Dhaka)",
         "",
-        "Or pick any time that suits you: https://meetready.app/sakif/intro",
+        "Or pick any time that suits you: https://meetreadyv2.vercel.app/sakif/intro",
       ].join("\n"),
     );
   });

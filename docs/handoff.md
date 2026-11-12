@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 12)
+# Handoff: starting a new chat (after Day 13)
 
-Read this first in a new chat. It replaces the long Days 1–12 conversations. Details live in `docs/day-01.md` …
-`docs/day-12.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–13 conversations. Details live in `docs/day-01.md` …
+`docs/day-13.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–12):**
+- **Built (Days 1–13):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -21,7 +21,10 @@ Read this first in a new chat. It replaces the long Days 1–12 conversations. D
   - Deploy-ready (Day 12): migrations in the Vercel build (direct connection, advisory lock), real 404s from
     `proxy.ts`, security headers, app URL from Vercel's variables, smoke tests after each production deploy.
     Runbook: `docs/deploy.md`.
-- **Numbers:** 384 unit tests + 13 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  - Error monitoring (Day 13): Sentry v11 on server and browser via the `/monitoring` tunnel; privacy in
+    `src/lib/monitoring.ts` (`DATA_COLLECTION` all off + `scrubEvent`); errors only, no replay. Needs runbook step 10
+    on Vercel to go live. The UI shows the real address (`appHost`), never `meetready.app`.
+- **Numbers:** 394 unit tests + 13 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
   build all green. 5 migrations (0000–0004).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -31,11 +34,9 @@ Read this first in a new chat. It replaces the long Days 1–12 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. Confirm the smoke workflow passes on <https://meetreadyv2.vercel.app> (GitHub variables `PRODUCTION_URL`,
-   `DEMO_BOOKING_PATH`).
-2. **Sentry** (Sakif asked to do it as its own step after the deploy), then rate limiting, Google Calendar sync,
-   reminders, AI features.
-3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. Sakif: Sentry account + env vars (runbook step 10). Then **rate limiting**, Google Calendar sync, reminders, AI
+   features. (The smoke workflow and GitHub variables are set up and passing.)
+2. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -68,7 +69,8 @@ Read this first in a new chat. It replaces the long Days 1–12 conversations. D
   `SMOKE_URL=https://… npx playwright test --config playwright.smoke.config.ts`.
 - **Env** (`.env.example` holds names only, never values): `DATABASE_URL` (+ `DATABASE_URL_UNPOOLED` for
   migrations), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (derived on Vercel), `GOOGLE_CLIENT_ID/SECRET`, optional
-  `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`. Local dev uses the Neon `dev` branch, never `production`.
+  `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`, `NEXT_PUBLIC_SENTRY_DSN` (+ build-time `SENTRY_ORG`,
+  `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`). Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
 
@@ -95,6 +97,10 @@ Read this first in a new chat. It replaces the long Days 1–12 conversations. D
   read several fields use `when: noIssuesYet`; `never-throws.property.test.ts` covers every input schema.
 - **Streaming pages send 200 first.** Real 404s for public pages come from `proxy.ts` (rewrite to `/_not-found`).
 - **Migrations are additive** (they run before the build; old code serves until the new build is live).
+- **Sentry v11:** `sendDefaultPii` is gone; `dataCollection` defaults to collecting everything, so keep
+  `DATA_COLLECTION` explicit. `withSentryConfig` comes from `@sentry/nextjs/config`. Drizzle errors carry query
+  values (`params:`), redacted by the scrubber.
+- **New top-level routes are also possible usernames:** add them to `RESERVED_USERNAMES` and proxy's `APP_ROUTES`.
 - **Env files:** `KEY=` arrives as `""`, not missing. Optional env vars use `emptyAsUnset`.
 - **Browser scripts:** use `locale: "en-US"` when checking AM/PM text. Don't depend on "today"; pick a fixed
   day. Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".

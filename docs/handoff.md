@@ -23,14 +23,16 @@ Read this first in a new chat. It replaces the long Days 1–12 conversations. D
     Runbook: `docs/deploy.md`.
 - **Numbers:** 384 unit tests + 13 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
   build all green. 5 migrations (0000–0004).
-- **Deploy in progress:** Sakif follows `docs/deploy.md`. Neon project `meetready`, AWS US East 1, Postgres 18;
-  target URL `meetready.vercel.app`.
+- **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
+  `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
+  `docs/deploy.md`.
 - **Repo:** `SakifAzwad/MeetReady-V2`. Sakif applies each day from a zip, then commits and pushes. The new chat
   must clone the repo; it can't see the old machine.
 
 ## Next (from `docs/backlog.md`)
 
-1. Finish the live deploy (Sakif, `docs/deploy.md`); check the smoke workflow passes.
+1. Confirm the smoke workflow passes on <https://meetreadyv2.vercel.app> (GitHub variables `PRODUCTION_URL`,
+   `DEMO_BOOKING_PATH`).
 2. **Sentry** (Sakif asked to do it as its own step after the deploy), then rate limiting, Google Calendar sync,
    reminders, AI features.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).

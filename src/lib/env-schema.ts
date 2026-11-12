@@ -12,7 +12,7 @@ const emptyAsUnset = <T extends z.ZodType>(schema: T) =>
 
 /**
  * On Vercel the app can work out its own public URL: the production domain
- * (e.g. meetready.vercel.app) in production, the deployment's own URL on a
+ * (e.g. meetreadyv2.vercel.app) in production, the deployment's own URL on a
  * preview. One less secret to type, and a preview's email links point at the
  * preview (and its database branch), not at production.
  */
@@ -39,7 +39,7 @@ export function parseEnv(source: Record<string, string | undefined>) {
       RESEND_API_KEY: emptyAsUnset(z.string().min(1).optional()),
       /** Resend's shared test sender only delivers to your own Resend account email; use a verified domain for real guests. */
       EMAIL_FROM: emptyAsUnset(z.string().min(3).default("MeetReady <onboarding@resend.dev>")),
-      /** Optional: a real booking page to link from the landing page, e.g. "/sakif/intro". */
+      /** Optional: a real booking page to link from the landing page, e.g. "/sakifazwad18/intro". */
       DEMO_BOOKING_PATH: emptyAsUnset(z.string().startsWith("/").optional()),
     })
     .parse(source);

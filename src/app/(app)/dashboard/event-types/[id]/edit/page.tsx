@@ -6,6 +6,7 @@ import type { EventType } from "@/db/schema";
 import type { EventTypeFormValues } from "@/lib/validation/event-type";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { getEventType } from "@/server/event-types";
+import { appHost } from "@/lib/env";
 import { EventTypeForm } from "../../event-type-form";
 import { PageTransition } from "@/components/motion";
 
@@ -35,6 +36,7 @@ async function EditForm({ params }: Pick<PageProps<"/dashboard/event-types/[id]/
       mode="edit"
       id={eventType.id}
       username={user.username}
+      appHost={appHost}
       defaultValues={toFormValues(eventType)}
     />
   );

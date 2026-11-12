@@ -23,7 +23,17 @@ import { publicPageExists } from "@/server/booking";
 const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
 
 /** First path segments that are the app's own routes, never a username. */
-const APP_ROUTES = new Set(["dashboard", "onboarding", "login", "api", "booking", "_next"]);
+const APP_ROUTES = new Set([
+  "dashboard",
+  "onboarding",
+  "login",
+  "api",
+  "booking",
+  "_next",
+  // Error reports from browsers (Sentry tunnel): never a username, and never worth a database query.
+  "monitoring",
+  "sentry-tunnel",
+]);
 
 /** Same rule as usernameSchema; anything else can't be a profile, so no query is needed. */
 const USERNAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;

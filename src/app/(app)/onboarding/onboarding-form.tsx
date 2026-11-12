@@ -11,9 +11,11 @@ const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 type Props = {
   suggestedUsername: string;
+  /** e.g. "meetreadyv2.vercel.app", shown before the username. */
+  appHost: string;
 };
 
-export function OnboardingForm({ suggestedUsername }: Props) {
+export function OnboardingForm({ suggestedUsername, appHost }: Props) {
   const [state, formAction, pending] = useActionState<OnboardingFormState, FormData>(submitOnboarding, {});
 
   const [username, setUsername] = useState(state.values?.username ?? suggestedUsername);
@@ -39,7 +41,7 @@ export function OnboardingForm({ suggestedUsername }: Props) {
           Username
         </label>
         <div className="bg-card focus-within:ring-ring/50 focus-within:border-ring flex items-center rounded-md border focus-within:ring-[3px]">
-          <span className="text-muted-foreground pl-3 select-none">meetready.app/</span>
+          <span className="text-muted-foreground pl-3 select-none">{appHost}/</span>
           <input
             id="username"
             name="username"

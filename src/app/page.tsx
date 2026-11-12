@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/site/site-header";
 import { PageTransition } from "@/components/motion";
 import { SiteFooter } from "@/components/site/site-footer";
 import { Button } from "@/components/ui/button";
-import { env } from "@/lib/env";
+import { appHost, env } from "@/lib/env";
 import { REPO_URL } from "@/lib/site";
 import { GuestPreview } from "./_landing/guest-preview";
 import { HeroBands } from "./_landing/hero-bands";
@@ -56,7 +56,7 @@ export default function Home() {
             title="What your guests see"
             intro="This is the real booking page, running on sample data. Pick a time."
           >
-            <GuestPreview />
+            <GuestPreview address={`${appHost}${env.DEMO_BOOKING_PATH ?? "/sakif/intro"}`} />
           </Section>
 
           <Section id="how-it-works" title="How it works">

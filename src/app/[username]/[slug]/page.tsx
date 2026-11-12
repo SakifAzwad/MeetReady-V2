@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: eventType ? `${eventType.title} with ${eventType.hostName}` : "Not found" };
 }
 
-/** The public booking page: meetready.app/{username}/{slug}. No login. */
+/** The public booking page: meetreadyv2.vercel.app/{username}/{slug}. No login. */
 export default function BookingPage({ params }: { params: Params }) {
   return (
     <main className="flex flex-1 flex-col items-center gap-8 px-3 py-6 sm:px-6 sm:py-12">

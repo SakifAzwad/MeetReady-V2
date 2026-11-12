@@ -1,23 +1,21 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 12).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 13).
 
 ## Next, in order
 
-1. **Confirm the live checks:** the smoke workflow passes on <https://meetreadyv2.vercel.app>.
-2. **Error monitoring with Sentry:** agreed as its own small step right after the deploy works. Server and browser
-   errors with source maps; no session replay (privacy) and no tracing at first (free-tier quota).
-3. **Rate limiting** on the public booking routes (and later the AI routes). Upstash Redis is planned. This
+1. **Turn on Sentry in production:** [deploy.md](deploy.md) step 10 (Sakif).
+2. **Rate limiting** on the public booking routes (and later the AI routes). Upstash Redis is planned. This
    needs to be in place before the slot hold below. Matters more now that the site is public.
-4. **Google Calendar sync for hosts:** busy times from the host's calendar block slots, and bookings get a Meet
+3. **Google Calendar sync for hosts:** busy times from the host's calendar block slots, and bookings get a Meet
    link.
-5. **Reminder emails** (a day and an hour before) with Inngest, plus email retries.
-6. **AI features:** booking assistant, MCP server, meeting brief (see the full list below). The booking
+4. **Reminder emails** (a day and an hour before) with Inngest, plus email retries.
+5. **AI features:** booking assistant, MCP server, meeting brief (see the full list below). The booking
    questions feed the meeting brief: the answers are what the host should read before the call.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
-code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026.
+code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13).
 
 ## Ideas from reviews, deferred
 
@@ -30,6 +28,7 @@ code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov
 | **More E2E coverage:** onboarding, availability editor, guest timezone switching | Day 11 | The four specs cover the flows where a break costs a booking. These pages are covered by unit tests and the Day 3/8/9 scripts; porting them is mechanical.                                                                                            | When one of them changes next                     |
 | **Script Content-Security-Policy** (nonces)                                      | Day 12 | Headers stop framing and sniffing already. A strict script CSP needs a nonce per request, which conflicts with prerendered static shells; Next's hash-based option is still young.                                                                    | After Sentry (CSP violation reports can go there) |
 | **A custom domain** (emails to every guest)                                      | Day 12 | About $10/year; Resend's test sender only reaches the owner's address until a domain is verified. No code change: env vars and DNS.                                                                                                                   | Whenever Sakif buys one                           |
+| **Performance tracing** in Sentry                                                | Day 13 | Errors only for now: tracing spends the free quota, and with little traffic there's nothing to measure. One option (`tracesSampleRate`) when there is.                                                                                                | When real traffic arrives                         |
 | **Preferred hours** (was: "focus / open for meetings" tags)                      | Day 8  | Reshaped: focus time that guests mustn't book is simply not-available hours. The real feature is "bookable, but shown first": it needs a schema change and editor work.                                                                               | With AI smart slot ranking                        |
 
 ## Decided against

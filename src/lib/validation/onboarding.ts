@@ -8,11 +8,14 @@ import { isValidTimeZone } from "@/lib/scheduling/time";
  */
 
 /**
- * Usernames become top-level URLs: meetready.app/{username}. Any name that
+ * Usernames become top-level URLs: meetreadyv2.vercel.app/{username}. Any name that
  * collides with an app route would make that route unreachable, or let
  * someone squat a page that looks official (/login, /admin).
  */
 export const RESERVED_USERNAMES = new Set([
+  // Error-report endpoints (Sentry tunnel, Day 13): a profile here would collide with them.
+  "monitoring",
+  "sentry-tunnel",
   "about",
   "account",
   "admin",

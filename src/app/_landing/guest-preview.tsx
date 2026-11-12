@@ -31,7 +31,8 @@ const EVENT = {
 };
 const SHOWN = 6;
 
-export function GuestPreview() {
+/** `address`: what the sample's address bar shows, e.g. "meetreadyv2.vercel.app/sakifazwad18/intro". */
+export function GuestPreview({ address }: { address: string }) {
   const zone = useBrowserZone();
   const now = useMinuteClock();
   const [hour12] = useHour12();
@@ -75,7 +76,7 @@ export function GuestPreview() {
   return (
     <div className="bg-card overflow-hidden rounded-2xl border shadow-[0_24px_60px_-30px_rgb(24_33_58/0.35)]">
       <div className="text-muted-foreground flex items-center justify-center border-b px-4 py-2.5 text-xs">
-        <span className="bg-muted rounded-md px-3 py-1">meetready.app/sakif/intro</span>
+        <span className="bg-muted rounded-md px-3 py-1">{address}</span>
       </div>
       <div className="grid md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
         <FactsPanel event={EVENT} timeZone={zone} hour12={hour12} titleAs="h3" />

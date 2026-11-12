@@ -6,7 +6,6 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 **Live:** [meetreadyv2.vercel.app](https://meetreadyv2.vercel.app) · try a booking page:
 [meetreadyv2.vercel.app/sakifazwad18/intro](https://meetreadyv2.vercel.app/sakifazwad18/intro)
 
-
 ## Stack
 
 Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +

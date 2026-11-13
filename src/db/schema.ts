@@ -277,6 +277,45 @@ export const bookings = pgTable(
   ],
 );
 
+// ─── Google Calendar (Day 15) ──────────────────────────────────────────────────
+
+/**
+ * Why the last call to Google failed (null = the last call worked):
+ *  - access_lost: the token was refused or couldn't be refreshed (the host
+ *    revoked access, or unticked the calendar permission). Needs a reconnect.
+ *  - unavailable: Google timed out or answered 429/5xx. Clears by itself.
+ */
+export const calendarError = pgEnum("calendar_error", ["access_lost", "unavailable"]);
+
+/**
+ * A host's connected calendar. Kept apart from Better Auth's `account` row on
+ * purpose: `account` is how they SIGN IN (Better Auth owns it), this is a
+ * feature they switched on (we own it). Disconnecting deletes this row and
+ * the calendar tokens; signing in keeps working.
+ */
+export const calendarConnections = pgTable(
+  "calendar_connections",
+  {
+    /** One calendar per host for now. */
+    userId: text()
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The Better Auth account (Google) whose tokens are used. Its tokens are encrypted at rest. */
+    accountId: text()
+      .notNull()
+      .references(() => account.id, { onDelete: "cascade" }),
+    /** "primary" for now; picking other calendars comes later. */
+    calendarId: text().notNull().default("primary"),
+    lastError: calendarError(),
+    lastErrorAt: timestamp({ withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    // An error always says when; no error, no time.
+    check("calendar_connections_error_check", sql`(${t.lastError} is null) = (${t.lastErrorAt} is null)`),
+  ],
+);
+
 export type User = typeof user.$inferSelect;
 export type EventType = typeof eventTypes.$inferSelect;
 export type NewEventType = typeof eventTypes.$inferInsert;
@@ -284,3 +323,4 @@ export type AvailabilityRule = typeof availabilityRules.$inferSelect;
 export type DateOverride = typeof dateOverrides.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
+export type CalendarConnection = typeof calendarConnections.$inferSelect;

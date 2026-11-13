@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { timeZoneSchema } from "@/lib/validation/onboarding";
 import { requireOnboardedUser } from "@/server/auth/session";
+import { calendarBusy } from "@/server/calendar";
 import { suggestTimes } from "@/server/share";
 
 /*
@@ -28,14 +29,23 @@ export async function suggestTimesAction(input: unknown): Promise<SuggestTimesRe
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Pick a meeting type and a valid timezone." };
 
-  const r = await suggestTimes(db, user, parsed.data.eventTypeId, parsed.data.timeZone, new Date());
+  const r = await suggestTimes(
+    db,
+    user,
+    parsed.data.eventTypeId,
+    parsed.data.timeZone,
+    new Date(),
+    calendarBusy,
+  );
   if (!r.ok)
     return {
       ok: false,
       error:
         r.error === "inactive"
           ? "That meeting type is switched off. Turn it on first."
-          : "Meeting type not found.",
+          : r.error === "calendar_unavailable"
+            ? "Couldn't read your Google Calendar just now, so these times might clash with your meetings. Try again in a minute, or check the connection on the Availability page."
+            : "Meeting type not found.",
     };
   return {
     ok: true,

@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
-import { BASE_URL, E2E_AUTH_SECRET, E2E_DATABASE_URL, E2E_PORT } from "./e2e/support/config";
+import {
+  BASE_URL,
+  E2E_AUTH_SECRET,
+  E2E_DATABASE_URL,
+  E2E_PORT,
+  FAKE_GOOGLE_PORT,
+  FAKE_GOOGLE_URL,
+} from "./e2e/support/config";
 
 /*
  * End-to-end tests: a real browser against the PRODUCTION build and a real
@@ -41,31 +48,42 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], channel } }],
-  webServer: {
-    command: [
-      "node e2e/support/prepare-db.mts",
-      process.env.E2E_SKIP_BUILD ? null : "npm run build",
-      `npx next start -p ${E2E_PORT}`,
-    ]
-      .filter(Boolean)
-      .join(" && "),
-    url: BASE_URL,
-    // Never reuse a running server: it might be connected to another database.
-    reuseExistingServer: false,
-    timeout: 5 * 60_000, // includes `next build`
-    stderr: "pipe",
-    // Set here, so they win over .env.local: Next never lets a .env file
-    // override a variable that's already in the environment.
-    env: {
-      DATABASE_URL: E2E_DATABASE_URL,
-      BETTER_AUTH_SECRET: E2E_AUTH_SECRET,
-      BETTER_AUTH_URL: BASE_URL,
-      GOOGLE_CLIENT_ID: "e2e",
-      GOOGLE_CLIENT_SECRET: "e2e",
-      // Empty = emails go to the outbox folder, never to a real inbox, even if
-      // .env.local has a Resend key.
-      RESEND_API_KEY: "",
-      DEMO_BOOKING_PATH: "",
+  webServer: [
+    // A fake Google Calendar (Day 15): CI never calls the real one.
+    {
+      command: "node e2e/support/fake-google.mjs",
+      url: `${FAKE_GOOGLE_URL}/__fake/health`,
+      reuseExistingServer: false,
+      env: { FAKE_GOOGLE_PORT: String(FAKE_GOOGLE_PORT) },
     },
-  },
+    {
+      command: [
+        "node e2e/support/prepare-db.mts",
+        process.env.E2E_SKIP_BUILD ? null : "npm run build",
+        `npx next start -p ${E2E_PORT}`,
+      ]
+        .filter(Boolean)
+        .join(" && "),
+      url: BASE_URL,
+      // Never reuse a running server: it might be connected to another database.
+      reuseExistingServer: false,
+      timeout: 5 * 60_000, // includes `next build`
+      stderr: "pipe",
+      // Set here, so they win over .env.local: Next never lets a .env file
+      // override a variable that's already in the environment.
+      env: {
+        DATABASE_URL: E2E_DATABASE_URL,
+        BETTER_AUTH_SECRET: E2E_AUTH_SECRET,
+        BETTER_AUTH_URL: BASE_URL,
+        GOOGLE_CLIENT_ID: "e2e",
+        GOOGLE_CLIENT_SECRET: "e2e",
+        // Empty = emails go to the outbox folder, never to a real inbox, even if
+        // .env.local has a Resend key.
+        RESEND_API_KEY: "",
+        DEMO_BOOKING_PATH: "",
+        GOOGLE_CALENDAR_API_URL: `${FAKE_GOOGLE_URL}/calendar/v3`,
+        GOOGLE_REVOKE_URL: `${FAKE_GOOGLE_URL}/revoke`,
+      },
+    },
+  ],
 });

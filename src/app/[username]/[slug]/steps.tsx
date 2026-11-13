@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
+
+/** Fail closed (Day 15): the host's Google Calendar didn't answer, so nothing was booked. */
+const CALENDAR_UNAVAILABLE =
+  "We couldn't check the host's calendar just now, so this time can't be confirmed yet. Nothing was booked. Please try again in a minute.";
 import { formatDateKey, formatTime } from "@/lib/scheduling/calendar";
 import type { Slot } from "@/lib/scheduling/generate-slots";
 import { dateKeyInZone } from "@/lib/scheduling/time";
@@ -114,6 +118,10 @@ export function GuestForm({
       // Nothing changed on the server, so no refetch (it would only spend the slots limit).
       // The form stays as it is: everything typed is kept for the retry.
       setFormError(tooManyAttempts(result.retryAfterSeconds));
+      return;
+    }
+    if (!result.ok && result.error === "calendar_unavailable") {
+      setFormError(CALENDAR_UNAVAILABLE); // same: details kept, no refetch
       return;
     }
     // Either way the free times have changed: refetch them.
@@ -227,9 +235,11 @@ export function RescheduleConfirm({
     setPending(true);
     setError(null);
     const result = await rescheduleByTokenAction({ token, startsAt: slot.start.toISOString() });
-    if (!result.ok && result.error === "rate_limited") {
+    if (!result.ok && (result.error === "rate_limited" || result.error === "calendar_unavailable")) {
       setPending(false);
-      setError(tooManyAttempts(result.retryAfterSeconds));
+      setError(
+        result.error === "rate_limited" ? tooManyAttempts(result.retryAfterSeconds) : CALENDAR_UNAVAILABLE,
+      );
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ["calendar"] });

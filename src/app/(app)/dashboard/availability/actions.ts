@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { dateOverrideSchema, scheduleToRules, weeklyScheduleSchema } from "@/lib/validation/availability";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { deleteDateOverride, saveDateOverride, saveWeeklySchedule } from "@/server/availability";
+import { disconnectCalendarForUser } from "@/server/calendar";
 
 /* Same pattern as every action: session user -> re-validate -> scoped write. */
 
@@ -41,6 +42,14 @@ export async function deleteDateOverrideAction(date: unknown): Promise<Availabil
   if (!parsed.success) return { ok: false, error: "Invalid date" };
 
   await deleteDateOverride(db, user.id, parsed.data);
+  refresh();
+  return { ok: true };
+}
+
+/** Revokes MeetReady's access at Google and forgets the calendar tokens. Bookings stay as they are. */
+export async function disconnectCalendarAction(): Promise<AvailabilityActionResult> {
+  const user = await requireOnboardedUser();
+  await disconnectCalendarForUser(user.id);
   refresh();
   return { ok: true };
 }

@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 14)
+# Handoff: starting a new chat (after Day 15)
 
-Read this first in a new chat. It replaces the long Days 1–14 conversations. Details live in `docs/day-01.md` …
-`docs/day-14.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–15 conversations. Details live in `docs/day-01.md` …
+`docs/day-15.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–14):**
+- **Built (Days 1–15):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -29,8 +29,17 @@ Read this first in a new chat. It replaces the long Days 1–14 conversations. D
     10/hour per token, slots 60/min per IP, proxy username lookups 120/min per IP. Fails open (reported to
     Sentry, throttled). Keys are HMAC hashes. Friendly "Try again in N minutes" (typed details kept); `429` +
     `Retry-After` on the API. Needs runbook step 11 to use Redis.
-- **Numbers:** 423 unit tests + 15 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
-  build all green. 5 migrations (0000–0004).
+  - Google Calendar, read side (Day 15): `src/server/calendar/`. "Connect Google Calendar" on the Availability
+    page = Better Auth `linkSocial` with `calendar.freebusy` + `calendar.events`, `access_type=offline`,
+    `prompt=consent`; the callback route checks the granted scopes and a refresh token, then writes
+    `calendar_connections` (ours; `account` stays Better Auth's). Busy times go into slot generation as
+    `externalBusy` (no buffers of their own, never count to the daily limit). Booking/reschedule check Google
+    LIVE before the lock and fail closed (`calendar_unavailable`); showing times uses a cache (1 min fresh, 1 h
+    stale-if-error, Redis hash per host); no usable copy → slots API `503`. `last_error` (`access_lost` /
+    `unavailable`) shows "New bookings are paused" on the card. Disconnect revokes at Google and clears tokens and
+    calendar scopes. Needs runbook step 12.
+- **Numbers:** 470 unit tests + 18 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  build all green. 6 migrations (0000–0005).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -39,10 +48,13 @@ Read this first in a new chat. It replaces the long Days 1–14 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. Sakif: Upstash via the Vercel Marketplace (runbook step 11), then redeploy. Sentry (step 10) is live.
-2. Then his pick: the 5-minute slot hold (unblocked by rate limits) or Google Calendar sync; then reminders, AI
-   features (the AI routes get their own line in `LIMITS`).
-3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. Sakif: runbook step 12 (enable the Calendar API, declare the two scopes), push Day 15, connect his calendar.
+2. **Day 16: write bookings to Google Calendar** (event + Meet link via `conferenceData`, `sendUpdates`, store
+   the event id on the booking; reschedule patches it, cancel deletes it). The scope is already granted. A
+   reschedule must exclude the booking's own Google event from busy times (by event id), or it blocks itself.
+   Decide what happens when the write fails (the booking is already committed).
+3. Then reminders (Inngest), AI features. The slot hold waits (Sakif's call).
+4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -71,7 +83,9 @@ Read this first in a new chat. It replaces the long Days 1–14 conversations. D
   - Better Auth (Google, database sessions).
   - React Email + Resend; with no `RESEND_API_KEY`, emails go to a dev outbox folder.
   - Tailwind 4, Radix, self-hosted Bricolage Grotesque and Figtree.
-  - Sentry v11 (errors only); Upstash Redis + `@upstash/ratelimit` (rate limits).
+  - Sentry v11 (errors only); Upstash Redis + `@upstash/ratelimit` (rate limits, calendar cache; one client in
+    `src/server/redis.ts`).
+  - Google Calendar over plain `fetch` (no SDK): `src/server/calendar/google-api.ts`.
 - **Commands:** `npm test` (PGlite; set `TEST_DATABASE_URL` to also run the race tests on real Postgres),
   `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
   `E2E_BROWSER_CHANNEL=chrome`),
@@ -82,7 +96,7 @@ Read this first in a new chat. It replaces the long Days 1–14 conversations. D
   migrations), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (derived on Vercel), `GOOGLE_CLIENT_ID/SECRET`, optional
   `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`, `NEXT_PUBLIC_SENTRY_DSN` (+ build-time `SENTRY_ORG`,
   `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`), `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or the `UPSTASH_REDIS_REST_*`
-  names; both or neither). Local dev uses the Neon `dev` branch, never `production`.
+  names; both or neither). E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101). Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
 
@@ -121,3 +135,10 @@ Read this first in a new chat. It replaces the long Days 1–14 conversations. D
   app trusts off Vercel; on Vercel, Vercel overwrites it. A new public endpoint gets a line in `LIMITS`.
 - **Next's route announcer is an empty `role="alert"`** on every page: find messages by text, not by role alone.
 - **Edits made on GitHub's website skip the pre-commit hook:** run `npm run format` before the next commit.
+- **Google Calendar in tests:** never the real Google. Unit tests pass a fake `ExternalBusy` or fake `fetch`; E2E
+  uses `connectCalendar(db, host)` (seeds encrypted tokens with Better Auth's `symmetricEncrypt`) and
+  `fakeGoogle.setCalendar(token, { busy, down })`. The consent screen itself is covered by checking the URL
+  Better Auth builds (`link-calendar.test.ts`).
+- **Never call Google inside a DB transaction** (it would hold the per-host lock): fetch first, pass `externalBusy`.
+- **Better Auth reports every token refresh failure the same way** (`FAILED_TO_GET_ACCESS_TOKEN`): treated as
+  `access_lost`. Sign-in never overwrites the stored refresh token or the scopes.

@@ -10,6 +10,10 @@ import path from "node:path";
 export const E2E_PORT = 3100;
 export const BASE_URL = `http://localhost:${E2E_PORT}`;
 
+/** The fake Google Calendar the E2E server talks to (e2e/support/fake-google.mjs). */
+export const FAKE_GOOGLE_PORT = 3101;
+export const FAKE_GOOGLE_URL = `http://localhost:${FAKE_GOOGLE_PORT}`;
+
 /** Wiped and re-migrated on every run (e2e/support/prepare-db.mts refuses names without "e2e"). */
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/meetready_e2e";

@@ -14,6 +14,7 @@ import { addDaysToKey, dateKeyInZone, type DateKey } from "@/lib/scheduling/time
 import type { BookingRequest } from "@/lib/validation/booking";
 import { answersSchema, toAnswerSnapshot, type Question } from "@/lib/validation/questions";
 import { getAvailability } from "./availability";
+import { CalendarUnavailableError, type ExternalBusy } from "./calendar/busy";
 import { newManageToken } from "./manage-token";
 
 /*
@@ -176,6 +177,27 @@ export async function getPublicProfile(db: Database, username: string) {
 }
 
 /**
+ * The window of data that slot generation needs for `range`. Host-calendar
+ * days can stick out past a UTC range by up to a day on each side, and
+ * buffers/daily limits look at whole host days, so it adds a margin. Also the
+ * window to ask Google about (Day 15), so both sources cover the same time.
+ */
+export function busyLoadRange(range: Interval): Interval {
+  return { start: addMinutes(range.start, -2 * 24 * 60), end: addMinutes(range.end, 2 * 24 * 60) };
+}
+
+export type CalendarOptions = {
+  /** When rescheduling: the booking being moved doesn't block its own new time. */
+  excludeBookingId?: string;
+  /**
+   * Busy times from the host's connected calendar (Day 15), already fetched
+   * for busyLoadRange(range). Passed in rather than fetched here, so nothing in
+   * this file waits on Google, and booking can fetch them BEFORE taking the lock.
+   */
+  externalBusy?: readonly Interval[];
+};
+
+/**
  * Free slots for one event type in [range.start, range.end).
  *
  * This is the glue between the database and Day 1's pure generateSlots():
@@ -186,8 +208,7 @@ export async function getBookableSlots(
   eventType: PublicEventType,
   range: Interval,
   now: Date,
-  /** When rescheduling: the booking being moved doesn't block its own new time. */
-  options: { excludeBookingId?: string } = {},
+  options: CalendarOptions = {},
 ): Promise<Slot[]> {
   return (await getBookingCalendar(db, eventType, range, now, options)).slots;
 }
@@ -202,13 +223,10 @@ export async function getBookingCalendar(
   eventType: PublicEventType,
   range: Interval,
   now: Date,
-  options: { excludeBookingId?: string } = {},
+  options: CalendarOptions = {},
 ): Promise<{ slots: Slot[]; windows: Interval[] }> {
   const tz = eventType.hostTimeZone;
-  // Host-calendar days can stick out past a UTC range by up to a day on each
-  // side, and buffers/daily limits look at whole host days, so load a margin.
-  const loadFrom = addMinutes(range.start, -2 * 24 * 60);
-  const loadTo = addMinutes(range.end, 2 * 24 * 60);
+  const { start: loadFrom, end: loadTo } = busyLoadRange(range);
 
   const availability = await getAvailability(db, eventType.hostId, {
     overridesFrom: addDaysToKey(dateKeyInZone(loadFrom, tz), -1),
@@ -245,6 +263,11 @@ export async function getBookingCalendar(
     bufferAfterMinutes: b.bufferAfterMinutes,
     countsTowardDailyLimit: b.eventTypeId === eventType.id,
   }));
+  // Meetings in the host's own calendar: no buffers of their own (the new slot's
+  // buffers still keep a gap), and they never count towards a daily limit.
+  for (const b of options.externalBusy ?? []) {
+    busy.push({ start: b.start, end: b.end, countsTowardDailyLimit: false });
+  }
 
   const host = {
     timeZone: tz,
@@ -267,6 +290,8 @@ export async function getBookingCalendar(
 export type BookingResult =
   | { ok: true; booking: { id: string; startsAt: Date; endsAt: Date }; manageToken: string }
   | { ok: false; error: "not_found" | "slot_unavailable" | "slot_taken" }
+  /** The host's calendar couldn't be checked, so the time can't be confirmed (fail closed, Day 15). */
+  | { ok: false; error: "calendar_unavailable" }
   /** The guest's answers break the rules: first message per question id ("" = not about one question). */
   | { ok: false; error: "invalid_answers"; answerErrors: Record<string, string> }
   /** The form was built from older questions: here are the current ones. */
@@ -287,18 +312,40 @@ export type BookingResult =
  *
  *  3. Exclusion constraint (Day 1): if anything ever skips 1–2, Postgres still
  *     refuses two overlapping confirmed bookings (SQLSTATE 23P01).
+ *
+ * With a connected Google Calendar (Day 15), its busy times are fetched LIVE
+ * first, outside the transaction: a network call must not hold a database
+ * connection and this host's lock for up to 2.5 seconds. If Google can't be
+ * read, the booking is refused (fail closed): a meeting booked on top of a
+ * real one is worse than "try again in a minute".
  */
 export async function createBooking(
   db: Database,
   request: BookingRequest,
   now: Date,
-  /**
-   * Test seam: runs after the re-check, before the insert. Lets the race tests
-   * hold two bookings at exactly the dangerous moment to prove the lock is
-   * needed. Never passed in production code.
-   */
-  testHooks: { afterCheck?: () => Promise<void> } = {},
+  options: {
+    /** The host's calendar. Omitted in tests that don't need one. */
+    calendar?: ExternalBusy;
+    /**
+     * Test seam: runs after the re-check, before the insert. Lets the race tests
+     * hold two bookings at exactly the dangerous moment to prove the lock is
+     * needed. Never passed in production code.
+     */
+    afterCheck?: () => Promise<void>;
+  } = {},
 ): Promise<BookingResult> {
+  const window = { start: request.startsAt, end: addMinutes(request.startsAt, 1) };
+  let externalBusy: Interval[] = [];
+  if (options.calendar) {
+    const host = await getPublicEventType(db, request.username, request.slug);
+    if (!host) return { ok: false, error: "not_found" };
+    try {
+      externalBusy = await options.calendar.busyTimes(host.hostId, busyLoadRange(window), "live");
+    } catch (error) {
+      if (error instanceof CalendarUnavailableError) return { ok: false, error: "calendar_unavailable" };
+      throw error;
+    }
+  }
   try {
     return await db.transaction(async (tx) => {
       const eventType = await getPublicEventType(tx, request.username, request.slug);
@@ -326,11 +373,11 @@ export async function createBooking(
 
       // (1) Is this exact start still offered? Ask for slots in a 1-minute window around it.
       const start = request.startsAt;
-      const slots = await getBookableSlots(tx, eventType, { start, end: addMinutes(start, 1) }, now);
+      const slots = await getBookableSlots(tx, eventType, window, now, { externalBusy });
       if (!slots.some((s) => s.start.getTime() === start.getTime())) {
         return { ok: false, error: "slot_unavailable" } as const;
       }
-      await testHooks.afterCheck?.();
+      await options.afterCheck?.();
 
       // The raw token goes back to the caller (for the guest's email) and is never stored.
       const { token, hash } = newManageToken();

@@ -1,6 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/db";
+import { APP_ROUTES } from "@/lib/app-routes";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { publicPageExists } from "@/server/booking";
 import { ipOf, rateLimit } from "@/server/rate-limit";
@@ -28,18 +29,7 @@ import { ipOf, rateLimit } from "@/server/rate-limit";
  */
 const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
 
-/** First path segments that are the app's own routes, never a username. */
-const APP_ROUTES = new Set([
-  "dashboard",
-  "onboarding",
-  "login",
-  "api",
-  "booking",
-  "_next",
-  // Error reports from browsers (Sentry tunnel): never a username, and never worth a database query.
-  "monitoring",
-  "sentry-tunnel",
-]);
+/** First path segments that are the app's own routes, never a username: src/lib/app-routes.ts. */
 
 /** Same rule as usernameSchema; anything else can't be a profile, so no query is needed. */
 const USERNAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;

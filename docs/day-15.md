@@ -124,6 +124,23 @@ e2e/support/fake-google.mjs, e2e/calendar.spec.ts  # a fake Google; busy times, 
   `GOOGLE_CALENDAR_API_URL` and `GOOGLE_REVOKE_URL` (default: Google's real addresses). Calendars are per access
   token, so parallel tests can't see each other's.
 
+### Follow-up (13 Nov): privacy policy, terms, publishing
+
+- **Why it was needed:** Google won't let the app leave Testing until the Branding page has a privacy policy
+  link. In Testing, calendar access works only for test users and expires every 7 days.
+- **`/privacy` says what the code does, nothing more.** Each claim maps to code: the three sign-in fields,
+  session IP and user agent (Better Auth), guests' details, hashed manage links, busy times only and a cache of
+  at most an hour, encrypted tokens, hashed rate-limit keys, scrubbed Sentry reports, one cookie, the 12/24-hour
+  preference in local storage, and the six services involved. If the code changes, the page must change.
+- **Google's "Limited Use" statement** is on the page, with the promise it implies: Google data isn't sold, used
+  for ads, used to train AI, or read by people (except with permission, for security, or by law).
+- **Deletion is a manual email for now,** answered within 30 days. Honest beats a button that doesn't exist yet.
+- **`/terms` is short:** a portfolio project, provided as it is; fair use (no spam, no filling calendars, no
+  getting around limits); liability limited as far as the law allows.
+- **Linked where people decide:** the site footer (a "Legal" column) and under the Google button on the login
+  page ("By continuing, you agree to…").
+- **Not legal advice:** the pages are an accurate description of the app, written for a portfolio project.
+
 ## 2. Likely interview questions
 
 - **"How do you integrate Google Calendar?"** Incremental authorisation on the existing Google login, with offline
@@ -189,23 +206,36 @@ e2e/support/fake-google.mjs, e2e/calendar.spec.ts  # a fake Google; busy times, 
   secret. The app then reads them through its normal path (decrypt, check expiry, call "Google").
 - **Lesson:** seed data the way production would have written it, so the test exercises the real read path.
 
-### Google blocked the consent screen outright
+### Google blocked the consent screen, and I first blamed the wrong thing
 
 - **What happened:** connecting in production, Google answered "Access blocked: meetreadyv2.vercel.app has not
   completed the Google verification process … can only be accessed by developer-approved testers",
   `Error 403: access_denied`. My runbook had promised a warning you could click through.
-- **Why:** the app is published ("In production"), which is enough for sign-in. But the calendar permissions
-  are "sensitive", and Google now blocks unverified sensitive permissions for everyone who isn't a listed test
-  user, even when the app is published.
-- **What I did:** added the host's account as a test user (Audience → Test users), keeping the app published so
-  sign-in stays open to everyone. Fixed the runbook (step 12.3) and the backlog note on verification.
-- **Lesson:** OAuth platform rules change. What a consent screen does for unverified apps is a fact to check
-  against the current platform, not something to remember.
+- **My first explanation was wrong:** I assumed the app was published and that Google blocks unverified
+  sensitive permissions even then, and wrote that into the runbook.
+- **What was really going on:** the Audience page showed the app had never left **Testing** (Publish was greyed
+  out until the Branding page had a privacy policy). Sign-in had always worked for every account because, in
+  Testing, Google lets anyone sign in when an app only asks for name, email and picture. Calendar permissions
+  aren't covered by that exception: test users only, and their access expires after 7 days.
+- **What I did:** added the host as a test user (it worked), corrected the runbook, then added `/privacy` and
+  `/terms` so the app can be published (runbook step 13).
+- **Lesson:** look at the actual console state before explaining a platform error. One screenshot of the
+  Audience page would have saved a wrong explanation.
+
+### `/privacy` would have answered 404
+
+- **What happened:** `privacy` and `terms` had been reserved usernames since Day 2. But `proxy.ts` (Day 12)
+  keeps its own list of app routes, and neither was in it. A new `/privacy` page would have gone through the
+  username lookup, found no user called "privacy", and been rewritten to the 404 page. Google's consent screen
+  would have linked to a 404.
+- **What I did:** one shared list (`src/lib/app-routes.ts`), and a test that reads the real `src/app` folder
+  and checks every top-level route is both in that list and a reserved username.
+- **Lesson:** two lists that must agree will drift. Make a test derive the truth from the source.
 
 ## Next
 
-- **You:** runbook step 12 (enable the Calendar API, declare the two scopes, add yourself as a test user), push,
-  then connect your calendar and check with a test event.
+- **You:** push the privacy/terms commit, then runbook step 13 (Branding links, Publish app, reconnect the
+  calendar).
 - **Day 16: write to the calendar.** Each booking becomes an event in the host's calendar with a Meet link;
   reschedule moves it, cancel deletes it. One thing to handle: once our own bookings are in Google, a reschedule
   must not be blocked by its own event (exclude it by event id).

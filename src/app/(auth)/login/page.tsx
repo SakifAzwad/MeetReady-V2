@@ -35,6 +35,17 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
             <Suspense fallback={<div className="bg-muted mt-8 h-10 rounded-md" />}>
               <SignIn searchParams={searchParams} />
             </Suspense>
+            <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+              By continuing, you agree to the{" "}
+              <Link href="/terms" className="hover:text-foreground underline underline-offset-4">
+                terms of use
+              </Link>{" "}
+              and the{" "}
+              <Link href="/privacy" className="hover:text-foreground underline underline-offset-4">
+                privacy policy
+              </Link>
+              .
+            </p>
             <p className="text-muted-foreground mt-8 border-t pt-6 text-sm">
               Booking a meeting with someone? You don&apos;t need an account: use the link they sent you.
             </p>

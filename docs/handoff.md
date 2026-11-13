@@ -38,7 +38,11 @@ Read this first in a new chat. It replaces the long Days 1–15 conversations. D
     stale-if-error, Redis hash per host); no usable copy → slots API `503`. `last_error` (`access_lost` /
     `unavailable`) shows "New bookings are paused" on the card. Disconnect revokes at Google and clears tokens and
     calendar scopes. Needs runbook step 12.
-- **Numbers:** 470 unit tests + 18 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  - Privacy policy and terms (Day 15 follow-up): `/privacy`, `/terms` (`src/components/site/legal-page.tsx`),
+    linked from the footer and the login page, and from Google's consent screen (Branding). The privacy page
+    describes what the code does: change one, change the other. App routes live in `src/lib/app-routes.ts`
+    (used by `proxy.ts`); `app-routes.test.ts` checks every `src/app` folder is listed and reserved.
+- **Numbers:** 487 unit tests + 19 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
   build all green. 6 migrations (0000–0005).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -48,11 +52,14 @@ Read this first in a new chat. It replaces the long Days 1–15 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. Sakif: runbook step 12 (enable the Calendar API, declare the two scopes), push Day 15, connect his calendar.
+1. Sakif: push the privacy/terms commit, then runbook step 13 (Branding links, **Publish app**, reconnect the
+   calendar). Until then the Google app is in **Testing**: calendar access for test users only (he and
+   `sakifazwad0` are listed), expiring every 7 days. Sign-in works for anyone either way.
 2. **Day 16: write bookings to Google Calendar** (event + Meet link via `conferenceData`, `sendUpdates`, store
    the event id on the booking; reschedule patches it, cancel deletes it). The scope is already granted. A
    reschedule must exclude the booking's own Google event from busy times (by event id), or it blocks itself.
-   Decide what happens when the write fails (the booking is already committed).
+   Decide what happens when the write fails (the booking is already committed). Update `/privacy` if anything
+   it says changes.
 3. Then reminders (Inngest), AI features. The slot hold waits (Sakif's call).
 4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
@@ -142,3 +149,7 @@ Read this first in a new chat. It replaces the long Days 1–15 conversations. D
 - **Never call Google inside a DB transaction** (it would hold the per-host lock): fetch first, pass `externalBusy`.
 - **Better Auth reports every token refresh failure the same way** (`FAILED_TO_GET_ACCESS_TOKEN`): treated as
   `access_lost`. Sign-in never overwrites the stored refresh token or the scopes.
+- **Google OAuth states (checked 13 Nov):** Testing = anyone can sign in (name/email/picture are exempt), but
+  sensitive scopes are test users only and expire after 7 days. Published + unverified = anyone, after an
+  "unverified app" warning, 100 accounts ever. Look at the console (Audience page) before explaining an OAuth
+  error: Day 15 story.

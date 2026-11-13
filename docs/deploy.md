@@ -219,11 +219,14 @@ The new table (`calendar_connections`, migration 0005) is created by the build, 
    - `https://www.googleapis.com/auth/calendar.freebusy`
    - `https://www.googleapis.com/auth/calendar.events`
 3. **Add yourself as a test user:** Google Auth Platform → **Audience** → **Test users** → **Add users** →
-   `sakifazwad18@gmail.com` → **Save**. Keep the app **In production** (sign-in must stay open to everyone).
-   - **Why:** Google blocks unverified sensitive permissions for everyone except listed test users, with
-     "Access blocked: … has not completed the Google verification process" and `Error 403: access_denied`.
-     There's no "Advanced → continue" to click through (found on 13 Nov, see the Day 15 story).
-   - Sign-in isn't affected: it only asks for name, email and picture, which need no verification.
+   `sakifazwad18@gmail.com` → **Save**.
+   - **Why:** while the app's publishing status is **Testing**, only listed test users can grant the calendar
+     permissions. Anyone else gets "Access blocked: … has not completed the Google verification process … can
+     only be accessed by developer-approved testers", `Error 403: access_denied` (found on 13 Nov).
+   - Sign-in isn't affected: in Testing, Google still lets ANY account sign in when an app asks only for name,
+     email and picture.
+   - **The catch:** in Testing, a test user's calendar access expires after 7 days. Step 13 (publishing) removes
+     that.
 4. **Nothing to change in Credentials:** the consent screen comes back through the same redirect URI as sign-in.
 5. **Deploy** (push Day 15). The migration runs first in the build; the log still ends with `[migrate] up to date`.
 6. **Connect it:** <https://meetreadyv2.vercel.app/dashboard/availability> → **Connect Google Calendar**.
@@ -235,11 +238,28 @@ The new table (`calendar_connections`, migration 0005) is created by the build, 
    2. Open your booking page in a private window. Within a minute, the times that overlap it are gone.
    3. Delete the event: within a minute, they're back.
 
-**The unverified-app limits:** until Google reviews the app (it asks for things like a privacy policy page and a
-demo video), only listed test users (up to 100) can connect a calendar; anyone else is blocked. Fine for a
-portfolio demo where you're the only host. Other hosts can still sign up and take bookings without a calendar.
-
 **Previews can't connect a calendar,** for the same reason they can't sign in with Google (step 6).
+
+## 13. Publish the app (privacy policy and terms), added after Day 15
+
+Until this step the app is in **Testing**: calendar access works for test users only and expires every 7 days
+(the Availability card then says "New bookings are paused" with **Reconnect**). Publishing fixes both.
+
+1. **Deploy** the commit with `/privacy` and `/terms`, and open both pages to check they load.
+2. Google Auth Platform → **Branding** → **App domain**:
+   - **Application home page:** `https://meetreadyv2.vercel.app`
+   - **Application privacy policy link:** `https://meetreadyv2.vercel.app/privacy`
+   - **Application terms of service link:** `https://meetreadyv2.vercel.app/terms`
+   - **Authorized domains:** `meetreadyv2.vercel.app` (already there). → **Save**.
+   - **Don't upload a logo.** The page says a logo means the app must be submitted for verification first.
+3. **Audience** → **Publish app** → confirm. The status should say **In production**.
+4. **Connect the calendar once more** (Availability → Disconnect, then Connect). Access granted while the app
+   was in Testing may still carry its 7-day expiry; a fresh consent after publishing starts clean.
+
+**After publishing (unverified):** any Google account can connect a calendar, after Google's "Google hasn't
+verified this app" warning (**Advanced → Go to …**), and at most 100 accounts ever can grant the calendar
+permissions. Sign-in has no warning and no cap. Removing the warning and the cap needs Google's verification
+(backlog).
 
 ## Afterwards: how a change ships
 

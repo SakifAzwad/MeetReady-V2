@@ -21,12 +21,19 @@ const COLUMNS = [
       { href: V1_URL, label: "The original v1" },
     ],
   },
+  {
+    heading: "Legal",
+    links: [
+      { href: "/privacy", label: "Privacy policy" },
+      { href: "/terms", label: "Terms of use" },
+    ],
+  },
 ];
 
 export function SiteFooter() {
   return (
     <footer className="border-t">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 sm:px-8 md:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 sm:px-8 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
         <div className="flex flex-col gap-3">
           <Logo className="text-lg" markClassName="size-6" />
           <p className="text-muted-foreground max-w-[36ch] text-sm leading-relaxed">

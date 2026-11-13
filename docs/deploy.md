@@ -218,21 +218,26 @@ The new table (`calendar_connections`, migration 0005) is created by the build, 
    (paste them in "Manually add scopes") → **Update** → **Save**:
    - `https://www.googleapis.com/auth/calendar.freebusy`
    - `https://www.googleapis.com/auth/calendar.events`
-3. **Nothing to change in Credentials:** the consent screen comes back through the same redirect URI as sign-in.
-4. **Deploy** (push Day 15). The migration runs first in the build; the log still ends with `[migrate] up to date`.
-5. **Connect it:** <https://meetreadyv2.vercel.app/dashboard/availability> → **Connect Google Calendar**.
-   - Google will say **"Google hasn't verified this app"**. That's expected: the calendar permissions are
-     "sensitive", and the app hasn't been through Google's review. Click **Advanced → Go to MeetReady (unsafe)**.
+3. **Add yourself as a test user:** Google Auth Platform → **Audience** → **Test users** → **Add users** →
+   `sakifazwad18@gmail.com` → **Save**. Keep the app **In production** (sign-in must stay open to everyone).
+   - **Why:** Google blocks unverified sensitive permissions for everyone except listed test users, with
+     "Access blocked: … has not completed the Google verification process" and `Error 403: access_denied`.
+     There's no "Advanced → continue" to click through (found on 13 Nov, see the Day 15 story).
+   - Sign-in isn't affected: it only asks for name, email and picture, which need no verification.
+4. **Nothing to change in Credentials:** the consent screen comes back through the same redirect URI as sign-in.
+5. **Deploy** (push Day 15). The migration runs first in the build; the log still ends with `[migrate] up to date`.
+6. **Connect it:** <https://meetreadyv2.vercel.app/dashboard/availability> → **Connect Google Calendar**.
+   - As a test user, Google may still show "Google hasn't verified this app": click **Continue**.
    - **Leave both permissions ticked.** If one is unticked, the page says so and nothing is connected.
    - Back on the page: "Google Calendar connected".
-6. **Check it works:**
+7. **Check it works:**
    1. In Google Calendar, add an event tomorrow during your working hours, e.g. 10:00–11:00.
    2. Open your booking page in a private window. Within a minute, the times that overlap it are gone.
    3. Delete the event: within a minute, they're back.
 
 **The unverified-app limits:** until Google reviews the app (it asks for things like a privacy policy page and a
-demo video), every person connecting sees that warning, and at most 100 people can connect. Fine for a portfolio
-demo where you're the only host. Sign-in alone is unaffected: it asks for no sensitive permission.
+demo video), only listed test users (up to 100) can connect a calendar; anyone else is blocked. Fine for a
+portfolio demo where you're the only host. Other hosts can still sign up and take bookings without a calendar.
 
 **Previews can't connect a calendar,** for the same reason they can't sign in with Google (step 6).
 

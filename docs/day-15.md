@@ -189,10 +189,23 @@ e2e/support/fake-google.mjs, e2e/calendar.spec.ts  # a fake Google; busy times, 
   secret. The app then reads them through its normal path (decrypt, check expiry, call "Google").
 - **Lesson:** seed data the way production would have written it, so the test exercises the real read path.
 
+### Google blocked the consent screen outright
+
+- **What happened:** connecting in production, Google answered "Access blocked: meetreadyv2.vercel.app has not
+  completed the Google verification process … can only be accessed by developer-approved testers",
+  `Error 403: access_denied`. My runbook had promised a warning you could click through.
+- **Why:** the app is published ("In production"), which is enough for sign-in. But the calendar permissions
+  are "sensitive", and Google now blocks unverified sensitive permissions for everyone who isn't a listed test
+  user, even when the app is published.
+- **What I did:** added the host's account as a test user (Audience → Test users), keeping the app published so
+  sign-in stays open to everyone. Fixed the runbook (step 12.3) and the backlog note on verification.
+- **Lesson:** OAuth platform rules change. What a consent screen does for unverified apps is a fact to check
+  against the current platform, not something to remember.
+
 ## Next
 
-- **You:** runbook step 12 (enable the Calendar API, declare the two scopes), push, then connect your calendar and
-  check with a test event.
+- **You:** runbook step 12 (enable the Calendar API, declare the two scopes, add yourself as a test user), push,
+  then connect your calendar and check with a test event.
 - **Day 16: write to the calendar.** Each booking becomes an event in the host's calendar with a Meet link;
   reschedule moves it, cancel deletes it. One thing to handle: once our own bookings are in Google, a reschedule
   must not be blocked by its own event (exclude it by event id).

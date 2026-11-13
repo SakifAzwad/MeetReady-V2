@@ -1,29 +1,30 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 14).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 15).
 
 ## Next, in order
 
-1. **Turn on Upstash in production:** [deploy.md](deploy.md) step 11 (Sakif).
-2. **Your pick:** the 5-minute slot hold (table below; unblocked now that rate limits are in place), or go
-   straight to Google Calendar sync.
-3. **Google Calendar sync for hosts:** busy times from the host's calendar block slots, and bookings get a Meet
-   link.
-4. **Reminder emails** (a day and an hour before) with Inngest, plus email retries.
-5. **AI features:** booking assistant, MCP server, meeting brief (see the full list below). The booking
+1. **Turn on Google Calendar in production:** [deploy.md](deploy.md) step 12 (Sakif).
+2. **Day 16: write bookings to the host's calendar** with a Meet link; reschedule moves the event, cancel deletes
+   it. A reschedule must not be blocked by the booking's own event (exclude it by event id).
+3. **Reminder emails** (a day and an hour before) with Inngest, plus email retries.
+4. **AI features:** booking assistant, MCP server, meeting brief (see the full list below). The booking
    questions feed the meeting brief: the answers are what the host should read before the call. **The AI routes
    get their own rate limits** (one more line in `LIMITS`): each call costs money.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
-rate limiting (Day 14).
+rate limiting (Day 14); Google Calendar busy times (Day 15).
 
 ## Ideas from reviews, deferred
 
 | Idea                                                                             | From   | Why it waits                                                                                                                                                                                                                                          | When                                              |
 | -------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **5-minute slot hold** while a guest types                                       | Day 9  | Good interview piece (expiring holds, same race tests as booking, Postgres only). But the page is public with no login: without rate limits a script could hold every slot. Abandoned holds also hide free times for 5 minutes.                       | Next (rate limits are in place since Day 14)      |
+| **5-minute slot hold** while a guest types                                       | Day 9  | Good interview piece (expiring holds, same race tests as booking, Postgres only). But the page is public with no login: without rate limits a script could hold every slot. Abandoned holds also hide free times for 5 minutes.                       | After calendar sync (Sakif's call, Day 15)        |
+| **Pick which calendars count** (not just primary)                                | Day 15 | Primary covers most people. Others need a calendar list (one more scope or `calendarList` call) and a picker in the card. The table already has `calendar_id`.                                                                                        | When a host asks                                  |
+| **Push updates instead of a 1-minute cache** (Google watch channels)             | Day 15 | Webhooks from Google need a public HTTPS endpoint, channel renewal every few days and a sync token per calendar. The cache plus the live check at booking already give the right answer.                                                              | With many hosts                                   |
+| **Google app verification**                                                      | Day 15 | Removes the "unverified app" warning and the 100-user cap. Needs a privacy policy page, a demo video and Google's review.                                                                                                                             | Before real users connect calendars               |
 | **Guest calendar overlay** ("check my conflicts")                                | Day 9  | Reuses the host Google Calendar sync, which matters more and comes first. Calendar access is a sensitive Google permission: until the app passes Google's review, users see an "unverified app" warning. Must stay optional, read-only, never stored. | After host Google Calendar sync                   |
 | **Guest edits their answers** when rescheduling                                  | Day 10 | The manage page shows answers read-only. Editing needs a form there and a host notification ("Ada changed her answers"). Rarely needed: notes cover it.                                                                                               | With Phase 2 webhooks                             |
 | **Conditional questions** ("ask B only if A = Founder")                          | Day 10 | Turns a list into a small rules engine (and its validation). It's what routing forms do, so it belongs there.                                                                                                                                         | With routing forms (Phase 3)                      |
@@ -37,6 +38,8 @@ rate limiting (Day 14).
 
 | Idea                                     | From     | Why not                                                                                                                          |
 | ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `calendar.readonly` to read busy times   | Day 15   | It would let us read every event's details. Free/busy can't see them.                                                            |
+| Calling Google inside the booking lock   | Day 15   | Holds a database connection and the host's lock during a network call. The live check runs first.                                |
 | Rate-limiting sign-in                    | Day 14   | Sign-in is Google-only: there's no password to guess, and Google protects its own login.                                         |
 | Failing closed when Redis is down        | Day 14   | Turns a Redis outage into "nobody can book". Limits stop rare abuse; double booking is stopped by Postgres either way.           |
 | Postgres or in-memory as the limit store | Day 14   | Memory isn't shared between serverless instances. Postgres would add a write to the hottest read paths.                          |

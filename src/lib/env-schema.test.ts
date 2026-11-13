@@ -56,6 +56,15 @@ describe("parseEnv", () => {
     });
   });
 
+  it("points at Google by default; only the E2E tests swap in a fake", () => {
+    const env = parseEnv(base);
+    expect(env.GOOGLE_CALENDAR_API_URL).toBe("https://www.googleapis.com/calendar/v3");
+    expect(env.GOOGLE_REVOKE_URL).toBe("https://oauth2.googleapis.com/revoke");
+    expect(parseEnv({ ...base, GOOGLE_CALENDAR_API_URL: "" }).GOOGLE_CALENDAR_API_URL).toBe(
+      "https://www.googleapis.com/calendar/v3",
+    );
+  });
+
   describe("Redis for rate limiting", () => {
     it("is optional: unset or empty means limits are kept in memory", () => {
       expect(parseEnv(base).REDIS).toBeUndefined();

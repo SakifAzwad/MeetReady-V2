@@ -8,8 +8,9 @@ import {
   type BrowserContextOptions,
   type Page,
 } from "@playwright/test";
+import { symmetricEncrypt } from "better-auth/crypto";
 import pg from "pg";
-import { BASE_URL, E2E_AUTH_SECRET, E2E_DATABASE_URL, OUTBOX } from "./support/config";
+import { BASE_URL, E2E_AUTH_SECRET, E2E_DATABASE_URL, FAKE_GOOGLE_URL, OUTBOX } from "./support/config";
 
 /*
  * Fixtures: what every test gets, set up fresh and torn down after.
@@ -195,3 +196,57 @@ export async function waitForEmails(to: string, count: number): Promise<Email[]>
   await expect.poll(() => emailsTo(to).length, { message: `emails to ${to}` }).toBeGreaterThanOrEqual(count);
   return emailsTo(to);
 }
+
+// ─── Google Calendar (Day 15) ────────────────────────────────────────────────────
+
+const CALENDAR_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.freebusy",
+  "https://www.googleapis.com/auth/calendar.events",
+];
+
+/**
+ * What the consent screen + callback would leave behind: a Google account row
+ * with tokens (encrypted the way Better Auth encrypts them, so the app reads
+ * them through its normal path), the calendar scopes, and a connection.
+ * The access token is unique to this host, and the fake Google keys its
+ * calendars by token, so tests can't see each other's calendars.
+ */
+export async function connectCalendar(db: pg.Pool, host: Host): Promise<string> {
+  const token = `fake-${host.username}`;
+  const encrypt = (data: string) => symmetricEncrypt({ key: E2E_AUTH_SECRET, data });
+  const accountId = `acc_${host.id}`;
+  await db.query(
+    `insert into account (id, account_id, provider_id, user_id, access_token, refresh_token,
+                          access_token_expires_at, scope)
+     values ($1, $2, 'google', $3, $4, $5, now() + interval '1 day', $6)`,
+    [
+      accountId,
+      `google-${host.id}`,
+      host.id,
+      await encrypt(token),
+      await encrypt(`refresh-${host.username}`),
+      ["openid", "email", "profile", ...CALENDAR_SCOPES].join(","),
+    ],
+  );
+  await db.query(`insert into calendar_connections (user_id, account_id) values ($1, $2)`, [
+    host.id,
+    accountId,
+  ]);
+  await fakeGoogle.setCalendar(token, { busy: [] });
+  return token;
+}
+
+/** Controls the fake Google (e2e/support/fake-google.mjs). */
+export const fakeGoogle = {
+  async setCalendar(token: string, state: { busy?: { start: string; end: string }[]; down?: boolean }) {
+    const res = await fetch(`${FAKE_GOOGLE_URL}/__fake/calendar`, {
+      method: "POST",
+      body: JSON.stringify({ token, ...state }),
+    });
+    expect(res.ok).toBe(true);
+  },
+  async wasRevoked(token: string): Promise<boolean> {
+    const res = await fetch(`${FAKE_GOOGLE_URL}/__fake/revoked?token=${encodeURIComponent(token)}`);
+    return ((await res.json()) as { revoked: boolean }).revoked;
+  },
+};

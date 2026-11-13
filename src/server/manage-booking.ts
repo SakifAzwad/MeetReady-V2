@@ -5,7 +5,8 @@ import { bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { addMinutes } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
-import { getBookableSlots, getPublicEventType } from "./booking";
+import { busyLoadRange, getBookableSlots, getPublicEventType } from "./booking";
+import { CalendarUnavailableError, type ExternalBusy } from "./calendar/busy";
 import { hashManageToken, manageTokenSchema } from "./manage-token";
 
 /*
@@ -128,7 +129,7 @@ export async function cancelBookingByToken(
 
 export type RescheduleResult =
   | { ok: true; bookingId: string; previousStartsAt: Date }
-  | { ok: false; error: ManageError | "slot_unavailable" | "slot_taken" };
+  | { ok: false; error: ManageError | "slot_unavailable" | "slot_taken" | "calendar_unavailable" };
 
 /**
  * Moves a booking to a new start. Same three layers as createBooking:
@@ -144,9 +145,22 @@ export async function rescheduleBookingByToken(
   token: string,
   newStart: Date,
   now: Date,
-  testHooks: { afterCheck?: () => Promise<void> } = {},
+  /** Same as createBooking: the host's calendar (checked live, fail closed), and the race-test seam. */
+  options: { calendar?: ExternalBusy; afterCheck?: () => Promise<void> } = {},
 ): Promise<RescheduleResult> {
   if (!manageTokenSchema.safeParse(token).success) return { ok: false, error: "not_found" };
+  const window = { start: newStart, end: addMinutes(newStart, 1) };
+  let externalBusy: { start: Date; end: Date }[] = [];
+  if (options.calendar) {
+    const current = await getBookingByToken(db, token);
+    if (!current) return { ok: false, error: "not_found" };
+    try {
+      externalBusy = await options.calendar.busyTimes(current.hostId, busyLoadRange(window), "live");
+    } catch (error) {
+      if (error instanceof CalendarUnavailableError) return { ok: false, error: "calendar_unavailable" };
+      throw error;
+    }
+  }
   try {
     return await db.transaction(async (tx) => {
       const current = await getBookingByToken(tx, token);
@@ -169,19 +183,14 @@ export async function rescheduleBookingByToken(
         : null;
       if (!eventType) return { ok: false, error: "not_changeable" } as const;
 
-      const slots = await getBookableSlots(
-        tx,
-        eventType,
-        { start: newStart, end: addMinutes(newStart, 1) },
-        now,
-        {
-          excludeBookingId: current.id,
-        },
-      );
+      const slots = await getBookableSlots(tx, eventType, window, now, {
+        excludeBookingId: current.id,
+        externalBusy,
+      });
       if (!slots.some((s) => s.start.getTime() === newStart.getTime())) {
         return { ok: false, error: "slot_unavailable" } as const;
       }
-      await testHooks.afterCheck?.();
+      await options.afterCheck?.();
 
       await tx
         .update(bookings)

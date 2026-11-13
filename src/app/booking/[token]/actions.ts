@@ -6,6 +6,7 @@ import { cancelRequestSchema, rescheduleRequestSchema } from "@/lib/validation/b
 import { emailContext } from "@/server/email";
 import { notifyBookingCancelled, notifyBookingRescheduled } from "@/server/email/notifications";
 import { cancelBookingByToken, rescheduleBookingByToken } from "@/server/manage-booking";
+import { calendarBusy } from "@/server/calendar";
 import { rateLimit } from "@/server/rate-limit";
 
 /*
@@ -21,6 +22,8 @@ import { rateLimit } from "@/server/rate-limit";
 export type ManageActionResult =
   | { ok: true; startsAt?: string; endsAt?: string }
   | { ok: false; error: "not_found" | "not_changeable" | "slot_unavailable" | "invalid" }
+  /** The host's Google Calendar couldn't be checked, so the new time can't be confirmed yet. */
+  | { ok: false; error: "calendar_unavailable" }
   | { ok: false; error: "rate_limited"; retryAfterSeconds: number };
 
 export async function cancelByTokenAction(input: unknown): Promise<ManageActionResult> {
@@ -43,7 +46,9 @@ export async function rescheduleByTokenAction(input: unknown): Promise<ManageAct
   const limited = await rateLimit([["manage", token]]);
   if (!limited.ok) return { ok: false, error: "rate_limited", retryAfterSeconds: limited.retryAfterSeconds };
 
-  const result = await rescheduleBookingByToken(db, token, startsAt, new Date());
+  const result = await rescheduleBookingByToken(db, token, startsAt, new Date(), {
+    calendar: calendarBusy,
+  });
   if (!result.ok) {
     return { ok: false, error: result.error === "slot_taken" ? "slot_unavailable" : result.error };
   }

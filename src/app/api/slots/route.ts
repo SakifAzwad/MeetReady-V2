@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { slotsQuerySchema } from "@/lib/validation/booking";
-import { getBookingCalendar, getPublicEventType } from "@/server/booking";
+import { busyLoadRange, getBookingCalendar, getPublicEventType } from "@/server/booking";
+import { CalendarUnavailableError, calendarBusy } from "@/server/calendar";
 import { getBookingByToken } from "@/server/manage-booking";
 import { ipOf, rateLimit, tooManyRequests } from "@/server/rate-limit";
 
@@ -39,8 +40,24 @@ export async function GET(request: NextRequest) {
     if (own && own.eventTypeId === eventType.id && own.status === "confirmed") excludeBookingId = own.id;
   }
 
-  const { slots, windows } = await getBookingCalendar(db, eventType, { start: from, end: to }, new Date(), {
+  // The host's Google Calendar (Day 15): cached for a minute, or up to an hour old if Google is
+  // failing. Showing slightly old times is fine: booking re-checks Google live.
+  const range = { start: from, end: to };
+  let externalBusy;
+  try {
+    externalBusy = await calendarBusy.busyTimes(eventType.hostId, busyLoadRange(range), "cached");
+  } catch (error) {
+    if (!(error instanceof CalendarUnavailableError)) throw error;
+    // No usable copy at all: showing times we can't check would only lead to refused bookings.
+    return Response.json(
+      { error: "Calendar unavailable" },
+      { status: 503, headers: { "Retry-After": "30", "Cache-Control": "no-store" } },
+    );
+  }
+
+  const { slots, windows } = await getBookingCalendar(db, eventType, range, new Date(), {
     excludeBookingId,
+    externalBusy,
   });
   const iso = (i: { start: Date; end: Date }) => ({ start: i.start.toISOString(), end: i.end.toISOString() });
   return Response.json(

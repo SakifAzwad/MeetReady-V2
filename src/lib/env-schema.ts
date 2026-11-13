@@ -55,6 +55,12 @@ export function parseEnv(source: Record<string, string | undefined>) {
       EMAIL_FROM: emptyAsUnset(z.string().min(3).default("MeetReady <onboarding@resend.dev>")),
       /** Optional: a real booking page to link from the landing page, e.g. "/sakifazwad18/intro". */
       DEMO_BOOKING_PATH: emptyAsUnset(z.string().startsWith("/").optional()),
+      /**
+       * Google endpoints for the calendar (Day 15). Only the E2E tests change them, to a
+       * local fake Google (e2e/support/fake-google.mjs), so CI never calls Google.
+       */
+      GOOGLE_CALENDAR_API_URL: emptyAsUnset(z.url().default("https://www.googleapis.com/calendar/v3")),
+      GOOGLE_REVOKE_URL: emptyAsUnset(z.url().default("https://oauth2.googleapis.com/revoke")),
       /** Rate-limit store (see redisConfig): both or neither, so a half-pasted pair fails at startup, not per request. */
       REDIS: z.preprocess(
         () => redisConfig(source),

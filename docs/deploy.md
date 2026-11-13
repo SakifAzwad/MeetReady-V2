@@ -189,7 +189,8 @@ Without this step the limits still work, but per server instance only (a warning
    (or `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`). The other ones the integration adds (`KV_URL`,
    `REDIS_URL`, the read-only token) aren't used. **The token is a secret.**
 3. **Redeploy** production.
-4. **Check it works** (PowerShell; this blocks your own IP from the slots API for about a minute):
+4. **Check it works** (PowerShell; this blocks your own IP from the slots API for about a minute). **Start it just
+   after a clock minute begins (:00 seconds):**
 
    ```powershell
    1..61 | % { curl.exe -s -o NUL -w "%{http_code}`n" "https://meetreadyv2.vercel.app/api/slots?username=x&slug=y&from=bad&to=bad" } | Group-Object
@@ -198,7 +199,42 @@ Without this step the limits still work, but per server instance only (a warning
    Expect 60 × `400` (bad parameters, on purpose: no database work) and 1 × `429`. Then Upstash's **Data Browser**
    shows keys like `meetready:production:slots:…`: hashes, never an IP.
 
+   **Why the timing matters (found on 12 Nov):** from Bangladesh the 61 requests took 31 s. Started mid-minute,
+   they split across two windows (keys ending `…959` and `…960`; the second held 22). The sliding window weights
+   the previous window by how much of it is still inside the last 60 s, so the total stayed around 53, under 60,
+   and every request got `400`. Started at :00, all 61 land in one window and the 61st gets `429`. Alternatively,
+   run `1..150`.
+
 **Previews share the database** but not the counters: keys are prefixed with the environment.
+
+## 12. Google Calendar, added on Day 15
+
+No new environment variables: it uses the same Google OAuth client as sign-in, and the same Redis as rate limiting.
+The new table (`calendar_connections`, migration 0005) is created by the build, like every migration.
+
+1. **Turn on the API:** Google Cloud Console → the same project → **APIs & Services → Library** → search **Google
+   Calendar API** → **Enable**. Without this, every call answers 403 and the app shows "access was removed".
+2. **Declare the permissions:** Google Auth Platform → **Data Access** → **Add or remove scopes** → add these two
+   (paste them in "Manually add scopes") → **Update** → **Save**:
+   - `https://www.googleapis.com/auth/calendar.freebusy`
+   - `https://www.googleapis.com/auth/calendar.events`
+3. **Nothing to change in Credentials:** the consent screen comes back through the same redirect URI as sign-in.
+4. **Deploy** (push Day 15). The migration runs first in the build; the log still ends with `[migrate] up to date`.
+5. **Connect it:** <https://meetreadyv2.vercel.app/dashboard/availability> → **Connect Google Calendar**.
+   - Google will say **"Google hasn't verified this app"**. That's expected: the calendar permissions are
+     "sensitive", and the app hasn't been through Google's review. Click **Advanced → Go to MeetReady (unsafe)**.
+   - **Leave both permissions ticked.** If one is unticked, the page says so and nothing is connected.
+   - Back on the page: "Google Calendar connected".
+6. **Check it works:**
+   1. In Google Calendar, add an event tomorrow during your working hours, e.g. 10:00–11:00.
+   2. Open your booking page in a private window. Within a minute, the times that overlap it are gone.
+   3. Delete the event: within a minute, they're back.
+
+**The unverified-app limits:** until Google reviews the app (it asks for things like a privacy policy page and a
+demo video), every person connecting sees that warning, and at most 100 people can connect. Fine for a portfolio
+demo where you're the only host. Sign-in alone is unaffected: it asks for no sensitive permission.
+
+**Previews can't connect a calendar,** for the same reason they can't sign in with Google (step 6).
 
 ## Afterwards: how a change ships
 
@@ -222,7 +258,13 @@ the new column and write to both; later, drop the old one.
   now: Upstash → Data Browser → delete the `meetready:production:…` keys. They're hashed, so delete by limit name.
 - **Function logs say "rate limits are per instance only":** step 11's variables are missing for that
   environment.
+- **The step 11 check gives 61 × `400`:** if Upstash shows `meetready:production:slots:…` keys, Redis works and
+  the run crossed a minute boundary; restart it at :00. With no keys, see the line above, or check that the
+  production deploy includes the Day 14 commit.
 - **Sentry shows "Rate limit store timed out" or a Redis error:** Upstash is slow or down. Bookings still work
   (limits fail open); check Upstash's status page.
+- **The Availability page says "New bookings are paused":** Google Calendar didn't answer, or access was
+  removed. "Didn't answer" clears by itself; "access was removed" needs **Reconnect** (or **Disconnect** to take
+  bookings without the calendar). Check step 12.1 first: a disabled Calendar API also looks like lost access.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo
   a migration, which is another reason migrations stay additive.

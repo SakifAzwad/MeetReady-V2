@@ -1,9 +1,9 @@
 import "server-only";
 import { createHmac } from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
-import { Redis } from "@upstash/redis";
 import { headers } from "next/headers";
 import { env } from "@/lib/env";
+import { getRedis, redisPrefix } from "@/server/redis";
 import { clientIp, emailBucket, hashIdentifier, ipBucket } from "./identity";
 import {
   checkAll,
@@ -26,11 +26,10 @@ import { createUpstashRateLimiter } from "./upstash";
  */
 
 function build(): RateLimiter {
-  if (env.REDIS) {
-    const redis = new Redis({ ...env.REDIS, enableTelemetry: false });
-    // Production and previews may share one Redis: their counters must not mix.
-    const prefix = `meetready:${process.env.VERCEL_ENV ?? env.NODE_ENV}`;
-    return failOpen(createUpstashRateLimiter(redis, prefix), (error) => {
+  const redis = getRedis();
+  if (redis) {
+    // Prefixed by environment: production and previews may share one Redis.
+    return failOpen(createUpstashRateLimiter(redis, redisPrefix), (error) => {
       console.error("Rate limiting is failing open:", error);
       Sentry.captureException(error, { tags: { area: "rate-limit" } });
     });

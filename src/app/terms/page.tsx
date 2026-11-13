@@ -15,8 +15,8 @@ export default function TermsPage() {
       title="Terms of use"
       intro={
         <p>
-          MeetReady is a portfolio project by Sakif Azwad, free to use. By using it, as a host or as a guest,
-          you agree to these terms.
+          MeetReady is a project by Sakif Azwad, free to use. By using it, as a host or as a guest, you agree
+          to these terms.
         </p>
       }
     >

@@ -20,9 +20,9 @@ export default function PrivacyPage() {
       title="Privacy policy"
       intro={
         <p>
-          MeetReady is a scheduling app built by Sakif Azwad as a portfolio project. This page says, in plain
-          words, what it stores about hosts and guests, what it reads from Google, who helps run it, and how
-          to have your data removed.
+          MeetReady is a scheduling app built by Sakif Azwad. This page says, in plain words, what it stores
+          about hosts and guests, what it reads from Google, who helps run it, and how to have your data
+          removed.
         </p>
       }
     >

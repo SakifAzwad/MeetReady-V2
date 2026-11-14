@@ -7,10 +7,15 @@ export function formatWhen(start: Date, end: Date, timeZone: string): string {
   return `${formatDateKey(dateKeyInZone(start, timeZone))}, ${formatTime(start, timeZone)} – ${formatTime(end, timeZone)} (${timeZone.replaceAll("_", " ")})`;
 }
 
-export function locationText(b: { locationType: LocationType; locationValue: string | null }): string {
+export function locationText(b: {
+  locationType: LocationType;
+  locationValue: string | null;
+  /** Created with the host's Google Calendar event (Day 16). */
+  meetUrl?: string | null;
+}): string {
   switch (b.locationType) {
     case "google_meet":
-      return "Google Meet (link to follow)";
+      return b.meetUrl ? `Google Meet: ${b.meetUrl}` : "Google Meet (link to follow)";
     case "zoom":
       return b.locationValue ?? "Zoom";
     case "phone":

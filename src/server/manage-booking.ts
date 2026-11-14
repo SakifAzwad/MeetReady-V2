@@ -3,7 +3,7 @@ import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
-import { addMinutes } from "@/lib/scheduling/intervals";
+import { addMinutes, subtractInterval } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
 import { busyLoadRange, getBookableSlots, getPublicEventType } from "./booking";
 import { CalendarUnavailableError, type ExternalBusy } from "./calendar/busy";
@@ -43,6 +43,10 @@ export type BookingDetails = {
   hostEmail: string;
   hostTimeZone: string;
   hostUsername: string | null;
+  /** Day 16: the host's Google Calendar event, its Meet link, and whether Google matches. */
+  calendarEventId: string | null;
+  meetUrl: string | null;
+  calendarSync: "synced" | "failed" | null;
 };
 
 const detailsColumns = {
@@ -70,6 +74,9 @@ const detailsColumns = {
   hostEmail: user.email,
   hostTimeZone: user.timeZone,
   hostUsername: user.username,
+  calendarEventId: bookings.calendarEventId,
+  meetUrl: bookings.meetUrl,
+  calendarSync: bookings.calendarSync,
 };
 
 function selectDetails(db: Database) {
@@ -155,7 +162,11 @@ export async function rescheduleBookingByToken(
     const current = await getBookingByToken(db, token);
     if (!current) return { ok: false, error: "not_found" };
     try {
-      externalBusy = await options.calendar.busyTimes(current.hostId, busyLoadRange(window), "live");
+      // The booking's own event is in the host's calendar (Day 16): it mustn't block its own move.
+      externalBusy = subtractInterval(
+        await options.calendar.busyTimes(current.hostId, busyLoadRange(window), "live"),
+        { start: current.startsAt, end: current.endsAt },
+      );
     } catch (error) {
       if (error instanceof CalendarUnavailableError) return { ok: false, error: "calendar_unavailable" };
       throw error;
@@ -228,6 +239,8 @@ export type HostBookingRow = {
   rescheduledAt: Date | null;
   eventTitle: string;
   eventColor: string;
+  meetUrl: string | null;
+  calendarSync: "synced" | "failed" | null;
 };
 
 export async function listHostBookings(
@@ -253,6 +266,8 @@ export async function listHostBookings(
       rescheduledAt: bookings.rescheduledAt,
       eventTitle: eventTypes.title,
       eventColor: eventTypes.color,
+      meetUrl: bookings.meetUrl,
+      calendarSync: bookings.calendarSync,
     })
     .from(bookings)
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId));

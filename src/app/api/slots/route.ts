@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
+import { subtractInterval } from "@/lib/scheduling/intervals";
 import { slotsQuerySchema } from "@/lib/validation/booking";
 import { busyLoadRange, getBookingCalendar, getPublicEventType } from "@/server/booking";
 import { CalendarUnavailableError, calendarBusy } from "@/server/calendar";
@@ -35,9 +36,13 @@ export async function GET(request: NextRequest) {
   // Rescheduling: the guest's own booking (proved by its token, and only if it
   // belongs to this event type) mustn't block the times around it.
   let excludeBookingId: string | undefined;
+  let ownTime: { start: Date; end: Date } | undefined;
   if (reschedule) {
     const own = await getBookingByToken(db, reschedule);
-    if (own && own.eventTypeId === eventType.id && own.status === "confirmed") excludeBookingId = own.id;
+    if (own && own.eventTypeId === eventType.id && own.status === "confirmed") {
+      excludeBookingId = own.id;
+      ownTime = { start: own.startsAt, end: own.endsAt };
+    }
   }
 
   // The host's Google Calendar (Day 15): cached for a minute, or up to an hour old if Google is
@@ -46,6 +51,8 @@ export async function GET(request: NextRequest) {
   let externalBusy;
   try {
     externalBusy = await calendarBusy.busyTimes(eventType.hostId, busyLoadRange(range), "cached");
+    // Its own Google Calendar event (Day 16) mustn't block the times around it either.
+    if (ownTime) externalBusy = subtractInterval(externalBusy, ownTime);
   } catch (error) {
     if (!(error instanceof CalendarUnavailableError)) throw error;
     // No usable copy at all: showing times we can't check would only lead to refused bookings.

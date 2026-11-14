@@ -6,7 +6,7 @@ import { cancelRequestSchema, rescheduleRequestSchema } from "@/lib/validation/b
 import { emailContext } from "@/server/email";
 import { notifyBookingCancelled, notifyBookingRescheduled } from "@/server/email/notifications";
 import { cancelBookingByToken, rescheduleBookingByToken } from "@/server/manage-booking";
-import { calendarBusy } from "@/server/calendar";
+import { calendarBusy, calendarSync } from "@/server/calendar";
 import { rateLimit } from "@/server/rate-limit";
 
 /*
@@ -35,7 +35,11 @@ export async function cancelByTokenAction(input: unknown): Promise<ManageActionR
   const result = await cancelBookingByToken(db, parsed.data.token, parsed.data.reason, new Date());
   if (!result.ok) return result;
 
-  after(() => notifyBookingCancelled(emailContext(), result.bookingId));
+  // Calendar first (Day 16): the host's email skips the .ics when the event is already handled in Google.
+  after(async () => {
+    await calendarSync.syncBooking(result.bookingId);
+    await notifyBookingCancelled(emailContext(), result.bookingId);
+  });
   return { ok: true };
 }
 
@@ -53,6 +57,9 @@ export async function rescheduleByTokenAction(input: unknown): Promise<ManageAct
     return { ok: false, error: result.error === "slot_taken" ? "slot_unavailable" : result.error };
   }
 
-  after(() => notifyBookingRescheduled(emailContext(), result.bookingId, result.previousStartsAt, token));
+  after(async () => {
+    await calendarSync.syncBooking(result.bookingId); // moves the host's Google Calendar event
+    await notifyBookingRescheduled(emailContext(), result.bookingId, result.previousStartsAt, token);
+  });
   return { ok: true, startsAt: startsAt.toISOString() };
 }

@@ -67,7 +67,18 @@ async function BookingPanel({ params }: { params: Params }) {
           </li>
           <li className="flex gap-2">
             <MapPin className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-            <span className="break-all">{locationText(booking)}</span>
+            {booking.meetUrl && !cancelled ? (
+              <a
+                href={booking.meetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary break-all underline underline-offset-4"
+              >
+                Join with Google Meet
+              </a>
+            ) : (
+              <span className="break-all">{locationText(booking)}</span>
+            )}
           </li>
         </ul>
         <p className="text-muted-foreground text-sm">

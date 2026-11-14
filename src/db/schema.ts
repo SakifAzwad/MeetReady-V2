@@ -218,6 +218,14 @@ export const dateOverrides = pgTable(
 // ─── Bookings ───────────────────────────────────────────────────────────────────
 
 export const bookingStatus = pgEnum("booking_status", ["confirmed", "cancelled"]);
+/**
+ * Does the host's Google Calendar match this booking (Day 16)? null = the host
+ * had no calendar connected, so there's nothing to match.
+ *  - synced: the event exists with the right time (or, for a cancelled
+ *    booking, is gone).
+ *  - failed: the last write to Google failed; the dashboard offers Retry.
+ */
+export const calendarSync = pgEnum("calendar_sync", ["synced", "failed"]);
 export const cancelledBy = pgEnum("cancelled_by", ["host", "guest"]);
 
 export const bookings = pgTable(
@@ -263,6 +271,11 @@ export const bookings = pgTable(
     rescheduledAt: timestamp({ withTimezone: true }),
     /** Calendar invite version (.ics SEQUENCE): +1 on every change, so calendar apps apply updates in order. */
     sequence: integer().notNull().default(0),
+    /** The event in the host's Google Calendar (Day 16). Set once Google has confirmed it. */
+    calendarEventId: text(),
+    /** The Google Meet link Google created with the event (Google Meet event types only). */
+    meetUrl: text(),
+    calendarSync: calendarSync(),
     ...timestamps,
   },
   (t) => [

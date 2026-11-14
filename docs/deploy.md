@@ -261,6 +261,24 @@ verified this app" warning (**Advanced → Go to …**), and at most 100 account
 permissions. Sign-in has no warning and no cap. Removing the warning and the cap needs Google's verification
 (backlog).
 
+## 14. Bookings in your Google Calendar, added on Day 16
+
+Nothing to set up: the "add events" permission was granted with step 12, and migration 0006 runs in the build.
+
+1. **Deploy** (push Day 16).
+2. **Check it works:**
+   1. Make sure one event type uses **Google Meet** as its location (Event types → edit).
+   2. Book it yourself from a private window, with your own email.
+   3. In Google Calendar: the meeting is there ("… with <your name>"), with a **Join with Google Meet** button.
+      There should be **one** copy, not two.
+   4. The guest email has the same Meet link. Your host email has no `.ics` (the event is already in your
+      calendar).
+   5. Open the booking link from the guest email → **Reschedule** → the event moves in Google Calendar, same Meet
+      link. **Cancel** → it disappears.
+3. **If a booking shows "Not in Google Calendar"** on the Bookings page: Google refused or didn't answer. Click
+   **Retry**. If Retry fails too, check the Availability card (a lost connection shows there) and Sentry
+   (`area: calendar-sync`).
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

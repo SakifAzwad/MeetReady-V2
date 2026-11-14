@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeIntervals, overlaps } from "./intervals";
+import { mergeIntervals, overlaps, subtractInterval } from "./intervals";
 import { addDaysToKey, dateKeyInZone, dayOfWeek, wallTimeToInstant } from "./time";
 
 const i = (a: string, b: string) => ({
@@ -54,5 +54,34 @@ describe("time helpers", () => {
     expect(wallTimeToInstant("2026-11-09", "24:00", "Asia/Dhaka").toISOString()).toBe(
       "2026-11-09T18:00:00.000Z",
     );
+  });
+});
+
+describe("subtractInterval (rescheduling: cut the booking's own event out of busy times)", () => {
+  const t = (hhmm: string) => new Date(`2026-11-09T${hhmm}:00Z`);
+  const iv = (a: string, b: string) => ({ start: t(a), end: t(b) });
+  const show = (list: { start: Date; end: Date }[]) =>
+    list.map((i) => `${i.start.toISOString().slice(11, 16)}-${i.end.toISOString().slice(11, 16)}`);
+
+  it("removes a block that is exactly the booking", () => {
+    expect(show(subtractInterval([iv("10:00", "10:30")], iv("10:00", "10:30")))).toEqual([]);
+  });
+
+  it("keeps a meeting right after it, even when Google merged the two into one block", () => {
+    // Booking 10:00–10:30 + another meeting 10:30–11:00 arrive from free/busy as 10:00–11:00.
+    expect(show(subtractInterval([iv("10:00", "11:00")], iv("10:00", "10:30")))).toEqual(["10:30-11:00"]);
+  });
+
+  it("splits a block when the booking is in the middle", () => {
+    expect(show(subtractInterval([iv("09:00", "12:00")], iv("10:00", "10:30")))).toEqual([
+      "09:00-10:00",
+      "10:30-12:00",
+    ]);
+  });
+
+  it("leaves blocks that don't overlap, including ones that only touch (half-open)", () => {
+    expect(
+      show(subtractInterval([iv("09:00", "10:00"), iv("10:30", "11:00")], iv("10:00", "10:30"))),
+    ).toEqual(["09:00-10:00", "10:30-11:00"]);
   });
 });

@@ -28,7 +28,7 @@ type Params = PageProps<"/booking/[token]">["params"];
 export default function ManageBookingPage({ params }: { params: Params }) {
   return (
     <main className="flex flex-1 flex-col items-center gap-8 px-4 py-8 sm:py-16">
-      <Reveal fallback={<div className="bg-muted h-96 w-full max-w-4xl rounded-xl" />}>
+      <Reveal fallback={<div className="bg-muted h-96 w-full max-w-6xl rounded-xl" />}>
         <BookingPanel params={params} />
       </Reveal>
       <PoweredBy />
@@ -52,7 +52,9 @@ async function BookingPanel({ params }: { params: Params }) {
   ];
 
   return (
-    <div className="bg-card grid w-full max-w-4xl overflow-hidden rounded-xl border shadow-sm md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+    // As wide as the public booking page (max-w-6xl), so rescheduling looks the same: times beside the
+    // calendar. At max-w-4xl the widget's area was under its 42rem side-by-side width (Day 16 follow-up).
+    <div className="bg-card grid w-full max-w-6xl overflow-hidden rounded-xl border shadow-sm md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
       <aside className="flex flex-col gap-4 border-b p-6 md:border-r md:border-b-0">
         <p className="text-muted-foreground text-sm">Your booking</p>
         <h1 className="text-2xl font-bold">{booking.eventTitle}</h1>

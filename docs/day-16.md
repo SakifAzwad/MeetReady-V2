@@ -203,8 +203,10 @@ exists` and turns into an update. A Retry, an automatic retry later, or a double
   page the widget sits beside the booking details, so its own area is only about 530px wide: the times got a
   168px column, one time per row, even after they became a grid.
 - **What I did:** a container query. The widget's area is a `@container`, and the two columns appear only when
-  that area is at least 42rem wide (`@min-[42rem]:`). On the booking page the times now go under the calendar,
-  5 to a row; on the public page they stay beside it.
+  that area is at least 42rem wide (`@min-[42rem]:`). Then, since the side-by-side look is the one we want on
+  both pages, the guest's booking page got the public page's width (`max-w-6xl` instead of `max-w-4xl`): its
+  widget area is now wide enough, and rescheduling looks exactly like booking. On narrower screens both pages
+  stack the times under the calendar, the same way.
 - **Lesson:** a component that's reused in different places should lay itself out by its own width. Viewport
   breakpoints describe the page, not the component.
 

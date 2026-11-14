@@ -83,6 +83,9 @@ npm run test:e2e                                                       # wipes a
 - [Day 15: Google Calendar, busy times](docs/day-15.md): incremental OAuth on the Google login, free/busy only (no
   event details), busy times into the same pure slot function, fail closed at booking and cached for showing, and a
   fake Google for E2E. Follow-up: privacy policy and terms, so the Google app can be published.
+- [Day 16: Google Calendar, writing](docs/day-16.md): each booking becomes an event with a Meet link, one
+  idempotent "make Google match" sync for book/move/cancel/Retry, no duplicate invites, and reschedules that
+  aren't blocked by their own event.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

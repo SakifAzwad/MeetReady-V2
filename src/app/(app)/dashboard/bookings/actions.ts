@@ -2,9 +2,12 @@
 
 import { refresh } from "next/cache";
 import { after } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { bookings } from "@/db/schema";
 import { requireOnboardedUser } from "@/server/auth/session";
+import { calendarSync } from "@/server/calendar";
 import { emailContext } from "@/server/email";
 import { notifyBookingCancelled } from "@/server/email/notifications";
 import { cancelBookingAsHost } from "@/server/manage-booking";
@@ -38,7 +41,39 @@ export async function cancelBookingAsHostAction(input: unknown): Promise<{ ok: b
     };
   }
 
-  after(() => notifyBookingCancelled(emailContext(), parsed.data.bookingId));
+  const { bookingId } = parsed.data;
+  after(async () => {
+    await calendarSync.syncBooking(bookingId); // removes the event from the host's Google Calendar
+    await notifyBookingCancelled(emailContext(), bookingId);
+  });
   refresh();
   return { ok: true };
+}
+
+/**
+ * "Retry" on a booking marked "Not in Google Calendar" (Day 16). The same
+ * sync that runs after booking: it makes Google match the booking as it is
+ * now (create, move or delete), so retrying is always safe.
+ */
+export async function retryCalendarSyncAction(bookingId: unknown): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireOnboardedUser();
+  const parsed = z.uuid().safeParse(bookingId);
+  if (!parsed.success) return { ok: false, error: "Booking not found" };
+  // Scoped to this host: another host's booking id looks exactly like a missing one.
+  const [own] = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(and(eq(bookings.id, parsed.data), eq(bookings.hostId, user.id)));
+  if (!own) return { ok: false, error: "Booking not found" };
+
+  const outcome = await calendarSync.syncBooking(own.id);
+  refresh();
+  if (outcome === "synced") return { ok: true };
+  return {
+    ok: false,
+    error:
+      outcome === "skipped"
+        ? "Google Calendar isn't connected. Connect it on the Availability page."
+        : "Google Calendar didn't accept it. Try again in a minute, or check the connection on the Availability page.",
+  };
 }

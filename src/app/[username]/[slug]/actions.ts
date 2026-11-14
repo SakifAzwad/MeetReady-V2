@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { bookingRequestSchema, type GuestDetailsForm } from "@/lib/validation/booking";
 import type { Question } from "@/lib/validation/questions";
 import { createBooking } from "@/server/booking";
-import { calendarBusy } from "@/server/calendar";
+import { calendarBusy, calendarSync } from "@/server/calendar";
 import { actionIp, emailBucket, rateLimit } from "@/server/rate-limit";
 import { emailContext } from "@/server/email";
 import { notifyBookingConfirmed } from "@/server/email/notifications";
@@ -69,9 +69,13 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
   // Emails go out AFTER the response is sent: the guest sees "You're booked"
   // without waiting on the mail provider, and a failed email can't undo a
   // committed booking. (A job queue with retries comes with Inngest later.)
+  // First the host's Google Calendar (Day 16), so the emails carry the Meet link it creates.
   const { id } = result.booking;
   const { manageToken } = result;
-  after(() => notifyBookingConfirmed(emailContext(), id, manageToken));
+  after(async () => {
+    await calendarSync.syncBooking(id);
+    await notifyBookingConfirmed(emailContext(), id, manageToken);
+  });
 
   return {
     ok: true,

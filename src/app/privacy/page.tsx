@@ -53,6 +53,11 @@ export default function PrivacyPage() {
             the host&apos;s questions. The host sees all of it; that&apos;s what it&apos;s for.
           </li>
           <li>
+            <strong>If the host has connected Google Calendar:</strong> the meeting is added to their calendar
+            with your name and email address (not your notes or answers), and Google may create a Meet link
+            for it. You are not added as a guest on their Google event, so Google doesn&apos;t email you.
+          </li>
+          <li>
             <strong>Emails:</strong> a confirmation with a calendar invite, and a private link to cancel or
             move the meeting. Only a scrambled (hashed) form of that link is stored, so it can&apos;t be
             rebuilt from the database.

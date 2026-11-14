@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 15)
+# Handoff: starting a new chat (after Day 16)
 
-Read this first in a new chat. It replaces the long Days 1–15 conversations. Details live in `docs/day-01.md` …
-`docs/day-15.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–16 conversations. Details live in `docs/day-01.md` …
+`docs/day-16.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–15):**
+- **Built (Days 1–16):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -41,9 +41,18 @@ Read this first in a new chat. It replaces the long Days 1–15 conversations. D
   - Privacy policy and terms (Day 15 follow-up): `/privacy`, `/terms` (`src/components/site/legal-page.tsx`),
     linked from the footer and the login page, and from Google's consent screen (Branding). The privacy page
     describes what the code does: change one, change the other. App routes live in `src/lib/app-routes.ts`
-    (used by `proxy.ts`); `app-routes.test.ts` checks every `src/app` folder is listed and reserved.
-- **Numbers:** 487 unit tests + 19 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
-  build all green. 6 migrations (0000–0005).
+    (used by `proxy.ts`); `app-routes.test.ts` checks every `src/app` folder is listed and reserved. The Google
+    app is published (In production, unverified: "unverified app" warning on connect, 100-account cap).
+  - Google Calendar, write side (Day 16): `src/server/calendar/sync.ts`. `calendarSync.syncBooking(id)` makes
+    Google match the booking as it is now (confirmed → upsert event, cancelled → delete); runs in `after()` BEFORE
+    the emails (they need the Meet link) and never throws. Event id = `googleEventId(bookingId)` (idempotent: 409 →
+    PATCH). No attendees, `sendUpdates=none`, Meet via `conferenceData.createRequest`. Booking columns:
+    `calendar_event_id`, `meet_url`, `calendar_sync` (`synced` | `failed` | null). Failed → "Not in Google
+    Calendar" + Retry on Bookings (`retryCalendarSyncAction`, host-scoped) + Sentry (`area: calendar-sync`).
+    Host's email has no `.ics` when synced. Reschedule (live check and `/api/slots`) subtracts the booking's own
+    time from Google busy blocks (`subtractInterval`; free/busy merges adjacent events).
+- **Numbers:** 514 unit tests + 21 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  build all green. 7 migrations (0000–0006).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -52,15 +61,11 @@ Read this first in a new chat. It replaces the long Days 1–15 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. Sakif: push the privacy/terms commit, then runbook step 13 (Branding links, **Publish app**, reconnect the
-   calendar). Until then the Google app is in **Testing**: calendar access for test users only (he and
-   `sakifazwad0` are listed), expiring every 7 days. Sign-in works for anyone either way.
-2. **Day 16: write bookings to Google Calendar** (event + Meet link via `conferenceData`, `sendUpdates`, store
-   the event id on the booking; reschedule patches it, cancel deletes it). The scope is already granted. A
-   reschedule must exclude the booking's own Google event from busy times (by event id), or it blocks itself.
-   Decide what happens when the write fails (the booking is already committed). Update `/privacy` if anything
-   it says changes.
-3. Then reminders (Inngest), AI features. The slot hold waits (Sakif's call).
+1. Sakif: push Day 16, then runbook step 14 (book a Google Meet type yourself; one event, Meet link, move, cancel).
+2. **Reminder emails with Inngest** (a day and an hour before). Bring automatic retries for calendar writes and
+   emails with it (today: Retry button). Backlog has the Day 16 follow-ups that fit a job queue (backfill on
+   connect, ordering concurrent syncs by `sequence`).
+3. Then AI features. The slot hold waits (Sakif's call).
 4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
@@ -153,3 +158,7 @@ Read this first in a new chat. It replaces the long Days 1–15 conversations. D
   sensitive scopes are test users only and expire after 7 days. Published + unverified = anyone, after an
   "unverified app" warning, 100 accounts ever. Look at the console (Audience page) before explaining an OAuth
   error: Day 15 story.
+
+- **Google writes:** never inside the booking transaction, always through `syncBooking` (idempotent), and the fake
+  Google stores events and counts them as busy (`fakeGoogle.events(token)`, `setCalendar(token, { eventsDown })`).
+- **Assertions in a loop need a count first** (Day 16 story: a loop over zero emails passed).

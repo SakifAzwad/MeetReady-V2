@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { listHostBookings, type BookingsView, type HostBookingRow } from "@/server/manage-booking";
 import { CancelBookingButton } from "./cancel-booking-button";
+import { RetryCalendarButton } from "./retry-calendar-button";
 import { PageTransition } from "@/components/motion";
 
 export const metadata: Metadata = { title: "Bookings" };
@@ -131,11 +132,31 @@ function BookingRow({
               {formatTime(b.startsAt, b.guestTimeZone)} for them in {cityName(b.guestTimeZone)}
             </p>
           )}
+          {b.meetUrl && b.status === "confirmed" && (
+            <p className="text-sm">
+              <a
+                href={b.meetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-4"
+              >
+                Join with Google Meet
+              </a>
+            </p>
+          )}
           {b.guestNotes && <p className="mt-2 text-sm whitespace-pre-line">&ldquo;{b.guestNotes}&rdquo;</p>}
           <BookingAnswers answers={b.answers} className="mt-3" />
           <div className="mt-2 flex flex-wrap gap-2">
             {inProgress && <Badge className="border-primary/40 text-primary">Happening now</Badge>}
             {b.rescheduledAt && <Badge>Rescheduled</Badge>}
+            {b.calendarSync === "failed" && (
+              <>
+                <Badge className="border-destructive/40">
+                  {b.status === "cancelled" ? "Still in Google Calendar" : "Not in Google Calendar"}
+                </Badge>
+                <RetryCalendarButton bookingId={b.id} />
+              </>
+            )}
             {b.status === "cancelled" && (
               <Badge>
                 Cancelled by {b.cancelledBy === "host" ? "you" : "guest"}

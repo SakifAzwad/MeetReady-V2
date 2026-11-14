@@ -43,6 +43,13 @@
       "when": 1794518353790,
       "tag": "0005_calendar_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794622938723,
+      "tag": "0006_booking_calendar_sync",
+      "breakpoints": true
     }
   ]
 }

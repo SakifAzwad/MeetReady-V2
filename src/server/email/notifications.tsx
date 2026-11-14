@@ -16,7 +16,10 @@ import type { EmailMessage, EmailSender } from "./sender";
  *   cancelled by host  -> guest only (the host did it)
  *
  * Each recipient sees times in THEIR timezone, and every email carries a
- * .ics: REQUEST to add/update the event, CANCEL to remove it.
+ * .ics: REQUEST to add/update the event, CANCEL to remove it. One exception
+ * (Day 16): when the booking is already in the host's Google Calendar
+ * (calendarSync = "synced"), the HOST's email has no .ics, or they could end
+ * up with the meeting twice. Guests always get one.
  *
  * These run AFTER the booking is committed (see the actions' `after()`), never
  * inside the database transaction: an email can't be rolled back, and a slow
@@ -31,6 +34,7 @@ async function compose(
   timeZone: string,
   to: string,
   now: Date,
+  withIcs = true,
 ): Promise<EmailMessage> {
   const full: BookingEmailProps = {
     ...props,
@@ -47,24 +51,26 @@ async function compose(
     subject: `${prefix}: ${b.eventTitle} with ${props.audience === "guest" ? b.hostName : b.guestName} – ${formatDateKey(dateKeyInZone(b.startsAt, timeZone), "short")}`,
     html: await render(element),
     text: await render(element, { plainText: true }),
-    ics: {
-      filename: "invite.ics",
-      method,
-      content: buildIcs({
-        method,
-        uid: `${b.id}@meetready`,
-        sequence: b.sequence,
-        start: b.startsAt,
-        end: b.endsAt,
-        createdAt: now,
-        summary: `${b.eventTitle}: ${b.guestName} and ${b.hostName}`,
-        description: bookingEmailHeading(full),
-        location: locationText(b),
-        url: props.actionUrl,
-        organizer: { name: b.hostName, email: b.hostEmail },
-        attendee: { name: b.guestName, email: b.guestEmail },
-      }),
-    },
+    ics: !withIcs
+      ? undefined
+      : {
+          filename: "invite.ics",
+          method,
+          content: buildIcs({
+            method,
+            uid: `${b.id}@meetready`,
+            sequence: b.sequence,
+            start: b.startsAt,
+            end: b.endsAt,
+            createdAt: now,
+            summary: `${b.eventTitle}: ${b.guestName} and ${b.hostName}`,
+            description: bookingEmailHeading(full),
+            location: locationText(b),
+            url: props.actionUrl,
+            organizer: { name: b.hostName, email: b.hostEmail },
+            attendee: { name: b.guestName, email: b.guestEmail },
+          }),
+        },
   };
 }
 
@@ -102,6 +108,7 @@ export async function notifyBookingConfirmed(ctx: Context, bookingId: string, ma
       b.hostTimeZone,
       b.hostEmail,
       ctx.now,
+      b.calendarSync !== "synced",
     ),
   ]);
 }
@@ -143,6 +150,7 @@ export async function notifyBookingRescheduled(
       b.hostTimeZone,
       b.hostEmail,
       ctx.now,
+      b.calendarSync !== "synced",
     ),
   ]);
 }
@@ -171,6 +179,7 @@ export async function notifyBookingCancelled(ctx: Context, bookingId: string) {
         b.hostTimeZone,
         b.hostEmail,
         ctx.now,
+        b.calendarSync !== "synced",
       ),
     );
   }

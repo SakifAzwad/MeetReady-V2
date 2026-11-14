@@ -7,7 +7,8 @@ import { getRedis, redisPrefix } from "@/server/redis";
 import { createCalendarBusy } from "./busy";
 import { createMemoryBusyCache, createRedisBusyCache } from "./cache";
 import { completeCalendarConnection, disconnectCalendar, getCalendarStatus } from "./connection";
-import { queryFreeBusy, revokeGoogleToken } from "./google-api";
+import { deleteGoogleEvent, queryFreeBusy, revokeGoogleToken, upsertGoogleEvent } from "./google-api";
+import { createCalendarSync } from "./sync";
 
 /*
  * The real wiring: Better Auth for tokens, Google over fetch, Redis (or
@@ -37,6 +38,20 @@ export const calendarBusy = createCalendarBusy({
   // Reported when a connection starts failing (not per request). Nothing about the host or
   // their events is attached: the kind and the message say what broke.
   report: (error) => Sentry.captureException(error, { tags: { area: "calendar", kind: error.kind } }),
+});
+
+/** Day 16: keeps the host's Google Calendar in step with a booking. See sync.ts. */
+export const calendarSync = createCalendarSync({
+  db,
+  appUrl: env.BETTER_AUTH_URL,
+  getAccessToken,
+  writer: {
+    upsertEvent: (args) => upsertGoogleEvent({ ...args, baseUrl: env.GOOGLE_CALENDAR_API_URL, fetch }),
+    deleteEvent: (args) => deleteGoogleEvent({ ...args, baseUrl: env.GOOGLE_CALENDAR_API_URL, fetch }),
+  },
+  // One report per failed write. The booking id lets it be found; nothing about the guest is attached.
+  report: (error, bookingId) =>
+    Sentry.captureException(error, { tags: { area: "calendar-sync" }, extra: { bookingId } }),
 });
 
 export async function connectCalendar(userId: string) {

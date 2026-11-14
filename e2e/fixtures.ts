@@ -236,14 +236,32 @@ export async function connectCalendar(db: pg.Pool, host: Host): Promise<string> 
   return token;
 }
 
+export type FakeEvent = {
+  id: string;
+  summary: string;
+  description: string;
+  start: { dateTime: string };
+  end: { dateTime: string };
+  attendees?: unknown[];
+  conferenceData?: { entryPoints: { entryPointType: string; uri: string }[] };
+};
+
 /** Controls the fake Google (e2e/support/fake-google.mjs). */
 export const fakeGoogle = {
-  async setCalendar(token: string, state: { busy?: { start: string; end: string }[]; down?: boolean }) {
+  async setCalendar(
+    token: string,
+    state: { busy?: { start: string; end: string }[]; down?: boolean; eventsDown?: boolean },
+  ) {
     const res = await fetch(`${FAKE_GOOGLE_URL}/__fake/calendar`, {
       method: "POST",
       body: JSON.stringify({ token, ...state }),
     });
     expect(res.ok).toBe(true);
+  },
+  /** The events MeetReady wrote to this host's calendar (Day 16). */
+  async events(token: string): Promise<FakeEvent[]> {
+    const res = await fetch(`${FAKE_GOOGLE_URL}/__fake/events?token=${encodeURIComponent(token)}`);
+    return (await res.json()) as FakeEvent[];
   },
   async wasRevoked(token: string): Promise<boolean> {
     const res = await fetch(`${FAKE_GOOGLE_URL}/__fake/revoked?token=${encodeURIComponent(token)}`);

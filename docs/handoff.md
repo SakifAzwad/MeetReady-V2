@@ -162,3 +162,6 @@ Read this first in a new chat. It replaces the long Days 1–16 conversations. D
 - **Google writes:** never inside the booking transaction, always through `syncBooking` (idempotent), and the fake
   Google stores events and counts them as busy (`fakeGoogle.events(token)`, `setCalendar(token, { eventsDown })`).
 - **Assertions in a loop need a count first** (Day 16 story: a loop over zero emails passed).
+- **The booking widget is laid out by its own width** (`@container` + `@min-[42rem]:`), not the window: it's
+  embedded in places of different widths (public page, guest's booking page). Times are a grid (Day 16
+  follow-up); the "Times on …" group and `button[aria-pressed]` contract for tests is unchanged.

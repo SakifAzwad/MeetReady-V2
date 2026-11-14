@@ -281,7 +281,10 @@ function Scheduler({
       aside={aside}
       stage="pick"
       main={
-        <div className="flex flex-col gap-6">
+        // @container: the calendar and the times sit side by side only when THIS area is wide enough,
+        // not the window. On the guest's booking page (embedded beside the booking details) the area is
+        // narrow even on a wide screen, and the times were squeezed into one long column.
+        <div className="@container flex flex-col gap-6">
           {reschedule && (
             <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-3 text-sm">
               <p>
@@ -321,7 +324,7 @@ function Scheduler({
             </p>
           )}
 
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+          <div className="grid gap-8 @min-[42rem]:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
             <div className={phoneHidden}>
               <MonthCalendar
                 month={visible}
@@ -411,9 +414,11 @@ function Scheduler({
                 </div>
               ) : (
                 <div className="flex min-w-0 flex-col gap-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-semibold">
-                      {activeDate ? formatDateKey(activeDate) : formatMonth(visible)}
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    {/* Short ("Tue 17 Nov"): the long date wrapped onto four lines beside the toggle in the
+                        narrow column. The calendar right beside it already shows the month and year. */}
+                    <h3 className="text-lg font-semibold whitespace-nowrap">
+                      {activeDate ? formatDateKey(activeDate, "short") : formatMonth(visible)}
                     </h3>
                     <HourToggle hour12={hour12} onChange={setHour12} />
                   </div>

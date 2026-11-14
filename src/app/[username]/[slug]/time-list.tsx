@@ -24,9 +24,11 @@ const DOT: Record<PartOfDay, string> = {
 };
 
 /**
- * Two clocks per row (from direction A): the guest's time big, the host's
- * beside it. Click a row to select it; the selected row shows "Continue".
- * Grouped by part of the GUEST's day, in time order.
+ * A grid of times, grouped by part of the GUEST's day, in time order (a list
+ * until the Day 16 follow-up: half-hour meetings made it 16 rows long). When
+ * the host is in another timezone, each time also shows theirs, small (the
+ * two clocks from direction A). Click a time to select it; "Continue" appears
+ * under its group.
  *
  * Times outside the guest's daytime (8 AM–8 PM) are folded into one line
  * above and below, so the first time anyone reads is a sensible one. If none
@@ -193,62 +195,87 @@ function Rows({
     else groups.push({ part, slots: [slot] });
   }
 
+  const range = (slot: Slot) => formatTimeRange(slot.start, slot.end, timeZone, hour12);
+
   return (
     <>
-      {groups.map((g, gi) => (
-        <div key={`${g.part}-${g.slots[0]!.start.toISOString()}`} className="flex flex-col">
-          {!(gi === 0 && g.part === continuesPart) && (
-            <p className="text-muted-foreground mt-3 mb-1 flex items-center gap-2 text-[13px] first:mt-0">
-              <span aria-hidden className={cn("size-2 rounded-full", DOT[g.part])} />
-              {PART_OF_DAY_LABEL[g.part]}
-            </p>
-          )}
-          <ul className="flex flex-col">
-            {g.slots.map((slot) => {
-              const isSelected = selected?.start.getTime() === slot.start.getTime();
-              const yours = formatTime(slot.start, timeZone, hour12);
-              return (
-                <li
-                  key={slot.start.toISOString()}
-                  className={cn(
-                    "border-border/70 flex items-center gap-3 border-b pr-2 transition-colors",
-                    isSelected && "bg-primary text-primary-foreground rounded-lg border-transparent",
-                  )}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => onSelect(slot)}
-                    className="focus-visible:ring-ring/50 flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-[3px]"
-                  >
-                    <span aria-hidden className={cn("size-2 shrink-0 rounded-full", DOT[g.part])} />
-                    <span className="font-display tabular w-24 shrink-0 text-xl font-bold">{yours}</span>
-                    {showHost && (
-                      <span
-                        className={cn(
-                          "tabular truncate text-[13px]",
-                          isSelected ? "text-primary-foreground/75" : "text-muted-foreground",
-                        )}
-                      >
-                        {formatTime(slot.start, hostTimeZone, hour12)} in {cityName(hostTimeZone)}
-                      </span>
-                    )}
-                  </button>
-                  {isSelected && (
-                    <Button
-                      size="sm"
-                      className="bg-highlight text-night hover:bg-highlight/90 animate-in-left font-semibold"
-                      onClick={() => onContinue(slot)}
+      {groups.map((g, gi) => {
+        const selectedHere = g.slots.find((s) => s.start.getTime() === selected?.start.getTime());
+        return (
+          <div key={`${g.part}-${g.slots[0]!.start.toISOString()}`} className="flex flex-col not-first:mt-4">
+            {!(gi === 0 && g.part === continuesPart) && (
+              <p className="text-muted-foreground mb-2 flex items-center gap-2 text-[13px]">
+                <span aria-hidden className={cn("size-2 rounded-full", DOT[g.part])} />
+                {PART_OF_DAY_LABEL[g.part]}
+              </p>
+            )}
+            {/* A grid, not a list (Day 16 follow-up): 16 half-hour times fit in about 6 rows.
+                auto-fill: as many columns as the space allows, 2 on a phone, 3 or 4 on a wide screen. */}
+            <ul
+              className={cn(
+                "grid gap-2",
+                showHost
+                  ? "grid-cols-[repeat(auto-fill,minmax(6.75rem,1fr))]"
+                  : "grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))]",
+              )}
+            >
+              {g.slots.map((slot) => {
+                const isSelected = slot === selectedHere;
+                return (
+                  <li key={slot.start.toISOString()} className="flex">
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => onSelect(slot)}
+                      className={cn(
+                        "focus-visible:ring-ring/50 flex min-w-0 flex-1 flex-col items-center rounded-lg border px-2 py-2 transition-colors outline-none focus-visible:ring-[3px]",
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-transparent"
+                          : "hover:border-primary/50 hover:bg-primary/5",
+                      )}
                     >
-                      Continue
-                    </Button>
+                      <span className="font-display tabular text-base font-bold">
+                        {formatTime(slot.start, timeZone, hour12)}
+                      </span>
+                      {showHost && (
+                        <span
+                          className={cn(
+                            "tabular max-w-full truncate text-[11px]",
+                            isSelected ? "text-primary-foreground/75" : "text-muted-foreground",
+                          )}
+                        >
+                          {formatTime(slot.start, hostTimeZone, hour12)} {cityName(hostTimeZone)}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {/* Continue sits right under the group that holds the chosen time, where the eye already is. */}
+            {selectedHere && (
+              <div className="bg-primary/5 animate-in-down mt-2 flex items-center justify-between gap-3 rounded-lg px-3 py-2">
+                <span className="tabular min-w-0 text-sm">
+                  <span className="font-medium">{range(selectedHere)}</span>
+                  {showHost && (
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {formatTimeRange(selectedHere.start, selectedHere.end, hostTimeZone, hour12)} in{" "}
+                      {cityName(hostTimeZone)}
+                    </span>
                   )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+                </span>
+                <Button
+                  size="sm"
+                  className="bg-highlight text-night hover:bg-highlight/90 animate-in-left shrink-0 font-semibold"
+                  onClick={() => onContinue(selectedHere)}
+                >
+                  Continue
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 }

@@ -297,3 +297,27 @@ it("the event types used here are the ones from setup (guards the fixtures)", as
     "long",
   ]);
 });
+
+describe("attemptSync (Day 17: for the job queue)", () => {
+  beforeEach(connect);
+
+  it("doesn't report: the queue retries and reports only the final failure", async () => {
+    const { booking } = await book();
+    const error = new CalendarUnavailableError("unavailable", "503");
+    const { sync, report } = setup({ upsertEvent: vi.fn(async () => Promise.reject(error)) });
+    expect(await sync.attemptSync(booking.id)).toEqual({ outcome: "failed", error, retryable: true });
+    expect(report).not.toHaveBeenCalled();
+    expect((await row(booking.id)).calendarSync).toBe("failed");
+  });
+
+  it("says lost access isn't worth retrying", async () => {
+    const { booking } = await book();
+    const { sync } = setup({}, { getAccessToken: async () => Promise.reject(new Error("refresh failed")) });
+    expect(await sync.attemptSync(booking.id)).toMatchObject({ outcome: "failed", retryable: false });
+  });
+
+  it("succeeds like syncBooking", async () => {
+    const { booking } = await book();
+    expect(await setup().sync.attemptSync(booking.id)).toEqual({ outcome: "synced" });
+  });
+});

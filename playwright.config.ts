@@ -83,6 +83,11 @@ export default defineConfig({
         DEMO_BOOKING_PATH: "",
         GOOGLE_CALENDAR_API_URL: `${FAKE_GOOGLE_URL}/calendar/v3`,
         GOOGLE_REVOKE_URL: `${FAKE_GOOGLE_URL}/revoke`,
+        // Empty = background jobs run inline (Day 17), even if .env.local points at an
+        // Inngest dev server: the tests read emails from the outbox right after each action.
+        INNGEST_DEV: "",
+        INNGEST_EVENT_KEY: "",
+        INNGEST_SIGNING_KEY: "",
       },
     },
   ],

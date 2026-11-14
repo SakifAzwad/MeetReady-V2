@@ -61,6 +61,14 @@ export function parseEnv(source: Record<string, string | undefined>) {
        */
       GOOGLE_CALENDAR_API_URL: emptyAsUnset(z.url().default("https://www.googleapis.com/calendar/v3")),
       GOOGLE_REVOKE_URL: emptyAsUnset(z.url().default("https://oauth2.googleapis.com/revoke")),
+      /**
+       * Background jobs (Day 17). Inngest's Vercel integration sets INNGEST_EVENT_KEY and
+       * INNGEST_SIGNING_KEY (the SDK reads the signing key itself). Locally, run the Inngest
+       * dev server and set INNGEST_DEV=1. With neither, jobs run inline in `after()`
+       * (src/server/jobs): no retries, no reminders, but every other flow works.
+       */
+      INNGEST_EVENT_KEY: emptyAsUnset(z.string().min(1).optional()),
+      INNGEST_DEV: emptyAsUnset(z.string().min(1).optional()),
       /** Rate-limit store (see redisConfig): both or neither, so a half-pasted pair fails at startup, not per request. */
       REDIS: z.preprocess(
         () => redisConfig(source),

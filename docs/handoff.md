@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 16)
+# Handoff: starting a new chat (after Day 17)
 
-Read this first in a new chat. It replaces the long Days 1–16 conversations. Details live in `docs/day-01.md` …
-`docs/day-16.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–17 conversations. Details live in `docs/day-01.md` …
+`docs/day-17.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–16):**
+- **Built (Days 1–17):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -51,8 +51,22 @@ Read this first in a new chat. It replaces the long Days 1–16 conversations. D
     Calendar" + Retry on Bookings (`retryCalendarSyncAction`, host-scoped) + Sentry (`area: calendar-sync`).
     Host's email has no `.ics` when synced. Reschedule (live check and `/api/slots`) subtracts the booking's own
     time from Google busy blocks (`subtractInterval`; free/busy merges adjacent events).
-- **Numbers:** 514 unit tests + 21 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
-  build all green. 7 migrations (0000–0006).
+  - Background jobs (Day 17): `src/server/jobs/`. Inngest (SDK v4, `/api/inngest`). Actions call `jobs.bookingChanged`
+    / `jobs.calendarConnected` in `after()`. Events carry ids and times only (Inngest stores events, step results and
+    step errors; errors go through `scrubError`). Functions: `booking-changed` (Google once, then `email-guest` and
+    `email-host` as separate steps, in parallel so one can't block the other; a temporary Google failure →
+    `calendar-sync` event), `calendar-sync` (8 retries, `onFailure` reports), `calendar-backfill` (on connect, fan-out), `reminder-sweep` (cron every 15 min, 30-min
+    horizon) and `reminder-send` (sleeps to the minute, re-reads, sends). `booking-changed` and `calendar-sync`
+    share a concurrency key per booking (limit 1); stale emails skip by `sequence`. Emails carry idempotency keys
+    (`booking/{id}/{seq}/{audience}`, `reminder/{id}/{kind}/{start}`); Resend's `invalid_idempotent_request` =
+    sent. Handlers are plain functions over `steps` (`handlers.ts`), run by Inngest (`functions.ts`) or inline
+    (`inline.ts`: no Inngest keys, E2E, or a failed send). Reminders: guests only, a day and an hour before; rules
+    in `REMINDERS`; sent ones in `booking_reminders` keyed by (booking, kind, start). Manage token: hash +
+    AES-256-GCM copy (`manage_token_encrypted`, key = HKDF of `BETTER_AUTH_SECRET`, booking id as AAD); old
+    bookings get it on reschedule, else the reminder points to the first email. Needs runbook step 15 (keys in
+    Production only).
+- **Numbers:** 556 unit tests + 21 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
+  build all green. 8 migrations (0000–0007).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -61,12 +75,12 @@ Read this first in a new chat. It replaces the long Days 1–16 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. Sakif: push Day 16, then runbook step 14 (book a Google Meet type yourself; one event, Meet link, move, cancel).
-2. **Reminder emails with Inngest** (a day and an hour before). Bring automatic retries for calendar writes and
-   emails with it (today: Retry button). Backlog has the Day 16 follow-ups that fit a job queue (backfill on
-   connect, ordering concurrent syncs by `sequence`).
-3. Then AI features. The slot hold waits (Sakif's call).
-4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. **Sakif:** push Day 17, then runbook step 15 (Inngest's Vercel integration, keys in Production only) and its
+   checks (emails through the queue, a reminder, the backfill).
+2. **Then the AI features** (booking assistant, MCP server, meeting brief), each AI route with its own line in
+   `LIMITS`. Long AI work can be an Inngest job. The slot hold waits (Sakif's call).
+3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now). That
+   includes reminders.
 
 ## How Sakif works
 
@@ -98,6 +112,7 @@ Read this first in a new chat. It replaces the long Days 1–16 conversations. D
   - Sentry v11 (errors only); Upstash Redis + `@upstash/ratelimit` (rate limits, calendar cache; one client in
     `src/server/redis.ts`).
   - Google Calendar over plain `fetch` (no SDK): `src/server/calendar/google-api.ts`.
+  - Inngest (SDK v4) for background jobs and reminders: `src/server/jobs/`, served at `/api/inngest`.
 - **Commands:** `npm test` (PGlite; set `TEST_DATABASE_URL` to also run the race tests on real Postgres),
   `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
   `E2E_BROWSER_CHANNEL=chrome`),
@@ -108,7 +123,8 @@ Read this first in a new chat. It replaces the long Days 1–16 conversations. D
   migrations), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (derived on Vercel), `GOOGLE_CLIENT_ID/SECRET`, optional
   `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`, `NEXT_PUBLIC_SENTRY_DSN` (+ build-time `SENTRY_ORG`,
   `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`), `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or the `UPSTASH_REDIS_REST_*`
-  names; both or neither). E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101). Local dev uses the Neon `dev` branch, never `production`.
+  names; both or neither), `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` (Production; or `INNGEST_DEV=1` locally).
+  E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101). Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
 
@@ -165,3 +181,11 @@ Read this first in a new chat. It replaces the long Days 1–16 conversations. D
 - **The booking widget is laid out by its own width** (`@container` + `@min-[42rem]:`), not the window: it's
   embedded in places of different widths (public page, guest's booking page). Times are a grid (Day 16
   follow-up); the "Times on …" group and `button[aria-pressed]` contract for tests is unchanged.
+
+- **Background jobs (Day 17):** never put names, emails or tokens in an event or a step's return value (Inngest
+  stores them); read them from the database inside the step. Every side effect gets its own step and must be safe
+  to run twice. Anything time-based in an email built by a job comes from the event (`at`), not the clock, or a
+  retry won't match its idempotency key. Handlers read time through `deps.now()` (tests pass a fixed clock).
+- **Inngest locally:** `npx inngest-cli@latest dev` (UI on :8288) and `INNGEST_DEV=1` for the app. Without either,
+  jobs run inline. E2E sets the Inngest variables to empty on purpose. The free plan caps a run's life at 30 days
+  (sleeps included): don't sleep until a far-off date, sweep instead.

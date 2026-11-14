@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { connectCalendar } from "@/server/calendar";
+import { jobs } from "@/server/jobs";
 
 /*
  * Where Google (through Better Auth) sends the host back after the consent
@@ -15,5 +16,7 @@ import { connectCalendar } from "@/server/calendar";
 export async function GET(request: NextRequest) {
   const user = await requireOnboardedUser();
   const outcome = await connectCalendar(user.id);
+  // Day 17: bookings made before the calendar was connected go into it too (a background job).
+  if (outcome === "connected") after(() => jobs.calendarConnected(user.id));
   return NextResponse.redirect(new URL(`/dashboard/availability?calendar=${outcome}`, request.url));
 }

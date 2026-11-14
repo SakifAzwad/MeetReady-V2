@@ -118,3 +118,23 @@ export const DENY_URLS = [/^chrome-extension:\/\//, /^moz-extension:\/\//, /^saf
 export function monitoringEnvironment(vercelEnv: string | undefined): string {
   return vercelEnv || "development";
 }
+
+/**
+ * A copy of an error that's safe to hand to a third party (Day 17: Inngest
+ * stores the error of every failed step, and shows it in its dashboard). The
+ * message and its causes' messages are joined and scrubbed: a database error
+ * carries the query's values (guest names, notes), a Resend error may quote
+ * an address. The name is kept (it says what kind of failure it was); the
+ * original stack and cause objects are not passed on.
+ */
+export function scrubError(error: unknown): Error {
+  const messages: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth++) {
+    messages.push(current instanceof Error ? current.message : String(current));
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  const safe = new Error(scrubString(messages.join(" <- caused by: ")));
+  safe.name = error instanceof Error ? error.name : "Error";
+  return safe;
+}

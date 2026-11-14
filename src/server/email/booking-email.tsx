@@ -21,7 +21,8 @@ import { formatAnswer, type BookingAnswer } from "@/lib/validation/questions";
  */
 
 export type BookingEmailProps = {
-  kind: "confirmed" | "rescheduled" | "cancelled";
+  /** "reminder" (Day 17) goes to guests only, a day and an hour before. */
+  kind: "confirmed" | "rescheduled" | "cancelled" | "reminder";
   audience: "guest" | "host";
   eventTitle: string;
   hostName: string;
@@ -38,10 +39,13 @@ export type BookingEmailProps = {
   cancellationReason?: string | null;
   /** Guest: manage link (cancel/reschedule). Host: dashboard link. */
   actionUrl?: string;
+  /** Reminders: the heading, worked out from the time left ("Starts in 1 hour"). */
+  reminderHeading?: string;
 };
 
 export function bookingEmailHeading(p: BookingEmailProps): string {
   const host = p.hostName.split(" ")[0];
+  if (p.kind === "reminder") return p.reminderHeading ?? "Your meeting is coming up";
   if (p.kind === "confirmed")
     return p.audience === "guest" ? `You're booked with ${host}` : `New booking: ${p.guestName}`;
   if (p.kind === "rescheduled")
@@ -167,11 +171,19 @@ export function BookingEmail(p: BookingEmailProps) {
             </Section>
           )}
 
+          {p.kind === "reminder" && !p.actionUrl && (
+            <Text style={{ ...styles.label, marginTop: 28 }}>
+              To reschedule or cancel, use the link in your booking confirmation email.
+            </Text>
+          )}
+
           <Hr style={{ borderColor: "#e2e6ef", marginTop: 28 }} />
           <Text style={styles.footer}>
-            {cancelled
-              ? "The calendar invite attached removes this event from your calendar."
-              : "A calendar invite is attached."}{" "}
+            {p.kind === "reminder"
+              ? "This meeting is already in your calendar from your booking email."
+              : cancelled
+                ? "The calendar invite attached removes this event from your calendar."
+                : "A calendar invite is attached."}{" "}
             Sent by MeetReady.
           </Text>
         </Container>

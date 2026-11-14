@@ -6,10 +6,10 @@ import { db } from "@/db";
 import { bookingRequestSchema, type GuestDetailsForm } from "@/lib/validation/booking";
 import type { Question } from "@/lib/validation/questions";
 import { createBooking } from "@/server/booking";
-import { calendarBusy, calendarSync } from "@/server/calendar";
+import { calendarBusy } from "@/server/calendar";
+import { jobs } from "@/server/jobs";
+import { sealToken } from "@/server/manage-link";
 import { actionIp, emailBucket, rateLimit } from "@/server/rate-limit";
-import { emailContext } from "@/server/email";
-import { notifyBookingConfirmed } from "@/server/email/notifications";
 
 export type BookSlotResult =
   | { ok: true; booking: { startsAt: string; endsAt: string } }
@@ -50,7 +50,7 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
   const byEmail = await rateLimit([["book_email", emailBucket(parsed.data.guestEmail)]]);
   if (!byEmail.ok) return { ok: false, error: "rate_limited", retryAfterSeconds: byEmail.retryAfterSeconds };
 
-  const result = await createBooking(db, parsed.data, new Date(), { calendar: calendarBusy });
+  const result = await createBooking(db, parsed.data, new Date(), { calendar: calendarBusy, sealToken });
   if (!result.ok && result.error === "invalid_answers") {
     return { ok: false, error: "invalid", fieldErrors: {}, answerErrors: result.answerErrors };
   }
@@ -66,16 +66,13 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
     return { ok: false, error: result.error === "not_found" ? "not_found" : "slot_unavailable" };
   }
 
-  // Emails go out AFTER the response is sent: the guest sees "You're booked"
-  // without waiting on the mail provider, and a failed email can't undo a
-  // committed booking. (A job queue with retries comes with Inngest later.)
-  // First the host's Google Calendar (Day 16), so the emails carry the Meet link it creates.
+  // Google Calendar and the emails run AFTER the response is sent, as a
+  // background job (Day 17, src/server/jobs): the guest sees "You're booked"
+  // without waiting, a failed email can't undo a committed booking, and the
+  // job queue retries what fails. The job gets the booking id, nothing else:
+  // it reads the rest (and decrypts the manage link) when it runs.
   const { id } = result.booking;
-  const { manageToken } = result;
-  after(async () => {
-    await calendarSync.syncBooking(id);
-    await notifyBookingConfirmed(emailContext(), id, manageToken);
-  });
+  after(() => jobs.bookingChanged({ bookingId: id, change: "created", sequence: 0 }));
 
   return {
     ok: true,

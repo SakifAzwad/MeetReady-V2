@@ -140,7 +140,7 @@ describe("managing bookings", () => {
     it("moves the booking, keeps its id and link, frees the old time", async () => {
       const { manageToken, booking } = await book("intro", "10:00");
       const r = await rescheduleBookingByToken(db, manageToken, at("14:00"), NOW);
-      expect(r).toEqual({ ok: true, bookingId: booking.id, previousStartsAt: at("10:00") });
+      expect(r).toEqual({ ok: true, bookingId: booking.id, previousStartsAt: at("10:00"), sequence: 1 });
 
       const moved = await getBookingByToken(db, manageToken);
       expect(moved).toMatchObject({
@@ -213,7 +213,10 @@ describe("managing bookings", () => {
 
     it("cancels their own booking", async () => {
       const { booking, manageToken } = await book("intro", "10:00");
-      expect(await cancelBookingAsHost(db, "alice", booking.id, "Ill", NOW)).toEqual({ ok: true });
+      expect(await cancelBookingAsHost(db, "alice", booking.id, "Ill", NOW)).toEqual({
+        ok: true,
+        sequence: 1,
+      });
       expect(await getBookingByToken(db, manageToken)).toMatchObject({
         status: "cancelled",
         cancelledBy: "host",

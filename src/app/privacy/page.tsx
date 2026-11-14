@@ -58,9 +58,11 @@ export default function PrivacyPage() {
             for it. You are not added as a guest on their Google event, so Google doesn&apos;t email you.
           </li>
           <li>
-            <strong>Emails:</strong> a confirmation with a calendar invite, and a private link to cancel or
-            move the meeting. Only a scrambled (hashed) form of that link is stored, so it can&apos;t be
-            rebuilt from the database.
+            <strong>Emails:</strong> a confirmation with a calendar invite, a private link to cancel or move
+            the meeting, and reminders a day and an hour before it. The link is stored twice, neither time as
+            itself: a scrambled (hashed) form to check it, and an encrypted copy so later emails such as
+            reminders can include it. The key to that copy is not kept in the database, so the link can&apos;t
+            be rebuilt from the database alone.
           </li>
           <li>You don&apos;t need an account, and no cookies are set when you book.</li>
         </ul>
@@ -139,6 +141,11 @@ export default function PrivacyPage() {
           <li>Neon: the database (AWS, United States, US East).</li>
           <li>Upstash: rate-limit counters and the calendar cache (AWS, US East).</li>
           <li>Resend: sending emails.</li>
+          <li>
+            Inngest: running background work (sending emails and reminders, updating Google Calendar, and
+            trying again when that fails). It receives booking ids and times, never names, email addresses or
+            booking links.
+          </li>
           <li>Sentry: error reports, stripped as described above.</li>
           <li>Google: sign-in and, if connected, Google Calendar.</li>
         </ul>

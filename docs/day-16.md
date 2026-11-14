@@ -118,6 +118,24 @@ e2e/support/fake-google.mjs, e2e/calendar-sync.spec.ts   # events in the fake; b
 - **Bookings made before connecting** aren't copied in. They're added the first time they change (a reschedule
   creates the event).
 
+### Follow-up (14 Nov): the times as a grid
+
+- **The problem (from a screenshot of the guest's booking page):** with 30-minute meetings a 9–5 day is 16 times,
+  one per row, so the list ran far below the calendar. Next to the 12h/24h toggle, "Tuesday, 17 November 2026"
+  wrapped onto four lines.
+- **Options weighed:** a grid of times (chosen); picking directly on the daylight band (most original, but fiddly
+  on a phone and it still needs a keyboard-friendly fallback: backlog); collapsible parts of the day (decided
+  against: one more tap before any time is visible).
+- **The grid:**
+  - same Morning/Afternoon groups with their time-of-day dots, and the same Day 9 folding of night times;
+  - as many columns as fit (`auto-fill`): 2–3 on a phone, 4–5 on a wide screen;
+  - when the host is in another timezone, each time also shows theirs, small, under it (the two clocks stay);
+  - "Continue" appears under the group holding the chosen time, with the full range ("8:30–9 AM").
+  - Still plain buttons with `aria-pressed` inside the "Times on …" group: keyboards, screen readers and the
+    browser tests work as before (no test needed changing).
+- **The date heading** is short ("Mon 16 Nov"); the calendar beside it already shows the month and year. The
+  toggle stays beside it: the Day 9 reason (a 24-hour reader looks for it where the times are) still holds.
+
 ## 2. Likely interview questions
 
 - **"How do you keep two systems in sync without a distributed transaction?"** The database is the source of
@@ -177,6 +195,18 @@ exists` and turns into an update. A Retry, an automatic retry later, or a double
   zero emails.
 - **What I did:** fixed the helper, and the test now asserts there are exactly two emails before looping.
 - **Lesson:** an assertion inside a loop proves nothing if the loop can run zero times. Assert the count first.
+
+### The layout followed the window, not its own space
+
+- **What happened:** the cramped column in the screenshot was on the guest's booking page, at a desktop width.
+  The calendar and the times switch to side by side at the `lg` breakpoint, which looks at the WINDOW. On that
+  page the widget sits beside the booking details, so its own area is only about 530px wide: the times got a
+  168px column, one time per row, even after they became a grid.
+- **What I did:** a container query. The widget's area is a `@container`, and the two columns appear only when
+  that area is at least 42rem wide (`@min-[42rem]:`). On the booking page the times now go under the calendar,
+  5 to a row; on the public page they stay beside it.
+- **Lesson:** a component that's reused in different places should lay itself out by its own width. Viewport
+  breakpoints describe the page, not the component.
 
 ## Next
 

@@ -291,10 +291,17 @@ warning that says so.
      `INNGEST_SIGNING_KEY` to the project, and tells Inngest about the app after every deploy.
    - (Without the integration: sign up at inngest.com, copy both keys from the dashboard into Vercel by hand, and
      after each deploy use **Apps → Sync app** with `https://meetreadyv2.vercel.app/api/inngest`.)
-2. **Settings → Environment Variables:** keep both Inngest keys for **Production only** (edit each, untick Preview
-   and Development). **Both are secrets.**
+2. **Settings → Environment Variables:**
+   - keep both Inngest keys for **Production only** (edit each, untick Preview and Development). **Both are
+     secrets.**
+   - add `INNGEST_SERVE_ORIGIN` = `https://meetreadyv2.vercel.app`, **Production only**.
    - **Why Production only:** previews then run jobs inline, like local dev. They send no real email anyway (no
      Resend key there), and Vercel's preview protection would block Inngest from calling them.
+   - **Why `INNGEST_SERVE_ORIGIN` (found on 14 Nov):** without it, the integration tells Inngest the deployment's
+     own URL (`meetready-git-main-….vercel.app`). Vercel's Deployment Protection puts a login in front of those
+     generated URLs, so the sync failed with "We could not reach your URL". The production domain isn't
+     protected. Opening `/api/inngest` in a browser answers `{"message":"Unauthorized"}`: expected, SDK v4 only
+     answers requests Inngest has signed.
 3. **Deploy** (push Day 17). Migration 0007 runs first in the build.
 4. **Inngest dashboard → Apps:** `meetready` with 5 functions (`booking-changed`, `calendar-sync`,
    `calendar-backfill`, `reminder-sweep`, `reminder-send`), each with its failure handler. `reminder-sweep` shows a
@@ -342,6 +349,9 @@ the new column and write to both; later, drop the old one.
   bookings without the calendar). Check step 12.1 first: a disabled Calendar API also looks like lost access.
 - **No reminders, and Sentry says "Inngest isn't configured":** step 15's keys are missing for Production. Emails
   and calendar writes still work (inline, without retries).
+- **Inngest's sync says "We could not reach your URL"** and shows a `…-git-main-….vercel.app` address:
+  `INNGEST_SERVE_ORIGIN` is missing (step 15.2). Add it, redeploy, or sync by hand: Apps → Sync new app →
+  `https://meetreadyv2.vercel.app/api/inngest`.
 - **Inngest shows the app as out of sync or its runs fail with 401:** the signing key in Vercel doesn't match the
   Inngest environment. Redeploy (the integration syncs again), or Apps → Sync app.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo

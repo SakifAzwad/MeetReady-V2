@@ -8,8 +8,7 @@ import { db } from "@/db";
 import { bookings } from "@/db/schema";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { calendarSync } from "@/server/calendar";
-import { emailContext } from "@/server/email";
-import { notifyBookingCancelled } from "@/server/email/notifications";
+import { jobs } from "@/server/jobs";
 import { cancelBookingAsHost } from "@/server/manage-booking";
 
 const schema = z.object({
@@ -42,10 +41,8 @@ export async function cancelBookingAsHostAction(input: unknown): Promise<{ ok: b
   }
 
   const { bookingId } = parsed.data;
-  after(async () => {
-    await calendarSync.syncBooking(bookingId); // removes the event from the host's Google Calendar
-    await notifyBookingCancelled(emailContext(), bookingId);
-  });
+  // Background job (Day 17): removes the Google Calendar event, then emails the guest.
+  after(() => jobs.bookingChanged({ bookingId, change: "cancelled", sequence: result.sequence }));
   refresh();
   return { ok: true };
 }

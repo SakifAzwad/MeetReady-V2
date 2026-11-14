@@ -9,7 +9,7 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 ## Stack
 
 Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +
-`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · Upstash Redis (rate limits, calendar cache) · Google Calendar API · PGlite (in-process Postgres for tests) · GitHub Actions
+`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · Upstash Redis (rate limits, calendar cache) · Google Calendar API · Inngest (background jobs, reminders) · PGlite (in-process Postgres for tests) · GitHub Actions
 
 ## Getting started
 
@@ -86,6 +86,9 @@ npm run test:e2e                                                       # wipes a
 - [Day 16: Google Calendar, writing](docs/day-16.md): each booking becomes an event with a Meet link, one
   idempotent "make Google match" sync for book/move/cancel/Retry, no duplicate invites, and reschedules that
   aren't blocked by their own event.
+- [Day 17: Background jobs and reminders](docs/day-17.md): Inngest with one step per side effect, idempotency keys,
+  automatic retries for Google writes and emails, reminders from a database sweep instead of long sleeps, the
+  manage link stored hashed and encrypted, a backfill when a calendar is connected, and an inline fallback.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

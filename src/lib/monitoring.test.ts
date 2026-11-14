@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monitoringEnvironment, scrubDeep, scrubEvent, scrubString } from "./monitoring";
+import { monitoringEnvironment, scrubDeep, scrubError, scrubEvent, scrubString } from "./monitoring";
 
 const TOKEN = "Zq3vK9xT1mW8pL2rB7nC4yH6dF0gJ5sA_e-Uo1iRkPw"; // 43 chars, like a real manage token
 
@@ -106,4 +106,27 @@ it("names the environment after Vercel's, or development", () => {
   expect(monitoringEnvironment("production")).toBe("production");
   expect(monitoringEnvironment("preview")).toBe("preview");
   expect(monitoringEnvironment(undefined)).toBe("development");
+});
+
+describe("scrubError (Day 17: errors stored by the job queue)", () => {
+  it("drops query values and addresses from the error and its causes, keeping the kind", () => {
+    const db = new Error(
+      'Failed query: insert into "bookings" ...\nparams: Ada,ada@example.com,secret notes',
+    );
+    const wrapped = new Error("Sending failed", { cause: new Error("Resend: bad address ada@example.com") });
+    const retry = Object.assign(new Error("Google Calendar write failed", { cause: db }), {
+      name: "RetryLaterError",
+    });
+
+    expect(scrubError(db).message).toBe('Failed query: insert into "bookings" ...\nparams: [redacted]');
+    expect(scrubError(wrapped).message).toBe("Sending failed <- caused by: Resend: bad address [email]");
+    const safe = scrubError(retry);
+    expect(safe.name).toBe("RetryLaterError");
+    expect(safe.message).not.toMatch(/Ada|secret|@/);
+    expect(safe.cause).toBeUndefined();
+  });
+
+  it("copes with things that aren't errors", () => {
+    expect(scrubError("plain ada@example.com").message).toBe("plain [email]");
+  });
 });

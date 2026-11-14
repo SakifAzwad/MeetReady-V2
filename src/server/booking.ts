@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, gt, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookings, eventTypes, user } from "@/db/schema";
@@ -332,6 +332,11 @@ export async function createBooking(
      * needed. Never passed in production code.
      */
     afterCheck?: () => Promise<void>;
+    /**
+     * Encrypts the manage token for this booking (Day 17, see sealManageToken).
+     * Passed by the booking action; tests that don't send emails leave it out.
+     */
+    sealToken?: (token: string, bookingId: string) => string;
   } = {},
 ): Promise<BookingResult> {
   const window = { start: request.startsAt, end: addMinutes(request.startsAt, 1) };
@@ -379,12 +384,17 @@ export async function createBooking(
       }
       await options.afterCheck?.();
 
-      // The raw token goes back to the caller (for the guest's email) and is never stored.
+      // The raw token goes back to the caller and is never stored in the clear:
+      // only its hash (to check it) and an encrypted copy (to email it again later).
+      // The id is made here, not by the database, because the encryption is bound to it.
       const { token, hash } = newManageToken();
+      const id = randomUUID();
       const [row] = await tx
         .insert(bookings)
         .values({
+          id,
           manageTokenHash: hash,
+          manageTokenEncrypted: options.sealToken?.(token, id) ?? null,
           eventTypeId: eventType.id,
           hostId: eventType.hostId,
           guestName: request.guestName,

@@ -14,6 +14,7 @@ step says **why**, so it can be explained later. Expect about 30–40 minutes.
 - `proxy.ts`: real 404s.
 - `next.config.ts`: security headers.
 - `.github/workflows/smoke.yml`: checks the live site after each production deploy.
+- `src/app/api/inngest/route.ts`: where Inngest runs the background jobs (step 15).
 
 ## 0. Before you start
 
@@ -279,6 +280,36 @@ Nothing to set up: the "add events" permission was granted with step 12, and mig
    **Retry**. If Retry fails too, check the Availability card (a lost connection shows there) and Sentry
    (`area: calendar-sync`).
 
+## 15. Background jobs and reminders (Inngest), added on Day 17
+
+Without this step everything still works, but jobs run inline: no automatic retries and no reminders. Sentry gets a
+warning that says so.
+
+1. Vercel → the `meetreadyv2` project → **Integrations** → browse the Marketplace → **Inngest** → **Install**.
+   - **Plan:** Free.
+   - **Connect it** to `meetreadyv2`. It creates your Inngest account, adds `INNGEST_EVENT_KEY` and
+     `INNGEST_SIGNING_KEY` to the project, and tells Inngest about the app after every deploy.
+   - (Without the integration: sign up at inngest.com, copy both keys from the dashboard into Vercel by hand, and
+     after each deploy use **Apps → Sync app** with `https://meetreadyv2.vercel.app/api/inngest`.)
+2. **Settings → Environment Variables:** keep both Inngest keys for **Production only** (edit each, untick Preview
+   and Development). **Both are secrets.**
+   - **Why Production only:** previews then run jobs inline, like local dev. They send no real email anyway (no
+     Resend key there), and Vercel's preview protection would block Inngest from calling them.
+3. **Deploy** (push Day 17). Migration 0007 runs first in the build.
+4. **Inngest dashboard → Apps:** `meetready` with 5 functions (`booking-changed`, `calendar-sync`,
+   `calendar-backfill`, `reminder-sweep`, `reminder-send`), each with its failure handler. `reminder-sweep` shows a
+   run every 15 minutes, normally with nothing to do.
+5. **Check it works** (with your own email: Resend's test sender only reaches you):
+   1. **Emails through the queue:** book yourself about 2 hours ahead. The emails arrive as before. Inngest →
+      **Runs** → `booking-changed`: three steps (`calendar`, `email-guest`, `email-host`), all green.
+   2. **A reminder:** within 15 minutes of the "one hour before" moment, a `reminder-send` run appears, sleeping.
+      At one hour before the meeting, the reminder arrives: "Starts in 1 hour", with the Meet link and the
+      reschedule/cancel button.
+   3. **Backfill:** Availability → **Disconnect** Google Calendar → book yourself → **Connect** again. Within a
+      minute the booking is in Google Calendar (runs: `calendar-backfill`, then one `calendar-sync`).
+6. **If a run fails,** Inngest shows which step and its error (scrubbed: no guest data). The final failure also
+   reaches Sentry, tagged `booking-emails`, `calendar-sync`, `calendar-backfill` or `reminders`.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.
@@ -309,5 +340,9 @@ the new column and write to both; later, drop the old one.
 - **The Availability page says "New bookings are paused":** Google Calendar didn't answer, or access was
   removed. "Didn't answer" clears by itself; "access was removed" needs **Reconnect** (or **Disconnect** to take
   bookings without the calendar). Check step 12.1 first: a disabled Calendar API also looks like lost access.
+- **No reminders, and Sentry says "Inngest isn't configured":** step 15's keys are missing for Production. Emails
+  and calendar writes still work (inline, without retries).
+- **Inngest shows the app as out of sync or its runs fail with 401:** the signing key in Vercel doesn't match the
+  Inngest environment. Redeploy (the integration syncs again), or Apps → Sync app.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo
   a migration, which is another reason migrations stay additive.

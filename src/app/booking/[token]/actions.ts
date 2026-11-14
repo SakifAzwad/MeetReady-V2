@@ -3,10 +3,10 @@
 import { after } from "next/server";
 import { db } from "@/db";
 import { cancelRequestSchema, rescheduleRequestSchema } from "@/lib/validation/booking";
-import { emailContext } from "@/server/email";
-import { notifyBookingCancelled, notifyBookingRescheduled } from "@/server/email/notifications";
+import { calendarBusy } from "@/server/calendar";
+import { jobs } from "@/server/jobs";
+import { sealToken } from "@/server/manage-link";
 import { cancelBookingByToken, rescheduleBookingByToken } from "@/server/manage-booking";
-import { calendarBusy, calendarSync } from "@/server/calendar";
 import { rateLimit } from "@/server/rate-limit";
 
 /*
@@ -35,11 +35,10 @@ export async function cancelByTokenAction(input: unknown): Promise<ManageActionR
   const result = await cancelBookingByToken(db, parsed.data.token, parsed.data.reason, new Date());
   if (!result.ok) return result;
 
-  // Calendar first (Day 16): the host's email skips the .ics when the event is already handled in Google.
-  after(async () => {
-    await calendarSync.syncBooking(result.bookingId);
-    await notifyBookingCancelled(emailContext(), result.bookingId);
-  });
+  // Background job (Day 17): removes the Google Calendar event, then emails both sides.
+  after(() =>
+    jobs.bookingChanged({ bookingId: result.bookingId, change: "cancelled", sequence: result.sequence }),
+  );
   return { ok: true };
 }
 
@@ -52,14 +51,20 @@ export async function rescheduleByTokenAction(input: unknown): Promise<ManageAct
 
   const result = await rescheduleBookingByToken(db, token, startsAt, new Date(), {
     calendar: calendarBusy,
+    sealToken, // saves an encrypted copy of the link if this booking predates Day 17
   });
   if (!result.ok) {
     return { ok: false, error: result.error === "slot_taken" ? "slot_unavailable" : result.error };
   }
 
-  after(async () => {
-    await calendarSync.syncBooking(result.bookingId); // moves the host's Google Calendar event
-    await notifyBookingRescheduled(emailContext(), result.bookingId, result.previousStartsAt, token);
-  });
+  // Background job (Day 17): moves the Google Calendar event, then emails both sides.
+  after(() =>
+    jobs.bookingChanged({
+      bookingId: result.bookingId,
+      change: "rescheduled",
+      sequence: result.sequence,
+      previousStartsAt: result.previousStartsAt,
+    }),
+  );
   return { ok: true, startsAt: startsAt.toISOString() };
 }

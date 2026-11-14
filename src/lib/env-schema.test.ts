@@ -17,6 +17,12 @@ describe("parseEnv", () => {
     expect(env.EMAIL_FROM).toBe("MeetReady <onboarding@resend.dev>");
   });
 
+  it("treats empty Inngest values as unset, so jobs fall back to running inline (Day 17)", () => {
+    const env = parseEnv({ ...base, INNGEST_DEV: "", INNGEST_EVENT_KEY: "" });
+    expect(env.INNGEST_DEV).toBeUndefined();
+    expect(env.INNGEST_EVENT_KEY).toBeUndefined();
+  });
+
   it("still rejects missing required values and a short secret", () => {
     expect(() => parseEnv({ ...base, GOOGLE_CLIENT_ID: "" })).toThrow();
     expect(() => parseEnv({ ...base, BETTER_AUTH_SECRET: "short" })).toThrow(/at least 32/);

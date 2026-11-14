@@ -7,7 +7,7 @@ import { addMinutes, subtractInterval } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
 import { busyLoadRange, getBookableSlots, getPublicEventType } from "./booking";
 import { CalendarUnavailableError, type ExternalBusy } from "./calendar/busy";
-import { hashManageToken, manageTokenSchema } from "./manage-token";
+import { hashManageToken, manageTokenSchema, openManageToken } from "./manage-token";
 
 /*
  * After a booking exists: the guest manages it with their token, the host
@@ -93,6 +93,25 @@ export async function getBookingDetails(db: Database, bookingId: string): Promis
   return row ?? null;
 }
 
+/**
+ * The guest's manage token for a booking, for an email sent by a background
+ * job (Day 17). Null when there's no encrypted copy (made before Day 17) or it
+ * can't be opened (e.g. the secret was rotated): the email then goes without
+ * the link. Kept out of BookingDetails on purpose: the secret only leaves the
+ * database where an email is being written.
+ */
+export async function readManageToken(
+  db: Database,
+  bookingId: string,
+  secret: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ sealed: bookings.manageTokenEncrypted })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId));
+  return row?.sealed ? openManageToken(row.sealed, bookingId, secret) : null;
+}
+
 // ─── Guest: by manage token ─────────────────────────────────────────────────────
 
 export async function getBookingByToken(db: Database, token: string): Promise<BookingDetails | null> {
@@ -112,7 +131,7 @@ export async function cancelBookingByToken(
   token: string,
   reason: string | null,
   now: Date,
-): Promise<{ ok: true; bookingId: string } | { ok: false; error: ManageError }> {
+): Promise<{ ok: true; bookingId: string; sequence: number } | { ok: false; error: ManageError }> {
   if (!manageTokenSchema.safeParse(token).success) return { ok: false, error: "not_found" };
   const hash = hashManageToken(token);
   // One UPDATE with the conditions in the WHERE: no "read, check, then write"
@@ -127,15 +146,15 @@ export async function cancelBookingByToken(
       sequence: sql`${bookings.sequence} + 1`,
     })
     .where(and(eq(bookings.manageTokenHash, hash), changeable(now)))
-    .returning({ id: bookings.id });
-  if (row) return { ok: true, bookingId: row.id };
+    .returning({ id: bookings.id, sequence: bookings.sequence });
+  if (row) return { ok: true, bookingId: row.id, sequence: row.sequence };
   // Nothing updated: tell "no such booking" apart from "too late / already cancelled".
   const exists = await getBookingByToken(db, token);
   return { ok: false, error: exists ? "not_changeable" : "not_found" };
 }
 
 export type RescheduleResult =
-  | { ok: true; bookingId: string; previousStartsAt: Date }
+  | { ok: true; bookingId: string; previousStartsAt: Date; sequence: number }
   | { ok: false; error: ManageError | "slot_unavailable" | "slot_taken" | "calendar_unavailable" };
 
 /**
@@ -153,7 +172,16 @@ export async function rescheduleBookingByToken(
   newStart: Date,
   now: Date,
   /** Same as createBooking: the host's calendar (checked live, fail closed), and the race-test seam. */
-  options: { calendar?: ExternalBusy; afterCheck?: () => Promise<void> } = {},
+  options: {
+    calendar?: ExternalBusy;
+    afterCheck?: () => Promise<void>;
+    /**
+     * Day 17: bookings made before Day 17 have no encrypted copy of the token.
+     * The guest just proved they hold it, so it's saved now (only if missing),
+     * and later emails about this booking can carry the link again.
+     */
+    sealToken?: (token: string, bookingId: string) => string;
+  } = {},
 ): Promise<RescheduleResult> {
   if (!manageTokenSchema.safeParse(token).success) return { ok: false, error: "not_found" };
   const window = { start: newStart, end: addMinutes(newStart, 1) };
@@ -203,16 +231,24 @@ export async function rescheduleBookingByToken(
       }
       await options.afterCheck?.();
 
-      await tx
+      const sealed = options.sealToken?.(token, current.id);
+      const [moved] = await tx
         .update(bookings)
         .set({
           startsAt: newStart,
           endsAt: addMinutes(newStart, eventType.durationMinutes),
           rescheduledAt: now,
           sequence: sql`${bookings.sequence} + 1`,
+          ...(sealed && { manageTokenEncrypted: sql`coalesce(${bookings.manageTokenEncrypted}, ${sealed})` }),
         })
-        .where(eq(bookings.id, current.id));
-      return { ok: true, bookingId: current.id, previousStartsAt: fresh.startsAt } as const;
+        .where(eq(bookings.id, current.id))
+        .returning({ sequence: bookings.sequence });
+      return {
+        ok: true,
+        bookingId: current.id,
+        previousStartsAt: fresh.startsAt,
+        sequence: moved!.sequence,
+      } as const;
     });
   } catch (error) {
     if (pgErrorCode(error) === PG_EXCLUSION_VIOLATION) return { ok: false, error: "slot_taken" };
@@ -298,7 +334,7 @@ export async function cancelBookingAsHost(
   bookingId: string,
   reason: string | null,
   now: Date,
-): Promise<{ ok: true } | { ok: false; error: ManageError }> {
+): Promise<{ ok: true; sequence: number } | { ok: false; error: ManageError }> {
   if (!z.uuid().safeParse(bookingId).success) return { ok: false, error: "not_found" };
   const [row] = await db
     .update(bookings)
@@ -310,8 +346,8 @@ export async function cancelBookingAsHost(
       sequence: sql`${bookings.sequence} + 1`,
     })
     .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId), changeable(now)))
-    .returning({ id: bookings.id });
-  if (row) return { ok: true };
+    .returning({ sequence: bookings.sequence });
+  if (row) return { ok: true, sequence: row.sequence };
   const [exists] = await db
     .select({ id: bookings.id })
     .from(bookings)

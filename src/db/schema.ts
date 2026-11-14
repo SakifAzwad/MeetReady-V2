@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   time,
@@ -267,6 +268,13 @@ export const bookings = pgTable(
      * guest's email.
      */
     manageTokenHash: text().notNull().unique("bookings_manage_token_hash_unique"),
+    /**
+     * The same token, encrypted (AES-256-GCM, key derived from BETTER_AUTH_SECRET;
+     * see sealManageToken). Day 17: emails sent later by background jobs (retries,
+     * reminders) need the link itself, and a hash can't give it back. Null for
+     * bookings made before Day 17 until the guest next uses their link.
+     */
+    manageTokenEncrypted: text(),
     /** Set when the guest moves the meeting. The booking keeps its id and manage link. */
     rescheduledAt: timestamp({ withTimezone: true }),
     /** Calendar invite version (.ics SEQUENCE): +1 on every change, so calendar apps apply updates in order. */
@@ -281,6 +289,11 @@ export const bookings = pgTable(
   (t) => [
     index().on(t.hostId, t.startsAt),
     index().on(t.eventTypeId),
+    // The reminder sweep (Day 17) reads "confirmed bookings starting soon" every
+    // 15 minutes. A partial index holds only confirmed rows, ordered by start.
+    index("bookings_confirmed_starts_at_idx")
+      .on(t.startsAt)
+      .where(sql`status = 'confirmed'`),
     check("bookings_time_order_check", sql`${t.endsAt} > ${t.startsAt}`),
     // A cancelled booking always says when; a confirmed one never does.
     check("bookings_cancellation_check", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`),
@@ -288,6 +301,30 @@ export const bookings = pgTable(
     // The no-double-booking EXCLUDE constraint is in a custom migration
     // (drizzle/0001_bookings_no_overlap.sql): Drizzle can't express EXCLUDE yet.
   ],
+);
+
+// ─── Reminders (Day 17) ─────────────────────────────────────────────────────────
+
+/** Which reminder: a day before or an hour before the meeting. */
+export const reminderKind = pgEnum("reminder_kind", ["day", "hour"]);
+
+/**
+ * Reminders already sent. The key includes the start time the reminder was
+ * for: moving a meeting gives it a new start, so its reminders are due again
+ * without resetting anything. The primary key also makes "send once" a
+ * database rule, like the no-overlap constraint for bookings.
+ */
+export const bookingReminders = pgTable(
+  "booking_reminders",
+  {
+    bookingId: uuid()
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    kind: reminderKind().notNull(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    sentAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.bookingId, t.kind, t.startsAt] })],
 );
 
 // ─── Google Calendar (Day 15) ──────────────────────────────────────────────────

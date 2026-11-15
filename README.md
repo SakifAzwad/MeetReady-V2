@@ -95,5 +95,5 @@ npm run test:e2e                                                       # wipes a
 
 ## Credits
 
-MeetReady v1 (Jan–Feb 2024) was built by a team of about 10 students at IIUC:
+MeetReady v1 (Jan–Feb 2024) was built by a team of 5 :
 [SakifAzwad/Meet-Ready](https://github.com/SakifAzwad/Meet-Ready). v2 keeps the idea and rewrites the code.

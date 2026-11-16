@@ -1,6 +1,6 @@
 # Handoff: starting a new chat (after Day 17)
 
-Read this first in a new chat. It replaces the long Days 1–17 conversations. Details live in `docs/day-01.md` …
+Details live in `docs/day-01.md` …
 `docs/day-17.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand

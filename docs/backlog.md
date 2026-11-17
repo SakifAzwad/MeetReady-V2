@@ -89,11 +89,11 @@ retries, reminder emails, backfill on connect and ordered syncs (Day 17).
   - smart slot ranking (with preferred hours);
   - post-meeting notes.
 
-## Known issues
+<!-- ## Known issues
 
 - **`/booking/{made-up-token}` returns 200** with the not-found page and `noindex` (Day 12). Profile and booking
   pages got real 404s from Proxy; the manage page didn't, because its URL is private and never linked publicly.
 - **Sun times use each timezone's main city** (Day 9). Someone in Chattogram sees Dhaka's sunrise, a few
   minutes off. Knowing the exact town would need a location permission, which isn't worth it for colours.
 - **The hero's colours no longer slide between cities** (Day 9). Real skies are per-city gradients, and CSS can't
-  animate between two gradients. The brackets still slide.
+  animate between two gradients. The brackets still slide. -->

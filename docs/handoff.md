@@ -86,7 +86,7 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
     model's text; host and event type come from the URL. Stateless: one message (2–300 chars) per request. Limits
     `ai_assistant_ip` 10/10 min, `ai_assistant_all` 100/day, `ai_assistant_host` 200/day; `ai_calls` feature
     `booking_assistant`. Tests: `mockModelSteps` (scripted tool calls); 8 evals. No UI yet (Day 20).
-- **Numbers:** 611 unit tests + 22 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
+- **Numbers:** 614 unit tests + 22 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
   and build all green. 9 migrations (0000–0008).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -218,5 +218,6 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
   route gets its own lines in `LIMITS` and logs to `ai_calls`.
 - **AI tools (Day 19):** the model writes plain dates/hours/zone names; code validates and does the arithmetic.
   Give it a calendar to copy dates from; anything that needs no language (widening a search) is code's.
-  What's shown or acted on comes from tool results, never the model's text. Fields a model fills under a strict
+  What's shown or acted on comes from tool results, never the model's text. Groq free = 8,000 tokens/minute per
+  model: evals retry 429s (`src/test/eval-rate-limit.ts`, a few minutes per run); the app doesn't. Fields a model fills under a strict
   schema are required + nullable, never `.optional()`. Tools read; writing stays in our own forms.

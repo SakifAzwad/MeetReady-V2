@@ -2,6 +2,7 @@ import { createGroq } from "@ai-sdk/groq";
 import { describe, expect, it } from "vitest";
 import type { Slot } from "@/lib/scheduling/generate-slots";
 import { dateKeyInZone } from "@/lib/scheduling/time";
+import { withRateLimitRetries } from "@/test/eval-rate-limit";
 import { runAssistant, type AssistantRun, type Search } from "./assistant";
 
 /*
@@ -39,18 +40,24 @@ describe.skipIf(!key)(`booking assistant evals (${modelId})`, () => {
     findSlots = everyHalfHour,
   ): Promise<{ run: Extract<AssistantRun, { ok: true }>; searches: Search[] }> {
     const searches: Search[] = [];
-    const run = await runAssistant(
-      model,
-      {
-        eventTitle: "Intro call",
-        durationMinutes: 30,
-        hostName: "Sakif Azwad",
-        guestTimeZone: "Europe/London",
+    const run = await withRateLimitRetries(
+      () => {
+        searches.length = 0; // a retried attempt starts over
+        return runAssistant(
+          model,
+          {
+            eventTitle: "Intro call",
+            durationMinutes: 30,
+            hostName: "Sakif Azwad",
+            guestTimeZone: "Europe/London",
+          },
+          message,
+          findSlots,
+          NOW,
+          (s) => searches.push(s),
+        );
       },
-      message,
-      findSlots,
-      NOW,
-      (s) => searches.push(s),
+      (r) => (r.ok ? undefined : r.error),
     );
     if (!run.ok) throw new Error(`Assistant failed: ${String(run.error)}`);
     // eslint-disable-next-line no-console -- an eval is read by a person: show what the model did.
@@ -115,14 +122,9 @@ describe.skipIf(!key)(`booking assistant evals (${modelId})`, () => {
   });
 
   it("when the day asked for is full, shows the nearest times and says so", async () => {
-    let first = true;
-    const fullFirst = async (range: { start: Date; end: Date }) => {
-      if (first) {
-        first = false;
-        return [];
-      }
-      return everyHalfHour(range);
-    };
+    // Any single day is full; the tool's wider read (8 days) finds times. Stateless, so a retried attempt sees the same.
+    const fullFirst = async (range: { start: Date; end: Date }) =>
+      range.end.getTime() - range.start.getTime() <= 25 * 60 * 60_000 ? [] : everyHalfHour(range);
     const { run, searches } = await ask("Tuesday afternoon", fullFirst);
     expect(searches[0]).toMatchObject({ from: "2026-11-24", to: "2026-11-24" });
     // Our code found them: the following days, at the same hours.

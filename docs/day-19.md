@@ -15,7 +15,7 @@
 - **Limits:** 10 requests per 10 minutes per IP, 200 a day per host, 100 a day for the app (each request is at
   most 4 model calls, so with the briefs we stay under Groq's free-plan cap). Every request is logged in
   `ai_calls` as `booking_assistant`.
-- **Tests:** 611 unit tests (32 new) and the 22 E2E tests, all green, plus 8 new evals (14 in `npm run eval`)
+- **Tests:** 614 unit tests (35 new) and the 22 E2E tests, all green, plus 8 new evals (14 in `npm run eval`)
   that need your Groq key. Typecheck, lint, format, `drizzle-kit check` and the build are green.
 - **Setup:** none. No migration, no new env var (it uses Day 18's `GROQ_API_KEY`). Nothing changes on the site yet.
 
@@ -31,6 +31,7 @@ src/app/[username]/[slug]/actions.ts  # askAssistantAction (per-IP limit, then t
 src/lib/validation/booking.ts    # assistantRequestSchema (message 2–300 characters, a real timezone)
 src/server/rate-limit/limits.ts  # ai_assistant_ip, ai_assistant_host, ai_assistant_all
 src/test/mock-model.ts           # mockModelSteps: a fake model that plays a script of tool calls and replies
+src/test/eval-rate-limit.ts      # evals wait and retry on Groq's 429 (8,000 tokens a minute on the free plan)
 ```
 
 ## 1. Decisions
@@ -112,6 +113,10 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
   Groq's free-plan daily request cap. Over the limit, the guest sees "try again later" (Day 20) and the normal
   times grid still works.
 - **`ai_calls`:** one row per request, tokens summed over all its model calls.
+- **The tighter limit is per minute:** Groq's free plan allows 8,000 tokens a minute for this model, and one
+  assistant request uses roughly 1,500 to 3,000 (instructions, tool schema, results, reasoning). So a burst of more
+  than 2 or 3 requests in a minute, app-wide, gets 429s: the guest sees "try again", the grid still works, and
+  `ai_calls` records `failed`. Fine for a portfolio's traffic; the backlog says what to do if it isn't.
 
 ### Schemas that work for both Zod and strict providers
 
@@ -182,8 +187,11 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
   search, then point to the form. (3) `nearestTimes` in code (Sakif chose this over a stronger prompt). The brief
   eval now allows "30". My first guess, before reading the log, was Groq's token-per-minute limit: wrong. The log
   showed real answers.
-- **Lesson:** an eval failure is either the model, the prompt or the test, and the log tells you which, not a guess.
-  When a prompt can't make the model reliable, give the decision to code.
+- **Then:** the next run passed the 3 it had failed, and failed 2 others with Groq's real "429: tokens
+  per minute (limit 8,000)", the cause I had guessed too early. The evals now wait and retry on a 429 only
+  (`withRateLimitRetries`; anything else still fails at once), so a run takes a few minutes instead of one.
+- **Lesson:** an eval failure is either the model, the prompt, the test or the provider, and the log tells you
+  which, not a guess. When a prompt can't make the model reliable, give the decision to code.
 
 ### "Today" written two ways
 

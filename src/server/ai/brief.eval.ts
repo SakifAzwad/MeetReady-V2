@@ -1,6 +1,7 @@
 import { createGroq } from "@ai-sdk/groq";
 import { describe, expect, it } from "vitest";
 import type { BookingAnswer } from "@/lib/validation/questions";
+import { withRateLimitRetries } from "@/test/eval-rate-limit";
 import { BRIEF_INSTRUCTIONS, writeBrief, type BriefSubject, type MeetingBrief } from "./brief";
 
 /*
@@ -34,7 +35,10 @@ describe.skipIf(!key)(`meeting brief evals (${modelId})`, () => {
   const model = createGroq({ apiKey: key })(modelId);
 
   async function brief(subject: Partial<BriefSubject>): Promise<MeetingBrief> {
-    const result = await writeBrief(model, { ...base, ...subject });
+    const result = await withRateLimitRetries(
+      () => writeBrief(model, { ...base, ...subject }),
+      (r) => (r.ok ? undefined : r.error),
+    );
     if (!result.ok) throw new Error(`No brief: ${result.outcome}: ${String(result.error)}`);
     // eslint-disable-next-line no-console -- an eval is read by a person: show what the model wrote.
     console.log(`\n--- ${subject.guestNotes?.slice(0, 50) ?? "(answers only)"}\n${all(result.brief)}`);

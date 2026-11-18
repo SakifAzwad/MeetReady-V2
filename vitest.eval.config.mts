@@ -21,7 +21,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.eval.ts"],
-    testTimeout: 60_000,
+    // Room for a few waits on the provider's per-minute token limit (src/test/eval-rate-limit.ts).
+    testTimeout: 180_000,
     // One at a time: the free plan allows a few requests a minute.
     fileParallelism: false,
     env: { TZ: "Pacific/Chatham" },

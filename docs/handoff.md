@@ -95,8 +95,10 @@ Read this first in a new chat. It replaces the long Days 1–20 conversations. D
     `focusSlot` → `onFocused`), then re-reads the month (`fetchQuery`, `staleTime: 0`): gone → "Someone just
     booked that time". Late answers for older picks are ignored (`picks` ref). Fake Groq for E2E
     (`e2e/support/fake-groq.mjs`, :3102, `GROQ_BASE_URL`): `fakeGroq.script(marker, { search, reply, fail })`,
-    fixed brief for any JSON-schema request, 500 for an unscripted assistant request.
-- **Numbers:** 618 unit tests + 28 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
+    fixed brief for any JSON-schema request, 500 for an unscripted assistant request, `delayMs` for a slow model.
+    A Clear button (×, or Escape) empties the box, answer included; a `requests` ref drops answers that arrive
+    after Clear or a newer question. The grid's selection is kept.
+- **Numbers:** 618 unit tests + 29 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
   and build all green. 9 migrations (0000–0008).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with

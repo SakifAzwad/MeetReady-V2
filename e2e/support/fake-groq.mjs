@@ -5,13 +5,14 @@
  * POST /openai/v1/chat/completions, no streaming. Plain Node, no dependencies.
  *
  * It plays a script, like mockModelSteps in the unit tests, but over HTTP:
- *   POST /__fake/groq/script  { marker, search, reply, fail }
+ *   POST /__fake/groq/script  { marker, search, reply, fail, delayMs }
  *     marker: a unique string the test puts in the guest's message. Tests run in
  *             parallel, so scripts are found by marker (like the fake Google's tokens).
  *     search: the findTimes arguments the "model" sends first ({from, to, earliest,
  *             latest, timeZone}), or null for no search.
  *     reply:  the text it answers with once the tool's result comes back.
  *     fail:   answer every request with a 500, like an outage.
+ *     delayMs: wait this long before each answer, like a slow model (Day 20: Clear while waiting).
  *   GET  /__fake/groq/calls?marker=…   how many requests carried that marker
  *
  * The tool itself is NOT faked: the app runs findTimes over its real slot
@@ -65,8 +66,8 @@ http
 
     if (url.pathname === "/__fake/health") return send(res, 200, { ok: true });
     if (req.method === "POST" && url.pathname === "/__fake/groq/script") {
-      const { marker, search = null, reply = "", fail = false } = JSON.parse(await body(req));
-      scripts.set(marker, { search, reply, fail });
+      const { marker, search = null, reply = "", fail = false, delayMs = 0 } = JSON.parse(await body(req));
+      scripts.set(marker, { search, reply, fail, delayMs });
       return send(res, 200, { ok: true });
     }
     if (url.pathname === "/__fake/groq/calls") {
@@ -91,6 +92,7 @@ http
         return send(res, 500, { error: { message: "No script for this request", type: "server_error" } });
       calls.set(marker, (calls.get(marker) ?? 0) + 1);
       const script = scripts.get(marker);
+      if (script.delayMs) await new Promise((resolve) => setTimeout(resolve, script.delayMs));
       if (script.fail) return send(res, 500, outage);
 
       // First the search; once the tool's answer is in the conversation, the reply.

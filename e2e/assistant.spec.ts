@@ -121,6 +121,8 @@ test("a guest who names another city gets that city's times, and picking one swi
 
   const guest = await newGuest(); // a laptop set to Dhaka
   await guest.goto(`/${host.username}/intro`);
+  const clear = box(guest).getByRole("button", { name: "Clear" });
+  await expect(clear).toHaveCount(0); // nothing to clear yet
   await ask(guest, `Morning please, I'm in London (${marker})`);
 
   // The host works until 5 PM Dhaka = 11 AM London, so the last start is 10:30.
@@ -134,8 +136,43 @@ test("a guest who names another city gets that city's times, and picking one swi
   await expect(selectedTime(guest)).toContainText("3:00 PM");
   await expect(box(guest).getByText("In London time")).toHaveCount(0); // now the page's own clock
 
+  // Clear empties the box, answer included, and puts the cursor back; the grid keeps its selection.
+  const input = box(guest).getByLabel("Tell us when suits you");
+  await clear.click();
+  await expect(input).toHaveValue("");
+  await expect(input).toBeFocused();
+  await expect(box(guest).getByText("These are free that morning, London time.")).toHaveCount(0);
+  await expect(suggestions(guest)).toHaveCount(0);
+  await expect(clear).toHaveCount(0);
+  await expect(selectedTime(guest)).toHaveText(/9:00 AM/);
+  // Escape does the same from the keyboard.
+  await input.fill("Friday morning instead");
+  await input.press("Escape");
+  await expect(input).toHaveValue("");
+
   await guest.getByRole("button", { name: "Continue" }).click();
   await expect(guest.getByText("(London)")).toBeVisible();
+});
+
+test("an answer that arrives after the guest pressed Clear is dropped, not shown", async ({
+  host,
+  newGuest,
+}) => {
+  const marker = fakeGroq.marker();
+  await fakeGroq.script(marker, { reply: "A late reply.", delayMs: 1500 });
+
+  const guest = await newGuest();
+  await guest.goto(`/${host.username}/intro`);
+  await ask(guest, `Any time this week (${marker})`);
+  await expect(box(guest).getByText("Looking for times…")).toBeVisible();
+  await box(guest).getByRole("button", { name: "Clear" }).click();
+  await expect(box(guest).getByText("Looking for times…")).toHaveCount(0);
+
+  // The request reached the fake; wait past its 1.5 s delay, then check the answer never appeared.
+  await expect.poll(() => fakeGroq.calls(marker)).toBe(1);
+  await guest.waitForTimeout(2000);
+  await expect(box(guest).getByText("A late reply.")).toHaveCount(0);
+  await expect(box(guest).getByRole("button", { name: "Find times" })).toBeDisabled(); // empty input
 });
 
 test("when the model fails, the guest is told plainly and the times grid still works", async ({

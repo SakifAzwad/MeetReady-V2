@@ -1,7 +1,8 @@
 "use client";
 
+import { X } from "lucide-react";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDateKey, formatTime, placeInCalendar } from "@/lib/scheduling/calendar";
@@ -49,7 +50,9 @@ function show(answer: Answer): Shown {
  * presses Continue and confirms through the normal form.
  *
  * Stateless, like the server: one message, one answer. Editing the message
- * and sending again replaces the answer.
+ * and sending again replaces the answer. Clear (or Escape) empties the box,
+ * answer included: one control for both "ask something else" and "I'll pick
+ * from the calendar myself". The grid's selection is the grid's: kept.
  */
 export function AssistantBox({
   username,
@@ -75,20 +78,35 @@ export function AssistantBox({
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [shown, setShown] = useState<Shown | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Counts requests: an answer that arrives after Clear (or after a newer question) is dropped.
+  const requests = useRef(0);
   const firstName = hostName.split(" ")[0];
+  const canClear = message !== "" || shown !== null || pending;
 
   const ask = async (event: React.FormEvent) => {
     event.preventDefault();
     if (pending || message.trim().length < 2) return;
+    const request = ++requests.current;
     setPending(true);
+    let next: Shown;
     try {
-      setShown(show(await askAssistantAction({ username, slug, message, timeZone })));
+      next = show(await askAssistantAction({ username, slug, message, timeZone }));
     } catch {
       // The request itself failed (offline, a deploy in between): same message as a model failure.
-      setShown({ kind: "error", message: COULD_NOT_ANSWER });
-    } finally {
-      setPending(false);
+      next = { kind: "error", message: COULD_NOT_ANSWER };
     }
+    if (request !== requests.current) return; // cleared while waiting
+    setShown(next);
+    setPending(false);
+  };
+
+  const clear = () => {
+    requests.current++;
+    setMessage("");
+    setShown(null);
+    setPending(false);
+    inputRef.current?.focus();
   };
 
   return (
@@ -98,16 +116,36 @@ export function AssistantBox({
           Tell us when suits you
         </label>
         <div className="flex gap-2">
-          <Input
-            id={inputId}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            maxLength={300}
-            autoComplete="off"
-            placeholder="e.g. Tuesday afternoon, I'm in London"
-            aria-describedby={noteId}
-            className="bg-background h-10"
-          />
+          <div className="relative min-w-0 flex-1">
+            <Input
+              ref={inputRef}
+              id={inputId}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && canClear) {
+                  e.preventDefault();
+                  clear();
+                }
+              }}
+              maxLength={300}
+              autoComplete="off"
+              placeholder="e.g. Tuesday afternoon, I'm in London"
+              aria-describedby={noteId}
+              className={cn("bg-background h-10", canClear && "pr-10")}
+            />
+            {/* Our own button, not type="search": that one looks different per browser, and Firefox has none. */}
+            {canClear && (
+              <button
+                type="button"
+                aria-label="Clear"
+                onClick={clear}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md outline-none focus-visible:ring-[3px]"
+              >
+                <X aria-hidden className="size-4" />
+              </button>
+            )}
+          </div>
           <Button type="submit" className="h-10 shrink-0" disabled={pending || message.trim().length < 2}>
             {pending ? "Looking…" : "Find times"}
           </Button>

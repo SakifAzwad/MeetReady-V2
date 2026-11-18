@@ -296,7 +296,10 @@ export type FakeSearch = {
 export const fakeGroq = {
   /** A unique word for the guest's message. */
   marker: () => `ref-${randomBytes(4).toString("hex")}`,
-  async script(marker: string, script: { search?: FakeSearch | null; reply?: string; fail?: boolean }) {
+  async script(
+    marker: string,
+    script: { search?: FakeSearch | null; reply?: string; fail?: boolean; delayMs?: number },
+  ) {
     const res = await fetch(`${FAKE_GROQ_URL}/__fake/groq/script`, {
       method: "POST",
       body: JSON.stringify({ marker, ...script }),

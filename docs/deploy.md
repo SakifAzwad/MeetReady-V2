@@ -333,6 +333,8 @@ Without this step everything still works: bookings just have no brief.
    - **Why Production only:** previews then have no AI, like local dev and the tests: nothing spends the free
      quota except real bookings.
    - `AI_MODEL` isn't needed: the default is `openai/gpt-oss-120b`.
+   - **Never add `GROQ_BASE_URL` on Vercel** (Day 20). It exists only so the E2E tests can point the app at a fake
+     Groq. Set in Production, guests' messages and notes would go to whatever address it holds.
 5. **Deploy** (push Day 18). Migration 0008 runs first in the build.
 6. **Check it works:**
    1. From a private window, book yourself on `/sakifazwad18/intro`, with your own email, and type in **Notes**:
@@ -355,21 +357,24 @@ Without this step everything still works: bookings just have no brief.
 8. **If a brief is missing:** Inngest → the run's `brief` step says why (`limited` = our daily budget, `ai_off` = no
    key in Production, `failed` = the model failed; Sentry has it, tagged `ai-brief`). The `ai_calls` table shows
    every call's outcome.
-9. **Booking assistant (since Day 20): check it once after deploying.** Same key, nothing to set up.
+9. **Booking assistant (since Day 20): check it once after deploying.** Same key, nothing to set up. Check on the
+   production address: previews have no box, because the key is Production only (step 16.4).
    1. From a private window, open `/sakifazwad18/intro`. The **Tell us when suits you** box is above the daylight
       band. (No box = no `GROQ_API_KEY` in Production.)
    2. Type "next Tuesday afternoon" → **Find times**. After a few seconds: a short reply, "Reply written by AI",
       and up to three times on Tuesday between 12:00 and 17:00 on your clock.
    3. Click one: the calendar moves to that day and the time is selected in the grid. Press **Continue**: the
       normal form. (No need to book.)
-   4. Type "Wednesday 10am, I'm in London" → the times say **In London time**; clicking one switches **Times
+   4. Click the **×** at the end of the box (**Clear**): the text, the reply and the suggested times go, the band
+      moves back up, and the time you picked stays selected. **Escape** in the box does the same.
+   5. Type "Wednesday 10am, I'm in London" → the times say **In London time**; clicking one switches **Times
       shown in** to London.
-   5. **Neon → SQL Editor (`production`):**
+   6. **Neon → SQL Editor (`production`):**
       ```sql
       select feature, outcome, input_tokens, duration_ms from ai_calls order by created_at desc limit 3;
       ```
       One `booking_assistant` row per request, `outcome = ok`, a couple of thousand input tokens.
-   6. **If it says "The assistant can't answer right now":** Sentry, tag `ai-assistant`. A burst of requests can
+   7. **If it says "The assistant can't answer right now":** Sentry, tag `ai-assistant`. A burst of requests can
       hit Groq's free limit (8,000 tokens a minute): wait a minute. The times grid works either way.
 
 ## Afterwards: how a change ships
@@ -410,5 +415,7 @@ the new column and write to both; later, drop the old one.
 - **Inngest shows the app as out of sync or its runs fail with 401:** the signing key in Vercel doesn't match the
   Inngest environment. Redeploy (the integration syncs again), or Apps → Sync app.
 - **Bookings have no AI brief:** see step 16.8. `ai_off` means `GROQ_API_KEY` isn't set for Production.
+- **No "Tell us when suits you" box on the booking page:** `GROQ_API_KEY` isn't set for this environment (previews
+  never have it). **"The assistant can't answer right now":** step 16.9.7.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo
   a migration, which is another reason migrations stay additive.

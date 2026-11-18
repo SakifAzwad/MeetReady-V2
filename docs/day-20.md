@@ -17,7 +17,9 @@
   Day 18's brief now runs its real path in E2E.
 - **Privacy page:** what the box sends to Groq, and what it doesn't. Policies dated 18 November 2026.
 - **Fixed on the way:** picking another day from the details form dropped what the guest had typed (story).
-- **Tests:** 618 unit tests (4 new) and 28 E2E tests (6 new), all green; the new E2E tests passed 3 times in a row.
+- **Follow-up (Sakif's idea): a Clear button (×) in the box.** One click, or Escape, empties it, answer
+  included: the band moves back up, and a new question starts clean.
+- **Tests:** 618 unit tests (4 new) and 29 E2E tests (7 new), all green; the new E2E tests passed 3 times in a row.
   Typecheck, lint, format, `drizzle-kit check` and the build are green.
 - **Setup:** none. No migration, no new package, nothing to set on Vercel (`GROQ_BASE_URL` is for tests only).
   After deploying, run the new runbook check (step 16.9).
@@ -130,6 +132,24 @@ docs/deploy.md                                # step 16.9: check the assistant a
 - **The model id stays the production one** (`AI_MODEL` empty → `openai/gpt-oss-120b`), so the AI SDK builds the
   same request shape it sends to Groq: strict JSON schema for the brief, tools for the assistant.
 
+### Follow-up: one Clear button, not two controls (Sakif's idea, option A)
+
+- **Sakif asked for two things:** a × to clear the text for another search, and a way to dismiss the suggestions
+  when picking from the calendar instead (so the band moves back up).
+- **One control does both:** Clear empties the text, the reply and the suggestions, and puts the cursor back in
+  the input. For a new search, the old suggestions would be replaced anyway; for "I'll pick myself", that's the
+  dismissal. Two buttons ("clear text" and "hide suggestions") would make the guest tell them apart for a
+  difference that doesn't matter.
+- **Shown only when there's something to clear.** Escape does the same from the keyboard.
+- **Our own button, not `type="search"`:** the browser's built-in clear button looks different in Chrome and
+  Safari, and Firefox has none. The icon is lucide's `X` (no emoji in this design), named "Clear" for screen
+  readers.
+- **The grid's selection is kept:** a time the guest already picked belongs to the grid, not to the box.
+- **Not automatic:** the suggestions don't hide when the guest picks a time by hand. They may be comparing the two;
+  the box changes only when they ask it to.
+- **Clear while waiting cancels the answer:** requests are counted (`requests` ref), and an answer for an older
+  request is dropped (story).
+
 ## 2. Likely interview questions
 
 - **"How does the AI's answer reach your UI without trusting it?"** The suggestions come from our tool's results,
@@ -188,6 +208,18 @@ docs/deploy.md                                # step 16.9: check the assistant a
 - **What I did:** three columns always (there are never more than three), no wrapping inside a button, a smaller
   time on narrow screens. Checked at 320, 360 and 390 pixels: no sideways overflow, one line each.
 - **Lesson:** look at the screen, not just the tests: the E2E tests passed with all three layouts.
+
+### Clear, then the answer arrives anyway
+
+- **What happened:** a model answer takes a few seconds. Clearing during that time would empty the box, and then
+  the old request's answer would land in it a moment later, as if Clear hadn't worked.
+- **What I did:** each request takes a number; Clear and every new question move the counter on, and an answer
+  whose number isn't the latest is dropped. The fake Groq got a `delayMs` option, and a test presses Clear while
+  "Looking for times…" shows, waits past the delay and checks the reply never appears. Removing the one-line guard
+  made it fail (`Received: 1`), so the test is real. The suggestion pick has the same guard (`picks`), for the
+  same reason.
+- **Lesson:** anything async that the user can cancel or overtake needs a way to recognise a stale answer. A
+  counter is the simplest: no abort plumbing, and it works for server actions, which can't be aborted.
 
 ## Next
 

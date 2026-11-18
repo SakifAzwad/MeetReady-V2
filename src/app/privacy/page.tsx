@@ -64,6 +64,15 @@ export default function PrivacyPage() {
             Groq isn&apos;t allowed to use it to train models, and MeetReady has asked Groq not to keep it
             (Zero Data Retention). The brief is stored with the booking and shown only to the host.
           </li>
+          <li id="booking-assistant">
+            <strong>Finding a time by describing it (&ldquo;Tell us when suits you&rdquo;):</strong> what you
+            type in that box and your timezone are sent to Groq, with the meeting type, the host&apos;s first
+            name and the free times MeetReady finds for your request. Groq&apos;s model suggests times; it
+            can&apos;t book anything. Your name and email address are not sent: the box comes before the form.
+            MeetReady doesn&apos;t store what you type there, only that a request was made and how long it
+            took. The same Groq terms apply: no training, not kept (Zero Data Retention). The box is optional:
+            every time is also on the page to pick yourself.
+          </li>
           <li>
             <strong>Emails:</strong> a confirmation with a calendar invite, a private link to cancel or move
             the meeting, and reminders a day and an hour before it. The link is stored twice, neither time as
@@ -155,7 +164,8 @@ export default function PrivacyPage() {
           </li>
           <li>Sentry: error reports, stripped as described above.</li>
           <li>
-            Groq: writing the host&apos;s meeting brief from a guest&apos;s notes and answers (see above).
+            Groq: writing the host&apos;s meeting brief from a guest&apos;s notes and answers, and suggesting
+            times from what a guest types in &ldquo;Tell us when suits you&rdquo; (see above).
           </li>
           <li>Google: sign-in and, if connected, Google Calendar.</li>
         </ul>

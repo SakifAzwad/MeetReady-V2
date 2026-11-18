@@ -45,6 +45,8 @@ export function TimeList({
   onContinue,
   label,
   focusOnMount = false,
+  focusSlot = null,
+  onFocused,
 }: {
   slots: Slot[];
   timeZone: string;
@@ -56,6 +58,13 @@ export function TimeList({
   label: string;
   /** Coming back from the details step: put keyboard focus back on the chosen time. */
   focusOnMount?: boolean;
+  /**
+   * A time chosen outside the list (the assistant's suggestions, Day 20): focus
+   * it as soon as it's on screen (its month may still be loading), which also
+   * scrolls it into view on a phone. Then onFocused, so it happens once.
+   */
+  focusSlot?: Slot | null;
+  onFocused?: () => void;
 }) {
   const showHost = slots[0]
     ? formatTime(slots[0].start, hostTimeZone) !== formatTime(slots[0].start, timeZone)
@@ -85,6 +94,16 @@ export function TimeList({
     // Mount only: focus once when the list comes back, not on every re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!focusSlot) return;
+    const button = groupRef.current?.querySelector<HTMLButtonElement>(
+      `button[data-start="${focusSlot.start.toISOString()}"]`,
+    );
+    if (!button) return; // not rendered yet: runs again when the slots arrive
+    button.focus();
+    onFocused?.();
+  }, [focusSlot, slots, onFocused]);
 
   const rows = (group: Slot[], continuesFrom?: Slot) => (
     <Rows
@@ -226,6 +245,7 @@ function Rows({
                     <button
                       type="button"
                       aria-pressed={isSelected}
+                      data-start={slot.start.toISOString()}
                       onClick={() => onSelect(slot)}
                       className={cn(
                         "focus-visible:ring-ring/50 flex min-w-0 flex-1 flex-col items-center rounded-lg border px-2 py-2 transition-colors outline-none focus-visible:ring-[3px]",

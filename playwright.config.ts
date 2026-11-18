@@ -6,6 +6,8 @@ import {
   E2E_PORT,
   FAKE_GOOGLE_PORT,
   FAKE_GOOGLE_URL,
+  FAKE_GROQ_PORT,
+  FAKE_GROQ_URL,
 } from "./e2e/support/config";
 
 /*
@@ -56,6 +58,13 @@ export default defineConfig({
       reuseExistingServer: false,
       env: { FAKE_GOOGLE_PORT: String(FAKE_GOOGLE_PORT) },
     },
+    // A fake Groq (Day 20): CI never calls a real model. Tests script what the "model" says.
+    {
+      command: "node e2e/support/fake-groq.mjs",
+      url: `${FAKE_GROQ_URL}/__fake/health`,
+      reuseExistingServer: false,
+      env: { FAKE_GROQ_PORT: String(FAKE_GROQ_PORT) },
+    },
     {
       command: [
         "node e2e/support/prepare-db.mts",
@@ -88,8 +97,11 @@ export default defineConfig({
         INNGEST_DEV: "",
         INNGEST_EVENT_KEY: "",
         INNGEST_SIGNING_KEY: "",
-        // Empty = no AI calls (Day 18): tests never reach a real model, even with a key in .env.local.
-        GROQ_API_KEY: "",
+        // AI on, but pointed at the fake Groq (Day 20): tests never reach a real model, even with a
+        // real key in .env.local. The key is a placeholder; the fake only checks there is one.
+        GROQ_API_KEY: "e2e-fake-key",
+        GROQ_BASE_URL: `${FAKE_GROQ_URL}/openai/v1`,
+        AI_MODEL: "",
       },
     },
   ],

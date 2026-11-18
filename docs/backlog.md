@@ -1,21 +1,20 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 19).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 20).
 
 ## Next, in order
 
-1. **Push Day 19**, then `npm run eval` once (Sakif).
-2. **Day 20: the assistant's UI.** A box on the public booking page; a suggestion selects that time in the widget
-   and the guest books through the normal form. A fake Groq for E2E, the privacy page, the runbook check.
-3. **Day 21: MCP server** (check times and book from Claude or ChatGPT).
+1. **Push Day 20**, then runbook step 16.9 on the live site (Sakif).
+2. **Day 21: MCP server** (check times and book from Claude or ChatGPT).
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
 rate limiting (Day 14); Google Calendar busy times (Day 15); privacy policy, terms and a published Google app
 (Day 15 follow-up); bookings written to Google Calendar with Meet links (Day 16); background jobs with automatic
 retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI meeting brief on Groq (Day 18);
-booking assistant on the server, suggest-only (Day 19).
+booking assistant on the server, suggest-only (Day 19); its box on the booking page, with a fake Groq for E2E
+(Day 20).
 
 ## Ideas from reviews, deferred
 
@@ -35,6 +34,7 @@ booking assistant on the server, suggest-only (Day 19).
 | **Brief in the host's language**                                                 | Day 18 | English only today (an eval checks a Bangla booking gets English). Needs a language setting on the host.                                                                                                                                                                               | With English + Bangla (Phase 3)                    |
 | **Assistant remembers the conversation** (follow-ups like "later that day")      | Day 19 | One message per request keeps it stateless: no history to store, cap or inject into. A follow-up means sending past turns back each time, which multiplies tokens on the free plan.                                                                                                    | If guests often rephrase                           |
 | **More AI throughput** (Groq Dev tier, or a smaller model for the assistant)     | Day 19 | The free plan's 8,000 tokens a minute is about 2–3 assistant requests a minute, app-wide; past that, guests get "try again" and briefs go missing. Paying, or a lighter model re-checked with the evals, lifts it.                                                                     | If `ai_calls` shows `failed` from 429s             |
+| **Assistant when rescheduling** (the guest's manage page)                        | Day 20 | The action has no reschedule token, so the booking's own time would count as busy, and the slots it suggests wouldn't match the grid there (which frees it). Needs the token passed through, checked like `/api/slots` does.                                                           | If guests reschedule often                         |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                  | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                              | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)       | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                      | As polish, after the AI features                   |
 | **Guest calendar overlay** ("check my conflicts")                                | Day 9  | Reuses the host Google Calendar sync, which matters more and comes first. Calendar access is a sensitive Google permission: until the app passes Google's review, users see an "unverified app" warning. Must stay optional, read-only, never stored.                                  | After host Google Calendar sync                    |
@@ -93,7 +93,7 @@ booking assistant on the server, suggest-only (Day 19).
   - recurring bookings;
   - English and Bangla.
 - **AI:**
-  - booking assistant (server Day 19, suggest-only; UI Day 20);
+  - booking assistant (done: server Day 19, suggest-only; box on the booking page Day 20);
   - MCP server (check times and book from Claude or ChatGPT);
   - meeting brief for the host (done, Day 18);
   - email-to-booking;

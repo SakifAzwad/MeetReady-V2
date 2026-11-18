@@ -71,6 +71,15 @@ describe("parseEnv", () => {
     );
   });
 
+  it("uses Groq's own API unless a base URL is set (only the E2E tests' fake Groq sets one)", () => {
+    expect(parseEnv(base).GROQ_BASE_URL).toBeUndefined();
+    expect(parseEnv({ ...base, GROQ_BASE_URL: "" }).GROQ_BASE_URL).toBeUndefined();
+    expect(parseEnv({ ...base, GROQ_BASE_URL: "http://localhost:3102/openai/v1" }).GROQ_BASE_URL).toBe(
+      "http://localhost:3102/openai/v1",
+    );
+    expect(() => parseEnv({ ...base, GROQ_BASE_URL: "not a url" })).toThrow();
+  });
+
   describe("Redis for rate limiting", () => {
     it("is optional: unset or empty means limits are kept in memory", () => {
       expect(parseEnv(base).REDIS).toBeUndefined();

@@ -1,5 +1,5 @@
 import { TZDate } from "@date-fns/tz";
-import { addDaysToKey, dayOfWeek, toDateKey, type DateKey } from "./time";
+import { addDaysToKey, dateKeyInZone, dayOfWeek, toDateKey, type DateKey } from "./time";
 
 /*
  * Helpers for the guest's month view. Everything here is in the GUEST's
@@ -28,6 +28,17 @@ export function monthRangeInZone({ year, month }: YearMonth, timeZone: string): 
     from: new Date(new TZDate(year, month - 1, 1, 0, 0, timeZone).getTime()),
     to: new Date(new TZDate(next.year, next.month - 1, 1, 0, 0, timeZone).getTime()),
   };
+}
+
+/**
+ * Where an instant sits in the guest's month view: its day and month on the
+ * clock it's shown in (Day 20: a time the assistant suggested is selected in
+ * the widget). 30 Nov 20:00 UTC is 1 December in Dhaka, so the widget must
+ * turn to December, not stay in November.
+ */
+export function placeInCalendar(instant: Date, timeZone: string): { date: DateKey; month: YearMonth } {
+  const date = dateKeyInZone(instant, timeZone);
+  return { date, month: { year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) } };
 }
 
 /**

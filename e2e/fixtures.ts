@@ -10,7 +10,14 @@ import {
 } from "@playwright/test";
 import { symmetricEncrypt } from "better-auth/crypto";
 import pg from "pg";
-import { BASE_URL, E2E_AUTH_SECRET, E2E_DATABASE_URL, FAKE_GOOGLE_URL, OUTBOX } from "./support/config";
+import {
+  BASE_URL,
+  E2E_AUTH_SECRET,
+  E2E_DATABASE_URL,
+  FAKE_GOOGLE_URL,
+  FAKE_GROQ_URL,
+  OUTBOX,
+} from "./support/config";
 
 /*
  * Fixtures: what every test gets, set up fresh and torn down after.
@@ -266,5 +273,39 @@ export const fakeGoogle = {
   async wasRevoked(token: string): Promise<boolean> {
     const res = await fetch(`${FAKE_GOOGLE_URL}/__fake/revoked?token=${encodeURIComponent(token)}`);
     return ((await res.json()) as { revoked: boolean }).revoked;
+  },
+};
+
+// ─── Groq (Day 20) ───────────────────────────────────────────────────────────────
+
+/** The findTimes arguments, as the model sends them (src/server/ai/assistant.ts). */
+export type FakeSearch = {
+  from: string;
+  to: string;
+  earliest: string | null;
+  latest: string | null;
+  timeZone: string | null;
+};
+
+/**
+ * Scripts the fake Groq (e2e/support/fake-groq.mjs). A script is found by a
+ * marker the test puts in the guest's message, so parallel tests can't pick
+ * up each other's. The app's findTimes tool really runs: only the model's
+ * words are scripted.
+ */
+export const fakeGroq = {
+  /** A unique word for the guest's message. */
+  marker: () => `ref-${randomBytes(4).toString("hex")}`,
+  async script(marker: string, script: { search?: FakeSearch | null; reply?: string; fail?: boolean }) {
+    const res = await fetch(`${FAKE_GROQ_URL}/__fake/groq/script`, {
+      method: "POST",
+      body: JSON.stringify({ marker, ...script }),
+    });
+    expect(res.ok).toBe(true);
+  },
+  /** How many model requests carried this marker. */
+  async calls(marker: string): Promise<number> {
+    const res = await fetch(`${FAKE_GROQ_URL}/__fake/groq/calls?marker=${encodeURIComponent(marker)}`);
+    return ((await res.json()) as { calls: number }).calls;
   },
 };

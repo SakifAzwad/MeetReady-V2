@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useForm, type Path, type Resolver } from "react-hook-form";
 import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,11 @@ export const EMPTY_DETAILS: GuestDraft = { guestName: "", guestEmail: "", guestN
 /** The host's questions, and which version of them the form was built from. */
 export type BookingQuestions = { questions: Question[]; questionsVersion?: string };
 
+/** Lets the widget read what's typed when the guest leaves the form another way than "Other times". */
+export type GuestFormHandle = { draft: () => GuestDraft };
+
 export function GuestForm({
+  ref,
   slot,
   timeZone,
   hour12,
@@ -76,6 +80,7 @@ export function GuestForm({
   onSlotGone,
   onQuestionsChanged,
 }: {
+  ref?: React.Ref<GuestFormHandle>;
   slot: Slot;
   timeZone: string;
   hour12: boolean;
@@ -102,6 +107,7 @@ export function GuestForm({
     mode: "onTouched",
   });
   const { register, formState, setError } = form;
+  useImperativeHandle(ref, () => ({ draft: () => form.getValues() }), [form]);
   const headingRef = useStepFocus(() => form.setFocus("guestName"));
 
   const onSubmit = form.handleSubmit(async () => {

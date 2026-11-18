@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 19)
+# Handoff: starting a new chat (after Day 20)
 
-Read this first in a new chat. It replaces the long Days 1–19 conversations. Details live in `docs/day-01.md` …
-`docs/day-19.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–20 conversations. Details live in `docs/day-01.md` …
+`docs/day-20.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -85,8 +85,18 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
     Shown times = `pickSuggestions` over the last non-empty tool result (3, spread over days/hours), never the
     model's text; host and event type come from the URL. Stateless: one message (2–300 chars) per request. Limits
     `ai_assistant_ip` 10/10 min, `ai_assistant_all` 100/day, `ai_assistant_host` 200/day; `ai_calls` feature
-    `booking_assistant`. Tests: `mockModelSteps` (scripted tool calls); 8 evals. No UI yet (Day 20).
-- **Numbers:** 614 unit tests + 22 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
+    `booking_assistant`. Tests: `mockModelSteps` (scripted tool calls); 8 evals.
+  - Booking assistant on the page (Day 20): `assistant-box.tsx` ("Tell us when suits you") at the top of the times
+    column, only when `assistantEnabled` and never when rescheduling. A note under it links to `/privacy#booking-assistant`.
+    Reply shown as text, "Reply written by AI"; up to 3 suggestion buttons (`aria-pressed`). `pickSuggestion` in the
+    widget: `placeInCalendar` → month + day + slot, switches the page's timezone to the one searched ("In London
+    time"), goes back from the details step keeping what's typed (`GuestForm` exposes `draft()` via
+    `useImperativeHandle`; picking another day keeps it too, a Day 20 fix), focuses the time (`TimeList`
+    `focusSlot` → `onFocused`), then re-reads the month (`fetchQuery`, `staleTime: 0`): gone → "Someone just
+    booked that time". Late answers for older picks are ignored (`picks` ref). Fake Groq for E2E
+    (`e2e/support/fake-groq.mjs`, :3102, `GROQ_BASE_URL`): `fakeGroq.script(marker, { search, reply, fail })`,
+    fixed brief for any JSON-schema request, 500 for an unscripted assistant request.
+- **Numbers:** 618 unit tests + 28 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
   and build all green. 9 migrations (0000–0008).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -96,10 +106,8 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 19, then `npm run eval` once locally (14 evals).
-2. **Day 20: the assistant's UI** on the public booking page (a suggestion selects that time in the widget), a fake
-   Groq for E2E (`GROQ_BASE_URL`, like the fake Google), the privacy page (the guest's message goes to Groq).
-   **Day 21: MCP server.** Opinions first, as always.
+1. **Sakif:** push Day 20, then runbook step 16.9 on the live page.
+2. **Day 21: MCP server** (check times and book from Claude or ChatGPT). Opinions first, as always.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
@@ -146,7 +154,8 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
   `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`), `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or the `UPSTASH_REDIS_REST_*`
   names; both or neither), `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` + `INNGEST_SERVE_ORIGIN` (Production; or `INNGEST_DEV=1`
   locally), `GROQ_API_KEY` (Production; unset = AI off) + optional `AI_MODEL`.
-  E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101). Local dev uses the Neon `dev` branch, never `production`.
+  E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101), `GROQ_BASE_URL` (a fake Groq
+  on :3102; E2E sets `GROQ_API_KEY` to a placeholder, so AI is on there). Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
 
@@ -221,3 +230,8 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
   What's shown or acted on comes from tool results, never the model's text. Groq free = 8,000 tokens/minute per
   model: evals retry 429s (`src/test/eval-rate-limit.ts`, a few minutes per run); the app doesn't. Fields a model fills under a strict
   schema are required + nullable, never `.optional()`. Tools read; writing stays in our own forms.
+- **AI in E2E (Day 20):** AI is ON in E2E (fake Groq), so every booking with notes gets the fake's fixed brief. An
+  assistant test scripts the fake with a random marker in the guest's message; the tool and database stay real.
+  The assistant searches 14 days from the server's real clock, so its specs pick a weekday 8–10 days ahead
+  (the one exception to "pick a fixed day").
+- **Before claiming existing behaviour, read it, and make a new test fail once on the old code** (Day 20 story).

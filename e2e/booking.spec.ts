@@ -130,3 +130,20 @@ test("booking emails: guest and host each get one with a calendar invite", async
   expect(hostMail!.html).not.toMatch(/\/booking\/[A-Za-z0-9_-]{43}/); // the host never gets it
   expect(hostMail!.html).toContain(email);
 });
+
+test("picking another day from the details form keeps what the guest typed", async ({ host, newGuest }) => {
+  const guest = await newGuest();
+  await chooseTime(guest, host);
+  const email = guestEmail("Ada");
+  await fillDetails(guest, "Ada Lovelace", email);
+
+  // Another day in the calendar, while the form is open: back to that day's times.
+  const days = guest.getByRole("button", { name: /\d+ times? available$/ });
+  await days.nth(1).click();
+  await timeButtons(guest).first().click();
+  await guest.getByRole("button", { name: "Continue" }).click();
+
+  // Day 20 fix: these used to come back empty.
+  await expect(guest.getByLabel("Name", { exact: true })).toHaveValue("Ada Lovelace");
+  await expect(guest.getByLabel("Email", { exact: true })).toHaveValue(email);
+});

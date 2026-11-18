@@ -75,6 +75,11 @@ export function parseEnv(source: Record<string, string | undefined>) {
        */
       GROQ_API_KEY: emptyAsUnset(z.string().min(1).optional()),
       AI_MODEL: emptyAsUnset(z.string().min(1).default("openai/gpt-oss-120b")),
+      /**
+       * Day 20: where Groq's API lives. Unset = the real one. Only the E2E tests set it, to a local
+       * fake Groq (e2e/support/fake-groq.mjs), so CI never calls a real model. Like the Google URLs.
+       */
+      GROQ_BASE_URL: emptyAsUnset(z.url().optional()),
       /** Rate-limit store (see redisConfig): both or neither, so a half-pasted pair fails at startup, not per request. */
       REDIS: z.preprocess(
         () => redisConfig(source),

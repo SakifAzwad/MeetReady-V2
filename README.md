@@ -96,6 +96,9 @@ npm run test:e2e                                                       # wipes a
 - [Day 19: Booking assistant, server side](docs/day-19.md): a guest's sentence becomes a search the model writes
   and code checks, run through our own slot function; up to three real times come from the tool, never the model's
   text. Suggest-only, stateless, its own limits, a scripted fake model, and evals.
+- [Day 20: Booking assistant on the page](docs/day-20.md): "Tell us when suits you" above the times; a suggestion
+  selects that time in the grid (its day, its month, the guest's named city), a fresh read catches a time taken
+  since, and the guest still confirms through the form. A fake Groq server makes the whole path testable in E2E.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

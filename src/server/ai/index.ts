@@ -15,7 +15,10 @@ import type { BriefDeps } from "./briefs";
  * from Groq to another provider is this file and two env vars.
  */
 
-const model = env.GROQ_API_KEY ? createGroq({ apiKey: env.GROQ_API_KEY })(env.AI_MODEL) : null;
+// baseURL is undefined (= Groq's own) everywhere except the E2E tests, which point it at a fake (Day 20).
+const model = env.GROQ_API_KEY
+  ? createGroq({ apiKey: env.GROQ_API_KEY, baseURL: env.GROQ_BASE_URL })(env.AI_MODEL)
+  : null;
 
 export const briefDeps: BriefDeps = {
   db,

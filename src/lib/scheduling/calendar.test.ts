@@ -6,6 +6,7 @@ import {
   formatTimeRange,
   monthGrid,
   monthRangeInZone,
+  placeInCalendar,
 } from "./calendar";
 
 describe("monthRangeInZone", () => {
@@ -70,5 +71,39 @@ describe("12/24-hour formatting", () => {
     ["2026-11-09T03:00:00Z", "2026-11-09T11:00:00Z", false, "03:00–11:00"],
   ])("range %s–%s (12h: %s) -> %s", (a, b, hour12, expected) => {
     expect(formatTimeRange(at(a), at(b), "UTC", hour12)).toBe(expected);
+  });
+});
+
+describe("placeInCalendar", () => {
+  it("gives the day and month on the viewer's clock", () => {
+    const at = new Date("2026-11-24T08:00:00Z");
+    expect(placeInCalendar(at, "Asia/Dhaka")).toEqual({
+      date: "2026-11-24",
+      month: { year: 2026, month: 11 },
+    });
+    expect(placeInCalendar(at, "America/Los_Angeles")).toEqual({
+      date: "2026-11-24",
+      month: { year: 2026, month: 11 },
+    });
+  });
+
+  it("turns the month when the time is already the 1st on that clock", () => {
+    const at = new Date("2026-11-30T20:00:00Z");
+    expect(placeInCalendar(at, "Asia/Dhaka")).toEqual({
+      date: "2026-12-01",
+      month: { year: 2026, month: 12 },
+    });
+    expect(placeInCalendar(at, "Europe/London")).toEqual({
+      date: "2026-11-30",
+      month: { year: 2026, month: 11 },
+    });
+  });
+
+  it("goes back a day (and a year) west of UTC", () => {
+    const at = new Date("2027-01-01T03:00:00Z");
+    expect(placeInCalendar(at, "America/New_York")).toEqual({
+      date: "2026-12-31",
+      month: { year: 2026, month: 12 },
+    });
   });
 });

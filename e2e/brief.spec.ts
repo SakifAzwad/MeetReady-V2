@@ -1,11 +1,13 @@
-import { book, guestEmail } from "./support/booking";
+import { book, chooseTime, fillDetails, guestEmail } from "./support/booking";
 import { expect, test } from "./fixtures";
 
 /*
- * Day 18: the AI meeting brief on the host's Bookings page. The E2E server has
- * no AI key (tests never call a real model), so the brief is stored directly,
- * as the background job would after a successful call. What's tested here is
- * what the host sees, and that it's clearly labelled as AI-written.
+ * Day 18: the AI meeting brief on the host's Bookings page. The first test
+ * stores a brief directly, to check what the host sees (labelled as
+ * AI-written, shown as text). Since Day 20 the E2E server's AI talks to a fake
+ * Groq (e2e/support/fake-groq.mjs), which answers every brief request with
+ * the same valid brief: the second test runs the real path, from booking to
+ * job to model to the page.
  */
 
 test("the host sees the AI brief with the booking, labelled as AI-written, above the guest's own words", async ({
@@ -45,4 +47,44 @@ test("the host sees the AI brief with the booking, labelled as AI-written, above
     .getByRole("listitem")
     .filter({ has: brief })
     .screenshot({ path: testInfo.outputPath("booking-with-brief.png") });
+});
+
+test("a booking with notes gets its brief through the real job (the fake Groq plays the model)", async ({
+  host,
+  db,
+  newGuest,
+  hostPage,
+}) => {
+  const guest = await newGuest();
+  await chooseTime(guest, host);
+  await fillDetails(guest, "Grace Hopper", guestEmail("Grace"));
+  await guest.getByLabel(/Anything to share/).fill("I'd like to talk about a compiler project.");
+  await guest.getByRole("button", { name: "Confirm booking" }).click();
+  await expect(guest.getByRole("heading", { name: /^You're booked/ })).toBeVisible();
+
+  // Jobs run inline in E2E, after the response: wait for the brief, then for the log line.
+  await expect
+    .poll(
+      async () =>
+        (
+          await db.query(
+            "select count(*)::int as n from booking_briefs b join bookings k on k.id = b.booking_id where k.host_id = $1",
+            [host.id],
+          )
+        ).rows[0].n,
+    )
+    .toBe(1);
+  const calls = await db.query("select feature, outcome from ai_calls where host_id = $1", [host.id]);
+  expect(calls.rows).toEqual([{ feature: "meeting_brief", outcome: "ok" }]);
+
+  await hostPage.goto("/dashboard/bookings");
+  const brief = hostPage.getByRole("region", { name: "Meeting brief" });
+  await expect(brief.getByText("Written by AI from Grace's answers")).toBeVisible();
+  // FAKE_BRIEF in e2e/support/fake-groq.mjs.
+  await expect(brief.getByText(/talk about working together/)).toBeVisible();
+  await expect(brief.getByRole("listitem")).toHaveText([
+    "Introductions",
+    "What the guest needs",
+    "Next steps",
+  ]);
 });

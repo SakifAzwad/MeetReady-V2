@@ -4,6 +4,7 @@ import { Reveal } from "@/components/motion";
 import { PoweredBy } from "@/components/site/powered-by";
 import { db } from "@/db";
 import { LOCATION_LABELS } from "@/lib/validation/event-type";
+import { assistantEnabled } from "@/server/ai";
 import { getPublicEventType } from "@/server/booking";
 import { BookingWidget } from "./booking-widget";
 
@@ -47,6 +48,8 @@ async function BookingCard({ params }: { params: Params }) {
         locationLabel: LOCATION_LABELS[eventType.locationType],
       }}
       questions={{ questions: eventType.questions, questionsVersion: eventType.questionsVersion }}
+      // Day 20: the "Tell us when suits you" box. No AI key (local dev, previews) = no box.
+      assistant={assistantEnabled}
     />
   );
 }

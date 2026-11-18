@@ -14,6 +14,10 @@ export const BASE_URL = `http://localhost:${E2E_PORT}`;
 export const FAKE_GOOGLE_PORT = 3101;
 export const FAKE_GOOGLE_URL = `http://localhost:${FAKE_GOOGLE_PORT}`;
 
+/** The fake Groq the E2E server's AI talks to (e2e/support/fake-groq.mjs, Day 20). */
+export const FAKE_GROQ_PORT = 3102;
+export const FAKE_GROQ_URL = `http://localhost:${FAKE_GROQ_PORT}`;
+
 /** Wiped and re-migrated on every run (e2e/support/prepare-db.mts refuses names without "e2e"). */
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/meetready_e2e";

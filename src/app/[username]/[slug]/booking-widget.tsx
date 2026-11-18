@@ -1,10 +1,11 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addTransitionType,
   startTransition,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   ViewTransition,
@@ -17,6 +18,7 @@ import {
   formatMonth,
   formatTime,
   monthRangeInZone,
+  placeInCalendar,
   type YearMonth,
 } from "@/lib/scheduling/calendar";
 import type { Slot } from "@/lib/scheduling/generate-slots";
@@ -25,6 +27,7 @@ import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { cn } from "@/lib/utils";
+import { AssistantBox } from "./assistant-box";
 import { DaylightBand } from "./daylight-band";
 import { FactsPanel, type EventInfo } from "./facts-panel";
 import { MonthCalendar } from "./month-calendar";
@@ -37,6 +40,7 @@ import {
   type Booked,
   type BookingQuestions,
   type GuestDraft,
+  type GuestFormHandle,
 } from "./steps";
 import { TimeList } from "./time-list";
 
@@ -60,6 +64,8 @@ type Props = {
   reschedule?: Reschedule;
   /** "embedded" drops the facts panel, for pages that show their own. */
   layout?: "full" | "embedded";
+  /** Show the booking assistant (Day 20): only when the server has an AI key, and never when rescheduling. */
+  assistant?: boolean;
 };
 
 const noSubscription = () => () => {};
@@ -144,6 +150,18 @@ class RateLimitedError extends Error {
   }
 }
 
+/** One cache entry per month (as the guest sees it), timezone and reschedule token. */
+const calendarKey = (event: EventInfo, from: Date, to: Date, rescheduleToken?: string) => [
+  "calendar",
+  event.username,
+  event.slug,
+  from.toISOString(),
+  to.toISOString(),
+  rescheduleToken ?? null,
+];
+
+const TAKEN = "Someone just booked that time. Pick another one.";
+
 async function fetchCalendar(
   event: EventInfo,
   from: Date,
@@ -176,9 +194,11 @@ function Scheduler({
   questions,
   reschedule,
   layout,
+  assistant,
   timeZone,
   onTimeZoneChange,
 }: Props & { timeZone: string; onTimeZoneChange: (tz: string) => void }) {
+  const queryClient = useQueryClient();
   const [hour12, setHour12] = useHour12();
   const [now] = useState(() => new Date());
   const today = dateKeyInZone(now, timeZone);
@@ -199,18 +219,17 @@ function Scheduler({
   const [formNotice, setFormNotice] = useState<string | null>(null);
   // True right after coming back from the details step, so the list puts focus on the chosen time.
   const [returned, setReturned] = useState(false);
+  // A time picked from the assistant's suggestions, waiting for the grid to show it so it can take focus.
+  const [focusSlot, setFocusSlot] = useState<Slot | null>(null);
+  // Reads what the guest has typed in the details form, so leaving it for another time keeps it.
+  const guestForm = useRef<GuestFormHandle>(null);
+  // Counts the guest's picks: a late "is it still free?" answer for an older pick is ignored.
+  const picks = useRef(0);
 
   // The month as the GUEST sees it, turned into UTC instants for the API.
   const { from, to } = monthRangeInZone(visible, timeZone);
   const calendar = useQuery({
-    queryKey: [
-      "calendar",
-      event.username,
-      event.slug,
-      from.toISOString(),
-      to.toISOString(),
-      reschedule?.token ?? null,
-    ],
+    queryKey: calendarKey(event, from, to, reschedule?.token),
     queryFn: () => fetchCalendar(event, from, to, reschedule?.token),
     // TanStack retries 3 times by default; on a 429 that only spends more of the limit.
     retry: (failures, error) => !(error instanceof RateLimitedError) && failures < 3,
@@ -226,6 +245,54 @@ function Scheduler({
 
   const aside =
     layout === "embedded" ? null : <FactsPanel event={event} timeZone={timeZone} hour12={hour12} />;
+  /** What's typed in the details form right now, when it's open (picking another day or time keeps it). */
+  const typedDetails = () => (step === "details" ? guestForm.current?.draft() : undefined);
+
+  /**
+   * A suggestion from the assistant (Day 20): select that time in the grid,
+   * on its own day and month, on the clock it was found on (the guest may
+   * have named a city). It doesn't go to the form: the guest sees the time in
+   * context and presses Continue. Then a fresh read of that month: the
+   * suggestion may be minutes old, and the grid's copy up to 30 seconds old.
+   */
+  const pickSuggestion = (slot: Slot, inZone: string) => {
+    const pick = ++picks.current;
+    const typed = typedDetails();
+    const place = placeInCalendar(slot.start, inZone);
+    const select = () => {
+      if (inZone !== timeZone) onTimeZoneChange(inZone);
+      if (typed) setDraft(typed);
+      setFormNotice(null);
+      setNotice(null);
+      setMonth(place.month);
+      setSelectedDate(place.date);
+      setSelectedSlot(slot);
+      setStep("pick");
+      setReturned(false);
+      setFocusSlot(slot);
+    };
+    if (step === "details") go("step-back", select);
+    else select();
+
+    const range = monthRangeInZone(place.month, inZone);
+    void queryClient
+      .fetchQuery({
+        queryKey: calendarKey(event, range.from, range.to, reschedule?.token),
+        queryFn: () => fetchCalendar(event, range.from, range.to, reschedule?.token),
+        staleTime: 0,
+      })
+      .then((fresh) => {
+        if (pick !== picks.current) return; // the guest has picked something else since
+        if (!fresh.slots.some((s) => s.start.getTime() === slot.start.getTime())) {
+          setSelectedSlot(null);
+          setFocusSlot(null);
+          setNotice(TAKEN);
+        }
+      })
+      // The grid shows its own "Couldn't load times"; the booking itself re-checks anyway.
+      .catch(() => {});
+  };
+
   const slotGone = (typed?: GuestDraft) =>
     go("step-back", () => {
       if (typed) setDraft(typed);
@@ -233,11 +300,7 @@ function Scheduler({
       setStep("pick");
       setSelectedSlot(null);
       setReturned(true);
-      setNotice(
-        typed
-          ? "Someone just booked that time. Pick another one: your details are kept."
-          : "Someone just booked that time. Pick another one.",
-      );
+      setNotice(typed ? "Someone just booked that time. Pick another one: your details are kept." : TAKEN);
     });
   const backToTimes = (typed?: GuestDraft) =>
     go("step-back", () => {
@@ -300,6 +363,20 @@ function Scheduler({
             </div>
           )}
 
+          {assistant && !reschedule && (
+            <div className={phoneHidden}>
+              <AssistantBox
+                username={event.username}
+                slug={event.slug}
+                hostName={event.hostName}
+                timeZone={timeZone}
+                hour12={hour12}
+                selected={selectedSlot}
+                onPick={pickSuggestion}
+              />
+            </div>
+          )}
+
           <div className={phoneHidden}>
             {activeDate && calendar.data ? (
               <DaylightBand
@@ -331,6 +408,7 @@ function Scheduler({
                 today={today}
                 canGoBack={compareMonths(visible, thisMonth) > 0}
                 onMonthChange={(m) => {
+                  picks.current++;
                   setMonth(m);
                   setSelectedDate(null);
                   setSelectedSlot(null);
@@ -339,13 +417,17 @@ function Scheduler({
                 availableDates={byDate}
                 activeDate={activeDate}
                 onSelect={(d) => {
+                  picks.current++;
+                  const typed = typedDetails();
                   const pickDay = () => {
+                    if (typed) setDraft(typed);
                     setSelectedDate(d);
                     setSelectedSlot(null);
                     setNotice(null);
                     setStep("pick");
                   };
-                  // Picking another day while filling in details slides back to that day's times.
+                  // Picking another day while filling in details slides back to that day's times,
+                  // keeping what was typed (Day 20 fix: it used to be dropped).
                   if (step === "details") go("step-back", pickDay);
                   else pickDay();
                 }}
@@ -391,6 +473,7 @@ function Scheduler({
                     <GuestForm
                       // A new version of the questions mounts a fresh form (schema and defaults rebuilt).
                       key={bookingQuestions.questionsVersion ?? "questions"}
+                      ref={guestForm}
                       slot={inDetails}
                       timeZone={timeZone}
                       hour12={hour12}
@@ -444,10 +527,14 @@ function Scheduler({
                       hour12={hour12}
                       selected={selectedSlot}
                       onSelect={(slot) => {
+                        picks.current++;
                         setSelectedSlot(slot);
                         setReturned(false);
+                        setFocusSlot(null);
                       }}
                       focusOnMount={returned}
+                      focusSlot={focusSlot}
+                      onFocused={() => setFocusSlot(null)}
                       onContinue={(slot) =>
                         go("step-forward", () => {
                           setSelectedSlot(slot);

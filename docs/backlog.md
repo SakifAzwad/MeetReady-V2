@@ -1,12 +1,13 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 20).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 21).
 
 ## Next, in order
 
-1. **Push Day 20**, then runbook step 16.9 on the live site (Sakif).
-2. **Day 21: MCP server** (check times and book from Claude or ChatGPT).
+1. **Push Day 21**, then runbook step 17 (connect Claude to production) (Sakif).
+2. **Day 22: `book_meeting`** over MCP (scope `bookings:write`): the guest's email says the host scheduled it, a
+   `source` column on bookings, no host questions, no AI brief, its own limits. Opinions first.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
@@ -14,7 +15,7 @@ rate limiting (Day 14); Google Calendar busy times (Day 15); privacy policy, ter
 (Day 15 follow-up); bookings written to Google Calendar with Meet links (Day 16); background jobs with automatic
 retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI meeting brief on Groq (Day 18);
 booking assistant on the server, suggest-only (Day 19); its box on the booking page, with a fake Groq for E2E
-(Day 20).
+(Day 20); an MCP server with OAuth (CIMD), a consent page and four read tools for AI assistants (Day 21).
 
 ## Ideas from reviews, deferred
 
@@ -35,6 +36,8 @@ booking assistant on the server, suggest-only (Day 19); its box on the booking p
 | **Assistant remembers the conversation** (follow-ups like "later that day")      | Day 19 | One message per request keeps it stateless: no history to store, cap or inject into. A follow-up means sending past turns back each time, which multiplies tokens on the free plan.                                                                                                    | If guests often rephrase                           |
 | **More AI throughput** (Groq Dev tier, or a smaller model for the assistant)     | Day 19 | The free plan's 8,000 tokens a minute is about 2–3 assistant requests a minute, app-wide; past that, guests get "try again" and briefs go missing. Paying, or a lighter model re-checked with the evals, lifts it.                                                                     | If `ai_calls` shows `failed` from 429s             |
 | **Assistant when rescheduling** (the guest's manage page)                        | Day 20 | The action has no reschedule token, so the booking's own time would count as busy, and the slots it suggests wouldn't match the grid there (which frees it). Needs the token passed through, checked like `/api/slots` does.                                                           | If guests reschedule often                         |
+| **Cancel and reschedule over MCP**                                               | Day 21 | Destructive and they email the guest; the read tools and `book_meeting` come first. Same rules as the dashboard's cancel (host-scoped, `cancelBookingAsHost`), plus a confirmation the assistant must show.                                                                            | After `book_meeting` (Day 22)                      |
+| **Show the MCP tool calls to the host** (an activity log per assistant)          | Day 21 | Today the dashboard shows which assistants are connected, not what they read. A log is a table and a page; useful once assistants can write.                                                                                                                                           | With `book_meeting`, if hosts ask                  |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                  | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                              | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)       | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                      | As polish, after the AI features                   |
 | **Guest calendar overlay** ("check my conflicts")                                | Day 9  | Reuses the host Google Calendar sync, which matters more and comes first. Calendar access is a sensitive Google permission: until the app passes Google's review, users see an "unverified app" warning. Must stay optional, read-only, never stored.                                  | After host Google Calendar sync                    |
@@ -48,33 +51,36 @@ booking assistant on the server, suggest-only (Day 19); its box on the booking p
 
 ## Decided against
 
-| Idea                                          | From     | Why not                                                                                                                                                                                       |
-| --------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The assistant books by itself                 | Day 19   | A writing tool on a public, anonymous page is what prompt injection aims at, and the form already validates everything a booking needs. The model suggests; the guest confirms in our form.   |
-| The model computing instants or offsets       | Day 19   | Models slip on DST and "next Tuesday" arithmetic. They write dates and hours; `wallTimeToInstant` converts.                                                                                   |
-| Gemini's free tier for AI                     | Day 18   | Free-tier requests may be used to improve Google's products. Guests' answers are personal data. Groq's free plan bars training.                                                               |
-| Length limits in the schema sent to the model | Day 18   | Strict structured-output modes support only part of JSON Schema; an unsupported keyword is a 400. `cleanBrief` caps lengths after the model instead.                                          |
-| Writing the brief before the guest's email    | Day 18   | The guest would wait for the model. The brief is on the host's side of the job only.                                                                                                          |
-| One sleeping run per booking for reminders    | Day 17   | Bookings can be further ahead than a free-plan run may live, and every reschedule or cancel must cancel the run: a second copy of the schedule. A 15-minute sweep reads the database instead. |
-| Resend's scheduled emails for reminders       | Day 17   | At most 30 days ahead, the Meet link frozen at scheduling time, and each change must find and cancel the scheduled email.                                                                     |
-| Vercel Cron for the reminder sweep            | Day 17   | The Hobby plan runs it once a day. Inngest's cron runs every 15 minutes and comes with the queue.                                                                                             |
-| Retrying Google before the booking emails     | Day 17   | The emails wait for Google (Meet link), so retries there would hold the guest's confirmation for minutes. One try, then a separate retrying job.                                              |
-| The raw manage token in job events            | Day 17   | Inngest stores events. The event carries the booking id; the job decrypts the token from our database (encrypted copy, Day 17).                                                               |
-| `calendar.readonly` to read busy times        | Day 15   | It would let us read every event's details. Free/busy can't see them.                                                                                                                         |
-| Calling Google inside the booking lock        | Day 15   | Holds a database connection and the host's lock during a network call. The live check runs first.                                                                                             |
-| Times grouped in collapsible sections         | Day 16   | One more tap before any time is visible, on the page's most common action. The grid shows them all in a few rows.                                                                             |
-| Rate-limiting sign-in                         | Day 14   | Sign-in is Google-only: there's no password to guess, and Google protects its own login.                                                                                                      |
-| Failing closed when Redis is down             | Day 14   | Turns a Redis outage into "nobody can book". Limits stop rare abuse; double booking is stopped by Postgres either way.                                                                        |
-| Postgres or in-memory as the limit store      | Day 14   | Memory isn't shared between serverless instances. Postgres would add a write to the hottest read paths.                                                                                       |
-| Retries for E2E tests                         | Day 11   | A pass on the second try is a hidden bug. Traces and screenshots are kept instead (Day 11 story: the one flake was a real race).                                                              |
-| A "log in as" route for tests                 | Day 11   | A backdoor in production code, one env var away from live. Tests seed a session and sign the cookie instead.                                                                                  |
-| Drag and drop to reorder questions            | Day 10   | Needs a keyboard alternative anyway, which is what the up/down buttons are; they're also trivial to test.                                                                                     |
-| Answers in the `.ics` description             | Day 10   | Calendar apps sync the description and share it with every attendee. Answers are for the host: email and dashboard.                                                                           |
-| Month view on the dashboard                   | Day 8    | Thirty bands is noise; the Bookings page covers the long view. Week paging was built instead.                                                                                                 |
-| Dimming night times to 50% (option B)         | Day 9    | Doesn't change reading order (3 AM still comes first), and 50% opacity reads as disabled. Folding was built.                                                                                  |
-| Green "Copied" accent                         | Day 9    | Colour in this design means time of day only. The button fills navy instead.                                                                                                                  |
-| "Daytime only" filter chips                   | Day 9    | Same problem as the folding, with two controls instead of one. Merged into the fold.                                                                                                          |
-| Emoji in labels and readouts (☀️ 🌙 ☕)       | Days 8–9 | Says more than we know ("off work") and renders inconsistently. Words do it: "outside Sakif's working hours", "after sunset".                                                                 |
+| Idea                                          | From     | Why not                                                                                                                                                                                                          |
+| --------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dynamic Client Registration on by default     | Day 21   | Anyone could create a client row with no login, and the spec now deprecates it. CIMD needs no row until a real assistant shows up. A switch (`MCP_ALLOW_DCR`) exists for a client that can't do CIMD, read-only. |
+| `legacy: "reject"` on the MCP endpoint        | Day 21   | Better Auth's README suggests it, but it refuses every assistant still speaking a 2025 protocol revision. The SDK's default serves both, statelessly.                                                            |
+| Guests' notes in `list_bookings`              | Day 21   | A tool result fills the assistant's context, and guests' words should leave MeetReady only when the host asks about that booking (`get_booking`).                                                                |
+| The assistant books by itself                 | Day 19   | A writing tool on a public, anonymous page is what prompt injection aims at, and the form already validates everything a booking needs. The model suggests; the guest confirms in our form.                      |
+| The model computing instants or offsets       | Day 19   | Models slip on DST and "next Tuesday" arithmetic. They write dates and hours; `wallTimeToInstant` converts.                                                                                                      |
+| Gemini's free tier for AI                     | Day 18   | Free-tier requests may be used to improve Google's products. Guests' answers are personal data. Groq's free plan bars training.                                                                                  |
+| Length limits in the schema sent to the model | Day 18   | Strict structured-output modes support only part of JSON Schema; an unsupported keyword is a 400. `cleanBrief` caps lengths after the model instead.                                                             |
+| Writing the brief before the guest's email    | Day 18   | The guest would wait for the model. The brief is on the host's side of the job only.                                                                                                                             |
+| One sleeping run per booking for reminders    | Day 17   | Bookings can be further ahead than a free-plan run may live, and every reschedule or cancel must cancel the run: a second copy of the schedule. A 15-minute sweep reads the database instead.                    |
+| Resend's scheduled emails for reminders       | Day 17   | At most 30 days ahead, the Meet link frozen at scheduling time, and each change must find and cancel the scheduled email.                                                                                        |
+| Vercel Cron for the reminder sweep            | Day 17   | The Hobby plan runs it once a day. Inngest's cron runs every 15 minutes and comes with the queue.                                                                                                                |
+| Retrying Google before the booking emails     | Day 17   | The emails wait for Google (Meet link), so retries there would hold the guest's confirmation for minutes. One try, then a separate retrying job.                                                                 |
+| The raw manage token in job events            | Day 17   | Inngest stores events. The event carries the booking id; the job decrypts the token from our database (encrypted copy, Day 17).                                                                                  |
+| `calendar.readonly` to read busy times        | Day 15   | It would let us read every event's details. Free/busy can't see them.                                                                                                                                            |
+| Calling Google inside the booking lock        | Day 15   | Holds a database connection and the host's lock during a network call. The live check runs first.                                                                                                                |
+| Times grouped in collapsible sections         | Day 16   | One more tap before any time is visible, on the page's most common action. The grid shows them all in a few rows.                                                                                                |
+| Rate-limiting sign-in                         | Day 14   | Sign-in is Google-only: there's no password to guess, and Google protects its own login.                                                                                                                         |
+| Failing closed when Redis is down             | Day 14   | Turns a Redis outage into "nobody can book". Limits stop rare abuse; double booking is stopped by Postgres either way.                                                                                           |
+| Postgres or in-memory as the limit store      | Day 14   | Memory isn't shared between serverless instances. Postgres would add a write to the hottest read paths.                                                                                                          |
+| Retries for E2E tests                         | Day 11   | A pass on the second try is a hidden bug. Traces and screenshots are kept instead (Day 11 story: the one flake was a real race).                                                                                 |
+| A "log in as" route for tests                 | Day 11   | A backdoor in production code, one env var away from live. Tests seed a session and sign the cookie instead.                                                                                                     |
+| Drag and drop to reorder questions            | Day 10   | Needs a keyboard alternative anyway, which is what the up/down buttons are; they're also trivial to test.                                                                                                        |
+| Answers in the `.ics` description             | Day 10   | Calendar apps sync the description and share it with every attendee. Answers are for the host: email and dashboard.                                                                                              |
+| Month view on the dashboard                   | Day 8    | Thirty bands is noise; the Bookings page covers the long view. Week paging was built instead.                                                                                                                    |
+| Dimming night times to 50% (option B)         | Day 9    | Doesn't change reading order (3 AM still comes first), and 50% opacity reads as disabled. Folding was built.                                                                                                     |
+| Green "Copied" accent                         | Day 9    | Colour in this design means time of day only. The button fills navy instead.                                                                                                                                     |
+| "Daytime only" filter chips                   | Day 9    | Same problem as the folding, with two controls instead of one. Merged into the fold.                                                                                                                             |
+| Emoji in labels and readouts (☀️ 🌙 ☕)       | Days 8–9 | Says more than we know ("off work") and renders inconsistently. Words do it: "outside Sakif's working hours", "after sunset".                                                                                    |
 
 ## Remaining roadmap (from the v1 context doc)
 
@@ -94,7 +100,7 @@ booking assistant on the server, suggest-only (Day 19); its box on the booking p
   - English and Bangla.
 - **AI:**
   - booking assistant (done: server Day 19, suggest-only; box on the booking page Day 20);
-  - MCP server (check times and book from Claude or ChatGPT);
+  - MCP server (done for reading: Day 21; booking: Day 22);
   - meeting brief for the host (done, Day 18);
   - email-to-booking;
   - smart slot ranking (with preferred hours);

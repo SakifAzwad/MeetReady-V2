@@ -92,3 +92,48 @@ describe("Better Auth on our schema", () => {
     expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
   });
 });
+
+describe("the OAuth server for AI assistants (Day 21)", () => {
+  const BASE = "http://localhost:3000";
+  const options = (allowDynamicClientRegistration: boolean) => ({
+    baseURL: BASE,
+    secret: "test-secret-test-secret-test-secret-1234",
+    mcp: { allowDynamicClientRegistration },
+  });
+  const metadata = async (auth: Auth) =>
+    (await auth.handler(new Request(`${BASE}/.well-known/oauth-authorization-server/api/auth`))).json();
+  const register = (auth: Auth, scope: string) =>
+    auth.handler(
+      new Request(`${BASE}/api/auth/oauth2/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Some client",
+          redirect_uris: ["https://client.example/callback"],
+          token_endpoint_auth_method: "none",
+          scope,
+        }),
+      }),
+    );
+
+  it("by default: Client ID Metadata Documents, and no self-registration at all", async () => {
+    const auth = createAuth(await createTestDb(), options(false));
+    const meta = await metadata(auth);
+    expect(meta.client_id_metadata_document_supported).toBe(true);
+    expect(meta.registration_endpoint).toBeUndefined();
+    expect(meta.scopes_supported).toEqual(["bookings:read", "bookings:write", "offline_access"]);
+    expect((await register(auth, "bookings:read")).ok).toBe(false);
+  }, 30_000);
+
+  it("with the DCR switch on: anyone can register, but only for reading", async () => {
+    const auth = createAuth(await createTestDb(), options(true));
+    expect((await metadata(auth)).registration_endpoint).toBe(`${BASE}/api/auth/oauth2/register`);
+
+    const readOnly = await register(auth, "bookings:read offline_access");
+    expect(readOnly.status).toBe(201);
+    expect((await readOnly.json()).scope).toBe("bookings:read offline_access");
+
+    const writer = await register(auth, "bookings:read bookings:write");
+    expect(writer.ok).toBe(false);
+  }, 30_000);
+});

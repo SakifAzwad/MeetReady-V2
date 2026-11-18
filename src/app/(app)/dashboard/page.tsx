@@ -12,6 +12,9 @@ import { requireOnboardedUser } from "@/server/auth/session";
 import { getAvailability } from "@/server/availability";
 import { listEventTypes } from "@/server/event-types";
 import { listHostBookings, listHostBookingsBetween } from "@/server/manage-booking";
+import { mcpUrl } from "@/lib/mcp";
+import { listConnectedAssistants } from "@/server/mcp/clients";
+import { AssistantsSection } from "./assistants";
 import { CopyLinkButton } from "./copy-link-button";
 import { ShareTimes } from "./share-times";
 import { WeekGlance } from "./week-glance";
@@ -42,7 +45,7 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/dashboard">, "search
   const now = new Date();
   const offset = parseWeekOffset(week);
   const days = weekDays(now, user.timeZone, offset);
-  const [availability, upcoming, weekMeetings, eventTypes] = await Promise.all([
+  const [availability, upcoming, weekMeetings, eventTypes, assistants] = await Promise.all([
     getAvailability(db, user.id),
     listHostBookings(db, user.id, "upcoming", now, 3),
     listHostBookingsBetween(db, user.id, {
@@ -50,6 +53,7 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/dashboard">, "search
       end: dayBounds(days[6]!, user.timeZone).end,
     }),
     listEventTypes(db, user.id),
+    listConnectedAssistants(db, user.id),
   ]);
   const tz = user.timeZone;
   const path = `/${user.username}`;
@@ -137,6 +141,8 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/dashboard">, "search
           </ul>
         )}
       </section>
+
+      <AssistantsSection mcpUrl={mcpUrl(env.BETTER_AUTH_URL)} assistants={assistants} timeZone={tz} />
     </div>
   );
 }

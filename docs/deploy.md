@@ -16,6 +16,8 @@ step says **why**, so it can be explained later. Expect about 30–40 minutes.
 - `.github/workflows/smoke.yml`: checks the live site after each production deploy.
 - `src/app/api/inngest/route.ts`: where Inngest runs the background jobs (step 15).
 - `src/server/ai/index.ts`: the only place that knows the AI provider is Groq (step 16).
+- `src/app/api/mcp/route.ts` and `src/app/.well-known/`: the MCP server for AI assistants and its OAuth discovery
+  (step 17).
 
 ## 0. Before you start
 
@@ -377,6 +379,52 @@ Without this step everything still works: bookings just have no brief.
    7. **If it says "The assistant can't answer right now":** Sentry, tag `ai-assistant`. A burst of requests can
       hit Groq's free limit (8,000 tokens a minute): wait a minute. The times grid works either way.
 
+## 17. AI assistants (MCP server), added on Day 21
+
+Nothing to set in Vercel: MeetReady is its own OAuth server (Better Auth), and assistants identify themselves with
+a Client ID Metadata Document, so there's no client to create by hand. Without this step everything else works.
+
+1. **Before deploying, check two usernames are free** (they're now reserved: `/oauth` is the consent page).
+   Neon → SQL Editor (`production`):
+   ```sql
+   select username from "user" where username in ('oauth', 'mcp');
+   ```
+   Expect no rows. (If one exists, that profile would stop being reachable: tell me before deploying.)
+2. **Deploy** (push Day 21). Migration 0009 runs first in the build: 8 new tables (`oauth_*`, `jwks`), nothing
+   changed in existing ones.
+3. **Check discovery** in a browser:
+   - <https://meetreadyv2.vercel.app/.well-known/oauth-protected-resource/api/mcp>: JSON with
+     `"resource": "https://meetreadyv2.vercel.app/api/mcp"`.
+   - <https://meetreadyv2.vercel.app/.well-known/oauth-authorization-server/api/auth>:
+     `"client_id_metadata_document_supported": true`, and **no** `registration_endpoint`.
+4. **Connect Claude** (the free plan allows one custom connector):
+   1. claude.ai → **Customize** (or Settings) → **Connectors** → **+** → **Add custom connector**. Name `MeetReady`,
+      URL `https://meetreadyv2.vercel.app/api/mcp`. Leave the advanced OAuth fields empty → **Add** → **Connect**.
+   2. A MeetReady tab opens: log in with Google if asked. The consent page says "Claude wants to use your MeetReady
+      account" and **Requested by claude.ai** (or Anthropic's domain), with three things it may do → **Allow**.
+   3. Back in Claude, the connector shows as connected, with 4 tools.
+5. **Try it** (Claude asks before using each tool the first time):
+   - "What meeting types do I have on MeetReady?"
+   - "When am I free for an intro call next Tuesday afternoon?" (times on your clock, Dhaka)
+   - "What's coming up this week?" then "Tell me more about the first one."
+6. **Dashboard → AI assistants:** Claude is listed, "Can read and book". **Disconnect** → confirm. Ask Claude
+   something again: it fails or asks you to reconnect. Reconnect it (step 4.1 → Connect).
+7. **Neon → SQL Editor (`production`):**
+   ```sql
+   select client_id, name, created_at from oauth_client;
+   ```
+   Claude's `client_id` is an `https://` URL: it used CIMD, as intended.
+8. **If Claude can't connect:**
+   - **Vercel → Logs**, filter `/api/auth/oauth2` and `/api/mcp`: the error says which step failed.
+   - **"invalid_target"**: the token's resource didn't match. `BETTER_AUTH_URL` must be the production domain.
+   - **Claude never reaches the consent page, and the log shows no CIMD fetch:** Claude fell back to Dynamic
+     Client Registration, which is off. Set `MCP_ALLOW_DCR` = `1` for **Production** → redeploy → connect again.
+     Such a connection is read-only (self-registered clients get the read scope only). Tell me: we'd rather fix it.
+   - Sentry, tag `mcp`, for errors inside a tool.
+9. **ChatGPT (optional, if your plan has developer mode):** Settings → Apps → Advanced settings → **Developer
+   mode** on → **Create** → URL `https://meetreadyv2.vercel.app/api/mcp`, authentication **OAuth** → the same
+   consent page. OpenAI's docs disagree on which plans can use it; skip this if you don't see the option.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.
@@ -415,6 +463,8 @@ the new column and write to both; later, drop the old one.
 - **Inngest shows the app as out of sync or its runs fail with 401:** the signing key in Vercel doesn't match the
   Inngest environment. Redeploy (the integration syncs again), or Apps → Sync app.
 - **Bookings have no AI brief:** see step 16.8. `ai_off` means `GROQ_API_KEY` isn't set for Production.
+- **An AI assistant can't connect, or stops working:** step 17.8. A host who disconnected it on the dashboard
+  has to connect it again.
 - **No "Tell us when suits you" box on the booking page:** `GROQ_API_KEY` isn't set for this environment (previews
   never have it). **"The assistant can't answer right now":** step 16.9.7.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo

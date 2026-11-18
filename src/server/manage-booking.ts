@@ -282,14 +282,9 @@ export type HostBookingRow = {
   brief: MeetingBrief | null;
 };
 
-export async function listHostBookings(
-  db: Database,
-  hostId: string,
-  view: BookingsView,
-  now: Date,
-  limit = 100,
-): Promise<HostBookingRow[]> {
-  const base = db
+/** The Bookings page's columns, joined to the event type and the brief. Unscoped: callers add the host. */
+const hostBookingQuery = (db: Database) =>
+  db
     .select({
       id: bookings.id,
       startsAt: bookings.startsAt,
@@ -314,6 +309,14 @@ export async function listHostBookings(
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
     .leftJoin(bookingBriefs, eq(bookingBriefs.bookingId, bookings.id));
 
+export async function listHostBookings(
+  db: Database,
+  hostId: string,
+  view: BookingsView,
+  now: Date,
+  limit = 100,
+): Promise<HostBookingRow[]> {
+  const base = hostBookingQuery(db);
   const mine = eq(bookings.hostId, hostId);
   switch (view) {
     case "upcoming": // still running counts as upcoming
@@ -332,6 +335,22 @@ export async function listHostBookings(
         .orderBy(desc(bookings.startsAt))
         .limit(limit);
   }
+}
+
+/**
+ * One booking, in full, if it's this host's (Day 21: the MCP get_booking tool).
+ * Another host's booking and a made-up id look the same: null.
+ */
+export async function getHostBooking(
+  db: Database,
+  hostId: string,
+  bookingId: string,
+): Promise<HostBookingRow | null> {
+  if (!z.uuid().safeParse(bookingId).success) return null;
+  const [row] = await hostBookingQuery(db).where(
+    and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)),
+  );
+  return row ?? null;
 }
 
 export async function cancelBookingAsHost(

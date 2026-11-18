@@ -6,4 +6,4 @@ export const V1_URL = "https://github.com/SakifAzwad/Meet-Ready";
 export const CONTACT_EMAIL = "sakifazwad18@gmail.com";
 
 /** When the privacy policy and terms last changed. A fixed string: these pages are static and read no clock. */
-export const POLICIES_UPDATED = "18 November 2026";
+export const POLICIES_UPDATED = "19 November 2026";

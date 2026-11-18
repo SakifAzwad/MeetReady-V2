@@ -19,7 +19,9 @@ function topLevelRoutes(dir = APP_DIR): string[] {
     .filter((e) => e.isDirectory())
     .flatMap((e) => {
       if (e.name.startsWith("(") && e.name.endsWith(")")) return topLevelRoutes(path.join(dir, e.name));
-      if (e.name.startsWith("[") || e.name.startsWith("_")) return [];
+      // .well-known (Day 21): a dot can't be in a username, and proxy.ts passes dotted segments straight
+      // through (it treats them as files), so neither list needs it.
+      if (e.name.startsWith("[") || e.name.startsWith("_") || e.name.startsWith(".")) return [];
       return [e.name];
     });
 }

@@ -20,4 +20,6 @@ export const APP_ROUTES = new Set([
   // Policy pages (linked from Google's consent screen).
   "privacy",
   "terms",
+  // Day 21: AI assistants ask the host's permission at /oauth/consent.
+  "oauth",
 ]);

@@ -15,4 +15,6 @@ export const auth = createAuth(db, {
       prompt: "select_account",
     },
   },
+  // Day 21: the OAuth server for AI assistants. Registration through CIMD only, unless switched on.
+  mcp: { allowDynamicClientRegistration: env.MCP_ALLOW_DCR === "1" },
 });

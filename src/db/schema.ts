@@ -14,6 +14,7 @@ import {
   time,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -108,6 +109,195 @@ export const verification = pgTable("verification", {
   value: text().notNull(),
   expiresAt: timestamp({ withTimezone: true }).notNull(),
   ...timestamps,
+});
+
+// ─── OAuth server for AI assistants (Day 21: MCP) ───────────────────────────────
+// Better Auth's JWT, OAuth Provider and MCP plugins. Columns and nullability as
+// `npx auth@1.7.26 generate` printed them; only the style is ours (timestamptz,
+// snake_case from `casing`). Read and written by Better Auth alone: our code
+// reads oauth_consent and oauth_client to list "connected assistants".
+
+const tz = { withTimezone: true } as const;
+
+/** Signing keys for access tokens. The public half is served at /api/auth/jwks. */
+export const jwks = pgTable("jwks", {
+  id: text().primaryKey(),
+  publicKey: text().notNull(),
+  /** Encrypted with BETTER_AUTH_SECRET by the JWT plugin. */
+  privateKey: text().notNull(),
+  createdAt: timestamp(tz).notNull(),
+  expiresAt: timestamp(tz),
+  alg: text(),
+  crv: text(),
+});
+
+/** An assistant (Claude, ChatGPT). With CIMD, client_id is the URL of its metadata document. */
+export const oauthClient = pgTable(
+  "oauth_client",
+  {
+    id: text().primaryKey(),
+    clientId: text().notNull().unique(),
+    clientSecret: text(),
+    clientDiscoveryId: text(),
+    disabled: boolean().default(false),
+    skipConsent: boolean(),
+    enableEndSession: boolean(),
+    subjectType: text(),
+    scopes: text().array(),
+    clientCredentialsScopes: text().array().default([]),
+    userId: text().references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp(tz),
+    updatedAt: timestamp(tz),
+    name: text(),
+    uri: text(),
+    icon: text(),
+    contacts: text().array(),
+    tos: text(),
+    policy: text(),
+    softwareId: text(),
+    softwareVersion: text(),
+    softwareStatement: text(),
+    redirectUris: text().array().notNull(),
+    postLogoutRedirectUris: text().array(),
+    backchannelLogoutUri: text(),
+    backchannelLogoutSessionRequired: boolean(),
+    tokenEndpointAuthMethod: text(),
+    applicationType: text(),
+    jwks: text(),
+    jwksUri: text(),
+    grantTypes: text().array(),
+    responseTypes: text().array(),
+    requirePKCE: boolean("require_pkce"),
+    dpopBoundAccessTokens: boolean().default(false),
+    referenceId: text(),
+    metadata: jsonb(),
+  },
+  (t) => [index().on(t.userId)],
+);
+
+/** The protected resources tokens can be bound to: here, one, the MCP endpoint. */
+export const oauthResource = pgTable("oauth_resource", {
+  id: text().primaryKey(),
+  identifier: text().notNull().unique(),
+  name: text().notNull(),
+  accessTokenTtl: integer(),
+  refreshTokenTtl: integer(),
+  signingAlgorithm: text(),
+  signingKeyId: text(),
+  allowedScopes: text().array(),
+  customClaims: jsonb(),
+  dpopBoundAccessTokensRequired: boolean().default(false),
+  disabled: boolean().default(false),
+  createdAt: timestamp(tz),
+  updatedAt: timestamp(tz),
+  policyVersion: integer().default(1),
+  metadata: jsonb(),
+});
+
+export const oauthClientResource = pgTable(
+  "oauth_client_resource",
+  {
+    id: text().primaryKey(),
+    clientId: text()
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    resourceId: text()
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: "cascade" }),
+    metadata: jsonb(),
+    createdAt: timestamp(tz),
+  },
+  (t) => [uniqueIndex().on(t.clientId, t.resourceId), index().on(t.clientId), index().on(t.resourceId)],
+);
+
+/** Stored hashed (the plugin's default). Revoked when the host disconnects the assistant. */
+export const oauthRefreshToken = pgTable(
+  "oauth_refresh_token",
+  {
+    id: text().primaryKey(),
+    token: text().notNull().unique(),
+    clientId: text()
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    sessionId: text().references(() => session.id, { onDelete: "set null" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    referenceId: text(),
+    authorizationCodeId: text(),
+    resources: text().array(),
+    requestedUserInfoClaims: text().array(),
+    expiresAt: timestamp(tz).notNull(),
+    createdAt: timestamp(tz).notNull(),
+    revoked: timestamp(tz),
+    rotatedAt: timestamp(tz),
+    rotationReplayResponse: text(),
+    rotationReplayExpiresAt: timestamp(tz),
+    authTime: timestamp(tz),
+    confirmation: jsonb(),
+    scopes: text().array().notNull(),
+  },
+  (t) => [
+    index().on(t.clientId),
+    index().on(t.sessionId),
+    index().on(t.userId),
+    index().on(t.authorizationCodeId),
+  ],
+);
+
+/** Opaque access tokens only. MCP tokens are JWTs (checked by signature), so normally unused. */
+export const oauthAccessToken = pgTable(
+  "oauth_access_token",
+  {
+    id: text().primaryKey(),
+    token: text().notNull().unique(),
+    clientId: text()
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    sessionId: text().references(() => session.id, { onDelete: "set null" }),
+    userId: text().references(() => user.id, { onDelete: "cascade" }),
+    referenceId: text(),
+    authorizationCodeId: text(),
+    resources: text().array(),
+    requestedUserInfoClaims: text().array(),
+    refreshId: text().references(() => oauthRefreshToken.id, { onDelete: "cascade" }),
+    expiresAt: timestamp(tz).notNull(),
+    createdAt: timestamp(tz).notNull(),
+    revoked: timestamp(tz),
+    confirmation: jsonb(),
+    scopes: text().array().notNull(),
+  },
+  (t) => [
+    index().on(t.clientId),
+    index().on(t.sessionId),
+    index().on(t.userId),
+    index().on(t.authorizationCodeId),
+    index().on(t.refreshId),
+  ],
+);
+
+/** "This host allowed this assistant these scopes": what the dashboard lists and Disconnect deletes. */
+export const oauthConsent = pgTable(
+  "oauth_consent",
+  {
+    id: text().primaryKey(),
+    clientId: text()
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    userId: text().references(() => user.id, { onDelete: "cascade" }),
+    referenceId: text(),
+    resources: text().array(),
+    requestedUserInfoClaims: text().array(),
+    scopes: text().array().notNull(),
+    createdAt: timestamp(tz).notNull(),
+    updatedAt: timestamp(tz).notNull(),
+  },
+  (t) => [index().on(t.clientId), index().on(t.userId)],
+);
+
+export const oauthClientAssertion = pgTable("oauth_client_assertion", {
+  id: text().primaryKey(),
+  expiresAt: timestamp(tz).notNull(),
 });
 
 // ─── Event types ────────────────────────────────────────────────────────────────

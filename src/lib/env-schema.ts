@@ -80,6 +80,11 @@ export function parseEnv(source: Record<string, string | undefined>) {
        * fake Groq (e2e/support/fake-groq.mjs), so CI never calls a real model. Like the Google URLs.
        */
       GROQ_BASE_URL: emptyAsUnset(z.url().optional()),
+      /**
+       * Day 21: let MCP clients register themselves (Dynamic Client Registration). Off: assistants use
+       * Client ID Metadata Documents. "1" only if a client can't, and then they get the read scope only.
+       */
+      MCP_ALLOW_DCR: emptyAsUnset(z.enum(["1"]).optional()),
       /** Rate-limit store (see redisConfig): both or neither, so a half-pasted pair fails at startup, not per request. */
       REDIS: z.preprocess(
         () => redisConfig(source),

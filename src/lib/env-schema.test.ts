@@ -80,6 +80,13 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...base, GROQ_BASE_URL: "not a url" })).toThrow();
   });
 
+  it("keeps MCP client self-registration off unless set to exactly 1", () => {
+    expect(parseEnv(base).MCP_ALLOW_DCR).toBeUndefined();
+    expect(parseEnv({ ...base, MCP_ALLOW_DCR: "" }).MCP_ALLOW_DCR).toBeUndefined();
+    expect(parseEnv({ ...base, MCP_ALLOW_DCR: "1" }).MCP_ALLOW_DCR).toBe("1");
+    expect(() => parseEnv({ ...base, MCP_ALLOW_DCR: "true" })).toThrow();
+  });
+
   describe("Redis for rate limiting", () => {
     it("is optional: unset or empty means limits are kept in memory", () => {
       expect(parseEnv(base).REDIS).toBeUndefined();

@@ -1,10 +1,12 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import { timeZoneSchema } from "@/lib/validation/onboarding";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { calendarBusy } from "@/server/calendar";
+import { disconnectAssistant } from "@/server/mcp/clients";
 import { suggestTimes } from "@/server/share";
 
 /*
@@ -54,4 +56,18 @@ export async function suggestTimesAction(input: unknown): Promise<SuggestTimesRe
     hostTimeZone: r.hostTimeZone,
     bookingPath: `/${user.username}/${r.eventType.slug}`,
   };
+}
+
+/**
+ * Day 21: disconnect an AI assistant. The host comes from the session, and the
+ * data layer only deletes this host's consent: a client id from another
+ * host's connection does nothing. Takes effect on the assistant's next call.
+ */
+export async function disconnectAssistantAction(input: unknown): Promise<{ ok: boolean }> {
+  const user = await requireOnboardedUser();
+  const parsed = z.object({ clientId: z.string().min(1).max(2048) }).safeParse(input);
+  if (!parsed.success) return { ok: false };
+  const r = await disconnectAssistant(db, user.id, parsed.data.clientId, new Date());
+  refresh();
+  return { ok: r.ok };
 }

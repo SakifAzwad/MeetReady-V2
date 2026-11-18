@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 20)
+# Handoff: starting a new chat (after Day 21)
 
-Read this first in a new chat. It replaces the long Days 1–20 conversations. Details live in `docs/day-01.md` …
-`docs/day-20.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–21 conversations. Details live in `docs/day-01.md` …
+`docs/day-21.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -98,8 +98,23 @@ Read this first in a new chat. It replaces the long Days 1–20 conversations. D
     fixed brief for any JSON-schema request, 500 for an unscripted assistant request, `delayMs` for a slow model.
     A Clear button (×, or Escape) empties the box, answer included; a `requests` ref drops answers that arrive
     after Clear or a newer question. The grid's selection is kept.
-- **Numbers:** 618 unit tests + 29 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
-  and build all green. 9 migrations (0000–0008).
+  - MCP server for AI assistants (Day 21): `src/server/mcp/` + `/api/mcp`. Better Auth 1.7.26 is the OAuth server:
+    `jwt({ disableSettingJwtHeader })` + `mcp()` (`@better-auth/mcp`) + `cimd()`; `/token` disabled; scopes
+    `bookings:read`, `bookings:write` (granted now, used Day 22), `offline_access`; grants code + refresh only;
+    `refreshTokenReuseInterval: 0`. DCR off (`MCP_ALLOW_DCR=1` = read-only self-registration, rate-limited).
+    Discovery at `/.well-known/[...path]` → `auth.handler`. Consent page `/oauth/consent` (signed query; CIMD domain
+    shown as verified, name not). Login page doesn't redirect when `sig` is present; `authClient` has
+    `oauthProviderClient()`. Route: `requireMcpAuth` (audience = `mcpUrl(BETTER_AUTH_URL)`, requires read,
+    challenge asks all 3 scopes so clients get a refresh token) → `hasConsent` (Disconnect is immediate) → SDK v2
+    `createMcpHandler` (default legacy = stateless: 2025-era clients still served; POST only). Tools (plain
+    functions in `tools.ts`, registered in `server.ts` via `runTool`: scope, `mcp_host` 120/10 min, errors as
+    `isError`): `list_event_types`, `find_free_times` (Day 19 `parseSearch`, `HH:mm` per day, cap 120),
+    `list_bookings` (compact, no notes), `get_booking` (`guestWrote` = guest text, data not instructions).
+    Dashboard "AI assistants": address, connected list, Disconnect (`disconnectAssistant`: consent deleted, refresh
+    tokens revoked). Migration 0009 (8 tables). E2E `mcp.spec.ts`: pre-registered client linked to the resource
+    (`oauth_client_resource`), consent in the browser, PKCE, official `@modelcontextprotocol/client`.
+- **Numbers:** 649 unit tests + 32 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`, 18 Nov);
+  typecheck, lint, format, `drizzle-kit check` and build all green. 10 migrations (0000–0009).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -108,8 +123,9 @@ Read this first in a new chat. It replaces the long Days 1–20 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 20, then runbook step 16.9 on the live page.
-2. **Day 21: MCP server** (check times and book from Claude or ChatGPT). Opinions first, as always.
+1. **Sakif:** push Day 21, then runbook step 17 (connect Claude to production; CIMD is only testable there).
+2. **Day 22: `book_meeting`** over MCP: the guest email says the host scheduled it, a `source` column, no host
+   questions, no AI brief, its own limits, tool annotations so assistants confirm first. Opinions first.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
@@ -144,6 +160,8 @@ Read this first in a new chat. It replaces the long Days 1–20 conversations. D
   - Google Calendar over plain `fetch` (no SDK): `src/server/calendar/google-api.ts`.
   - Inngest (SDK v4) for background jobs and reminders: `src/server/jobs/`, served at `/api/inngest`.
   - Vercel AI SDK v7 + Groq (free plan) for AI: `src/server/ai/` (provider chosen only in `index.ts`).
+  - MCP (Day 21): `@modelcontextprotocol/server` v2 (`@modelcontextprotocol/client` in E2E only); OAuth from Better
+    Auth's `@better-auth/mcp` + `@better-auth/cimd` (all `@better-auth/*` at the same version as `better-auth`).
 - **Commands:** `npm test` (PGlite; set `TEST_DATABASE_URL` to also run the race tests on real Postgres),
   `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
   `E2E_BROWSER_CHANNEL=chrome`),
@@ -156,6 +174,7 @@ Read this first in a new chat. It replaces the long Days 1–20 conversations. D
   `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`), `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or the `UPSTASH_REDIS_REST_*`
   names; both or neither), `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` + `INNGEST_SERVE_ORIGIN` (Production; or `INNGEST_DEV=1`
   locally), `GROQ_API_KEY` (Production; unset = AI off) + optional `AI_MODEL`.
+  Optional `MCP_ALLOW_DCR=1` (Day 21; off = CIMD only).
   E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101), `GROQ_BASE_URL` (a fake Groq
   on :3102; E2E sets `GROQ_API_KEY` to a placeholder, so AI is on there). Local dev uses the Neon `dev` branch, never `production`.
 
@@ -237,3 +256,9 @@ Read this first in a new chat. It replaces the long Days 1–20 conversations. D
   The assistant searches 14 days from the server's real clock, so its specs pick a weekday 8–10 days ahead
   (the one exception to "pick a fixed day").
 - **Before claiming existing behaviour, read it, and make a new test fail once on the old code** (Day 20 story).
+- **MCP / OAuth (Day 21):** the host is the token's subject; tools take no user id. Guest-written text reaches the
+  host's assistant: return it labelled (`guestWrote`). JWT access tokens can't be revoked by themselves: the route
+  checks the consent. A new OAuth client in tests must be linked to the resource (`invalid_target` otherwise).
+  Playwright's `page.route` doesn't catch HTTP redirects: read a 302's `Location` with `maxRedirects: 0`. Check
+  what real clients speak before following a library's strict setting (`legacy: "reject"`).
+- **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

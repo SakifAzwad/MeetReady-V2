@@ -43,6 +43,15 @@ export default function PrivacyPage() {
           <li>
             <strong>Your bookings:</strong> the meetings guests book with you, including what they tell you.
           </li>
+          <li id="ai-assistants">
+            <strong>If you connect an AI assistant</strong> (such as Claude or ChatGPT, through
+            MeetReady&apos;s MCP server): after you sign in and approve it, the assistant can read your
+            meeting types, free times and bookings, including guests&apos; names, email addresses, notes and
+            answers, when you ask it something that needs them. What it reads goes to that assistant&apos;s
+            provider, under their terms and your settings there. MeetReady stores which assistant you allowed,
+            what it may do, and its sign-in tokens (the long-lived ones only in a scrambled, hashed form).
+            Disconnect it on your dashboard at any time: it stops working at once.
+          </li>
         </ul>
       </LegalSection>
 
@@ -79,6 +88,11 @@ export default function PrivacyPage() {
             itself: a scrambled (hashed) form to check it, and an encrypted copy so later emails such as
             reminders can include it. The key to that copy is not kept in the database, so the link can&apos;t
             be rebuilt from the database alone.
+          </li>
+          <li>
+            <strong>If the host uses an AI assistant:</strong> a host can connect one to their MeetReady
+            account (see above). It can then read your booking, including your notes and answers, when the
+            host asks it about your meeting.
           </li>
           <li>You don&apos;t need an account, and no cookies are set when you book.</li>
         </ul>

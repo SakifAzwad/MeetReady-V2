@@ -89,11 +89,24 @@ function SampleRow({ label, zone }: { label: string; zone: string }) {
   );
 }
 async function SignIn({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
-  const { next } = await searchParams;
+  const { next, sig } = await searchParams;
   const destination = safeRedirectPath(typeof next === "string" ? next : undefined);
+  // Day 21: an AI assistant's request, signed by Better Auth. Signing in carries it on to the consent
+  // page (the auth client sends it along), so this page must not redirect away and drop it.
+  const forAssistant = typeof sig === "string";
 
   // Already logged in: skip the login page.
-  if (await getSession()) redirect(destination);
+  if (!forAssistant && (await getSession())) redirect(destination);
 
-  return <GoogleSignInButton callbackURL={destination} />;
+  return (
+    <>
+      {forAssistant && (
+        <p className="bg-muted mt-6 rounded-md px-3 py-2 text-sm">
+          An AI assistant asked to connect to your MeetReady account. Log in, then you&apos;ll see what it can
+          do before you allow it.
+        </p>
+      )}
+      <GoogleSignInButton callbackURL={destination} />
+    </>
+  );
 }

@@ -57,6 +57,15 @@ export const LIMITS = {
   ai_assistant_ip: { tokens: 10, windowMs: 10 * MINUTE },
   ai_assistant_host: { tokens: 200, windowMs: 24 * 60 * MINUTE },
   ai_assistant_all: { tokens: 100, windowMs: 24 * 60 * MINUTE },
+  /**
+   * The MCP server (Day 21): tool calls per host, from all their connected
+   * assistants together. An assistant may call several tools for one question,
+   * and find_free_times computes up to two weeks of slots, so this is generous
+   * for a person and stops a loop.
+   */
+  mcp_host: { tokens: 120, windowMs: 10 * MINUTE },
+  /** Self-registered MCP clients per IP, only when MCP_ALLOW_DCR is on (each one is a database row). */
+  mcp_register_ip: { tokens: 10, windowMs: 60 * MINUTE },
 } as const satisfies Record<string, Policy>;
 
 export type LimitName = keyof typeof LIMITS;

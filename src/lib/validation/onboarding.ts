@@ -16,6 +16,9 @@ export const RESERVED_USERNAMES = new Set([
   // Error-report endpoints (Sentry tunnel, Day 13): a profile here would collide with them.
   "monitoring",
   "sentry-tunnel",
+  // The AI assistants' consent page (/oauth/consent, Day 21), and names an OAuth or MCP page could use.
+  "oauth",
+  "mcp",
   "about",
   "account",
   "admin",

@@ -99,6 +99,9 @@ npm run test:e2e                                                       # wipes a
 - [Day 20: Booking assistant on the page](docs/day-20.md): "Tell us when suits you" above the times; a suggestion
   selects that time in the grid (its day, its month, the guest's named city), a fresh read catches a time taken
   since, and the guest still confirms through the form. A fake Groq server makes the whole path testable in E2E.
+- [Day 21: MCP server for AI assistants](docs/day-21.md): MeetReady as its own OAuth 2.1 server (Better Auth, Client
+  ID Metadata Documents, PKCE, audience-bound JWTs, rotating refresh tokens), a consent page, four read tools for
+  Claude or ChatGPT over the booking page's own slot function, and a Disconnect that works at once.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

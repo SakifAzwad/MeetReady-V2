@@ -80,11 +80,13 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
     `parseSearch` checks and narrows it (real dates/zone, past → today, max 14 days) and code converts with
     `wallTimeToInstant`; slots from `getBookableSlots` (+ cached Google busy), filtered by hour on the searched
     clock. Max 3 searches (`stepCountIs(4)`), 25 s, reply cleaned (`cleanText`, 300 chars), in the guest's language.
+    Instructions carry a 14-day calendar with weekdays and "this/next week" (`calendarForModel`). A full window →
+    the tool reads 7 more days and `nearestTimes` picks (same hours later, else any hour); no extra model call.
     Shown times = `pickSuggestions` over the last non-empty tool result (3, spread over days/hours), never the
     model's text; host and event type come from the URL. Stateless: one message (2–300 chars) per request. Limits
     `ai_assistant_ip` 10/10 min, `ai_assistant_all` 100/day, `ai_assistant_host` 200/day; `ai_calls` feature
     `booking_assistant`. Tests: `mockModelSteps` (scripted tool calls); 8 evals. No UI yet (Day 20).
-- **Numbers:** 604 unit tests + 22 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
+- **Numbers:** 611 unit tests + 22 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
   and build all green. 9 migrations (0000–0008).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -215,5 +217,6 @@ Read this first in a new chat. It replaces the long Days 1–19 conversations. D
   `scrubError`. Unit tests never call a model (`mockModel`); behaviour on real models is `npm run eval`. A new AI
   route gets its own lines in `LIMITS` and logs to `ai_calls`.
 - **AI tools (Day 19):** the model writes plain dates/hours/zone names; code validates and does the arithmetic.
+  Give it a calendar to copy dates from; anything that needs no language (widening a search) is code's.
   What's shown or acted on comes from tool results, never the model's text. Fields a model fills under a strict
   schema are required + nullable, never `.optional()`. Tools read; writing stays in our own forms.

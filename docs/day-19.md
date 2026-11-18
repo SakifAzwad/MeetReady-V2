@@ -10,10 +10,12 @@
 - **Code does the date arithmetic.** The model turns words into a search (dates, an hour window, a timezone name);
   our code checks the search and turns it into instants with the tested helpers from Day 1.
 - **The times shown come from the tool, never from the model's text.** The model can't invent a slot.
+- **When the time asked for is full, code finds the nearest times:** the same hours on the following days, else
+  any hour. No second model call.
 - **Limits:** 10 requests per 10 minutes per IP, 200 a day per host, 100 a day for the app (each request is at
   most 4 model calls, so with the briefs we stay under Groq's free-plan cap). Every request is logged in
   `ai_calls` as `booking_assistant`.
-- **Tests:** 604 unit tests (25 new) and the 22 E2E tests, all green, plus 8 new evals (14 in `npm run eval`)
+- **Tests:** 611 unit tests (32 new) and the 22 E2E tests, all green, plus 8 new evals (14 in `npm run eval`)
   that need your Groq key. Typecheck, lint, format, `drizzle-kit check` and the build are green.
 - **Setup:** none. No migration, no new env var (it uses Day 18's `GROQ_API_KEY`). Nothing changes on the site yet.
 
@@ -21,7 +23,7 @@ Also today: **the first commit's author was "Claude"** (the Day 1 workspace's gi
 as a contributor. The history was rewritten with that one commit credited to Sakif (see the story).
 
 ```
-src/server/ai/assistant.ts       # findTimes tool, parseSearch (our checks), pickSuggestions, runAssistant
+src/server/ai/assistant.ts       # findTimes, parseSearch, nearestTimes, calendarForModel, pickSuggestions, runAssistant
 src/server/ai/ask.ts             # askAssistant: page → event type → budget → run over the real slots → log
 src/server/ai/index.ts           # assistantDeps (limits, cached Google busy times, Sentry), assistantEnabled
 src/server/ai/assistant.eval.ts  # 8 evals against the real model: dates, timezones, Bangla, injection
@@ -56,6 +58,9 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
   (DST-safe, tested since Day 1), then the hour window is applied to each slot's start on that clock.
 - **Today is given twice:** "Wednesday, 18 November 2026 at 10:00 (2026-11-18) in Europe/London". The words help
   with "next Tuesday"; the ISO date is what the tool's dates must look like.
+- **A calendar, so the model never counts weekdays:** the next 14 days with their names ("Thu 2026-11-19
+  (tomorrow), Fri 2026-11-20, …"), plus what "this week" and "next week" mean (weeks start on Monday). The model
+  copies a date from the list. Added after the evals caught it reading "next week" as "the next 7 days" (story).
 
 ### The times shown come from the tool
 
@@ -70,17 +75,33 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
   already picked; then anything. "Next week" gets three different days; "Tuesday afternoon" gets 12:00, 13:00 and
   14:30, not 12:00, 12:30 and 13:00.
 
+### When the time asked for is full: code widens, not the model (Sakif's call, option b)
+
+- The tool reads once more, over the asked days plus the 7 after, and `nearestTimes` picks: first the same hours
+  on the following days (a time of day usually reflects a real constraint: work, a timezone; the day is often more
+  flexible), else any hour from the first day asked. The model gets `nearest: { note, examples }` and only has to
+  say "Tuesday afternoon is full; the nearest times are shown".
+- **Why not let the model search again:** it did that unreliably (the eval caught it giving up), each retry is
+  another model call on a free plan, and "which times are nearest" needs no language. Code does it the same way
+  every run and unit tests cover it.
+- **The trade-off:** less of an "agent". The model still chooses the first search, and may search again when the
+  guest asked for several things.
+
 ### Up to three searches
 
-- `stopWhen: stepCountIs(4)`: three searches and a reply. The tool counts too: a fourth search is refused with
-  "Reply to the guest now".
-- If a search finds nothing, the model may widen it (more days, any hour). The evals check it does.
+- `stopWhen: stepCountIs(4)`: three searches and a reply. The tool counts too, as a backstop: a fourth search
+  would be refused with "Reply to the guest now".
 - If the host's Google Calendar can't be read, the tool says so to the model ("try again in a minute") and nothing
   is shown. Same cached read as the times grid (1 minute fresh, up to an hour old when Google fails).
 
 ### Language
 
 - The guest reads the reply, so it's in their language (an eval sends Bangla). The host's brief stays English.
+
+### "Book me and confirm it"
+
+- The model can't, and must never say a meeting is booked. But it still searches for the time asked for and
+  tells the guest to confirm it on the page: a refusal that also helps.
 
 ### Limits and cost
 
@@ -103,14 +124,16 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
 
 - **Unit tests:** `parseSearch` (each rule), the hour window on another clock, `pickSuggestions`, and
   `runAssistant` with `mockModelSteps`, a fake model that plays a script: search → reply; a bad search corrected; a
-  wider search that comes up empty; four searches (the fourth refused); Google down; an off-topic message; links in
-  the reply; the fenced message; one tool offered; a provider failure.
+  wider search that comes up empty; the step limit; a full day (the nearest times, the second read's range, what
+  the model is told); nothing free for a week; Google down; an off-topic message; links in the reply; the fenced
+  message and the calendar; one tool offered; a provider failure. Plus `nearestTimes` and `calendarForModel` on
+  their own (including "next week" seen from a Monday).
 - **Database test:** `askAssistant` over the real slot function, with a booking and a Google busy block in the way:
   the three suggestions avoid both and are spread out. Plus not found, AI off, over budget (no model call), and the
   cost log.
 - **Evals (`npm run eval`, real model):** next Tuesday afternoon, tomorrow morning, next week, a named city
-  (New York), Bangla, "book me and confirm it", an off-topic poem, and a full day that should make it widen the
-  search. They check the search it made, not its wording.
+  (New York), Bangla, "book me and confirm it" (searches Monday, claims nothing), an off-topic poem, and a full day
+  (the nearest times, and a reply that says so). They check the search it made, not its wording.
 
 ## 2. Likely interview questions
 
@@ -122,8 +145,12 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
   dates it chose.
 - **"What if the model invents a time?"** It can't put one on screen: suggestions come only from the tool's
   results.
-- **"Why a tool and not one structured-output call?"** The tool lets it react to results: widen the search if the
-  day is full. Capped at three searches.
+- **"Why a tool and not one structured-output call?"** The model can search more than once when the guest asks
+  for several things, and it words the reply from what was found. Capped at three searches.
+- **"Why does code widen the search, not the model?"** Choosing the nearest free times needs no language. The model
+  did it unreliably and each retry costs a call; code does it the same way every time, and it's unit-tested.
+- **"How do you know the prompt works?"** Evals with a fixed "now". The first run failed 3 of 8; each failure
+  pointed at a real gap (a story below).
 - **"How do you test it without paying for tokens?"** A scripted fake model for the logic (CI); a handful of evals
   against the real model before changing the prompt or model.
 
@@ -140,6 +167,23 @@ src/test/mock-model.ts           # mockModelSteps: a fake model that plays a scr
   after the first got a new id, which is what rewriting the first one means.
 - **Lesson:** a commit's author is whatever `git config` says on the machine that made it. Set it before the first
   commit in any new environment, and test a history rewrite on a copy before force-pushing.
+
+### The evals failed 3 of 8, and each failure was right
+
+- **What happened:** Sakif's first `npm run eval` with his key failed 5 of 14; the run he logged, 3 of the 8
+  assistant evals. (1) "Sometime next week"
+  searched 19–25 Nov: the model read it as "the next 7 days", not the week starting Monday 23. (2) "Book me Monday
+  9am and confirm it": it refused correctly, but didn't search at all. (3) Tuesday afternoon full: it told the guest
+  to try another day instead of searching wider, because my instructions said both "you may search again" and "if
+  nothing was found, suggest another day", and it followed the second. An earlier run had also failed the brief's
+  "no invented numbers" check because the brief said "30-minute call", the meeting's own length.
+- **What I did:** each fix moved work away from the model. (1) A 14-day calendar with weekday names and the meaning
+  of "this week" / "next week" in the instructions: the model copies a date instead of counting. (2) One line: still
+  search, then point to the form. (3) `nearestTimes` in code (Sakif chose this over a stronger prompt). The brief
+  eval now allows "30". My first guess, before reading the log, was Groq's token-per-minute limit: wrong. The log
+  showed real answers.
+- **Lesson:** an eval failure is either the model, the prompt or the test, and the log tells you which, not a guess.
+  When a prompt can't make the model reliable, give the decision to code.
 
 ### "Today" written two ways
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { dateOverrideSchema, weeklyScheduleSchema } from "./availability";
 import {
+  assistantRequestSchema,
   bookingRequestSchema,
   cancelRequestSchema,
   rescheduleRequestSchema,
@@ -56,6 +57,11 @@ const cases: [string, z.ZodType, Record<string, unknown>][] = [
   ],
   ["reschedule", rescheduleRequestSchema, { token: "x".repeat(43), startsAt: "2026-11-09T04:00:00Z" }],
   ["cancel", cancelRequestSchema, { token: "x".repeat(43), reason: "" }],
+  [
+    "booking assistant",
+    assistantRequestSchema,
+    { username: "sakif", slug: "intro", message: "next Tuesday afternoon", timeZone: "Europe/London" },
+  ],
   ["event type", eventTypeSchema, { ...EVENT_TYPE_DEFAULTS, title: "Intro", slug: "intro" }],
   ["onboarding", onboardingSchema, { username: "sakif", timeZone: "Asia/Dhaka" }],
   [

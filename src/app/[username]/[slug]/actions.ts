@@ -3,8 +3,14 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { bookingRequestSchema, type GuestDetailsForm } from "@/lib/validation/booking";
+import {
+  assistantRequestSchema,
+  bookingRequestSchema,
+  type GuestDetailsForm,
+} from "@/lib/validation/booking";
 import type { Question } from "@/lib/validation/questions";
+import { assistantDeps } from "@/server/ai";
+import { askAssistant, type AskResult } from "@/server/ai/ask";
 import { createBooking } from "@/server/booking";
 import { calendarBusy } from "@/server/calendar";
 import { jobs } from "@/server/jobs";
@@ -78,4 +84,23 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
     ok: true,
     booking: { startsAt: result.booking.startsAt.toISOString(), endsAt: result.booking.endsAt.toISOString() },
   };
+}
+
+/**
+ * The booking assistant (Days 19–20): "next Tuesday afternoon" → up to three
+ * suggested times. Public like booking itself, so the same order: the per-IP
+ * limit first (before parsing, so even junk counts), then the input, then the
+ * per-host and app-wide budgets inside askAssistant. It never books: the guest
+ * picks a time and confirms through bookSlotAction, like any booking.
+ */
+export async function askAssistantAction(
+  input: unknown,
+): Promise<AskResult | { ok: false; error: "invalid"; message: string }> {
+  const byIp = await rateLimit([["ai_assistant_ip", await actionIp()]]);
+  if (!byIp.ok) return { ok: false, error: "rate_limited", retryAfterSeconds: byIp.retryAfterSeconds };
+  const parsed = assistantRequestSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "invalid", message: parsed.error.issues[0]?.message ?? "Invalid request" };
+  }
+  return askAssistant(assistantDeps, parsed.data, new Date());
 }

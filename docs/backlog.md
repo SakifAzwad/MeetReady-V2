@@ -1,21 +1,21 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 18).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 19).
 
 ## Next, in order
 
-1. **Push Day 18** and set up Groq: [deploy.md](deploy.md) step 16 (Sakif), then `npm run eval` once.
-2. **Days 19–20: booking assistant.** A guest types "30 minutes next Tuesday afternoon, I'm in London"; the model
-   calls our own tools (available slots, then booking) and books only after the guest confirms. Public and able to
-   create bookings, so it gets its own rate limits and the Day 18 injection habits. Opinions first.
+1. **Push Day 19**, then `npm run eval` once (Sakif).
+2. **Day 20: the assistant's UI.** A box on the public booking page; a suggestion selects that time in the widget
+   and the guest books through the normal form. A fake Groq for E2E, the privacy page, the runbook check.
 3. **Day 21: MCP server** (check times and book from Claude or ChatGPT).
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
 rate limiting (Day 14); Google Calendar busy times (Day 15); privacy policy, terms and a published Google app
 (Day 15 follow-up); bookings written to Google Calendar with Meet links (Day 16); background jobs with automatic
-retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI meeting brief on Groq (Day 18).
+retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI meeting brief on Groq (Day 18);
+booking assistant on the server, suggest-only (Day 19).
 
 ## Ideas from reviews, deferred
 
@@ -33,6 +33,8 @@ retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI mee
 | **Briefs for older bookings, and "Regenerate"**                                  | Day 18 | Only bookings made after Day 18 get one. `prepareBrief` is safe to call any time, so a backfill (like Day 17's) or a button is small. Waits until a host wants it.                                                                                                                     | When a host asks                                   |
 | **Retry a failed brief**                                                         | Day 18 | A failed brief is just missing: one call, no retries, to keep the free quota for real bookings. A retrying job (like `calendar-sync`) would show it on the Bookings page later.                                                                                                        | If `ai_calls` shows many failures                  |
 | **Brief in the host's language**                                                 | Day 18 | English only today (an eval checks a Bangla booking gets English). Needs a language setting on the host.                                                                                                                                                                               | With English + Bangla (Phase 3)                    |
+| **Assistant remembers the conversation** (follow-ups like "later that day")      | Day 19 | One message per request keeps it stateless: no history to store, cap or inject into. A follow-up means sending past turns back each time, which multiplies tokens on the free plan.                                                                                                    | If guests often rephrase                           |
+| **Assistant on the host's dashboard** ("move my 3pm to Friday")                  | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                              | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)       | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                      | As polish, after the AI features                   |
 | **Guest calendar overlay** ("check my conflicts")                                | Day 9  | Reuses the host Google Calendar sync, which matters more and comes first. Calendar access is a sensitive Google permission: until the app passes Google's review, users see an "unverified app" warning. Must stay optional, read-only, never stored.                                  | After host Google Calendar sync                    |
 | **Guest edits their answers** when rescheduling                                  | Day 10 | The manage page shows answers read-only. Editing needs a form there and a host notification ("Ada changed her answers"). Rarely needed: notes cover it.                                                                                                                                | With Phase 2 webhooks                              |
@@ -47,6 +49,8 @@ retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI mee
 
 | Idea                                          | From     | Why not                                                                                                                                                                                       |
 | --------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The assistant books by itself                 | Day 19   | A writing tool on a public, anonymous page is what prompt injection aims at, and the form already validates everything a booking needs. The model suggests; the guest confirms in our form.   |
+| The model computing instants or offsets       | Day 19   | Models slip on DST and "next Tuesday" arithmetic. They write dates and hours; `wallTimeToInstant` converts.                                                                                   |
 | Gemini's free tier for AI                     | Day 18   | Free-tier requests may be used to improve Google's products. Guests' answers are personal data. Groq's free plan bars training.                                                               |
 | Length limits in the schema sent to the model | Day 18   | Strict structured-output modes support only part of JSON Schema; an unsupported keyword is a 400. `cleanBrief` caps lengths after the model instead.                                          |
 | Writing the brief before the guest's email    | Day 18   | The guest would wait for the model. The brief is on the host's side of the job only.                                                                                                          |
@@ -88,7 +92,7 @@ retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI mee
   - recurring bookings;
   - English and Bangla.
 - **AI:**
-  - booking assistant (tool calling, books only after confirmation);
+  - booking assistant (server Day 19, suggest-only; UI Day 20);
   - MCP server (check times and book from Claude or ChatGPT);
   - meeting brief for the host (done, Day 18);
   - email-to-booking;

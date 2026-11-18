@@ -86,3 +86,11 @@ export const slotsQuerySchema = z
     path: ["to"],
     when: noIssuesYet,
   });
+
+/** The booking assistant (Days 19–20): one message from the guest, and where they are. */
+export const assistantRequestSchema = z.object({
+  username: z.string().trim().toLowerCase().min(1).max(30),
+  slug: z.string().trim().toLowerCase().min(1).max(80),
+  message: z.string().trim().min(2, "Tell us when suits you").max(300, "At most 300 characters"),
+  timeZone: timeZoneSchema,
+});

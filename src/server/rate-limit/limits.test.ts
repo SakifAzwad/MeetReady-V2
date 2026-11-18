@@ -34,6 +34,9 @@ describe("the agreed limits", () => {
       pages: { tokens: 120, windowMs: MIN },
       ai_brief_host: { tokens: 40, windowMs: 24 * 60 * MIN },
       ai_brief_all: { tokens: 400, windowMs: 24 * 60 * MIN },
+      ai_assistant_ip: { tokens: 10, windowMs: 10 * MIN },
+      ai_assistant_host: { tokens: 200, windowMs: 24 * 60 * MIN },
+      ai_assistant_all: { tokens: 100, windowMs: 24 * 60 * MIN },
     });
   });
 });

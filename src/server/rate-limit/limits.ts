@@ -47,6 +47,16 @@ export const LIMITS = {
    */
   ai_brief_host: { tokens: 40, windowMs: 24 * 60 * MINUTE },
   ai_brief_all: { tokens: 400, windowMs: 24 * 60 * MINUTE },
+  /**
+   * The booking assistant (Days 19–20): public, anonymous, and each request
+   * can be up to four model calls. Per IP (someone poking at it), per host (a
+   * host's page being hammered from many IPs), and for the whole app: 100
+   * requests a day is at most 400 calls, which with the briefs' 400 stays
+   * under Groq's free-plan daily cap.
+   */
+  ai_assistant_ip: { tokens: 10, windowMs: 10 * MINUTE },
+  ai_assistant_host: { tokens: 200, windowMs: 24 * 60 * MINUTE },
+  ai_assistant_all: { tokens: 100, windowMs: 24 * 60 * MINUTE },
 } as const satisfies Record<string, Policy>;
 
 export type LimitName = keyof typeof LIMITS;

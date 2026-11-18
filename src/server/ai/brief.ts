@@ -63,9 +63,9 @@ export function hasBriefContent(guestNotes: string | null, answers: BookingAnswe
   return answers.some((a) => a.type !== "checkbox" && formatAnswer(a).trim() !== "");
 }
 
-/** The guest can't end the fenced block early by typing the closing tag themselves. */
-function fence(text: string): string {
-  return text.replace(/<\s*\/?\s*guest_input\s*>/gi, "[tag removed]");
+/** The guest can't end a fenced block early (or open a new one) by typing the tag themselves. */
+export function fence(text: string, tag = "guest_input"): string {
+  return text.replace(new RegExp(String.raw`<\s*\/?\s*${tag}\s*>`, "gi"), "[tag removed]");
 }
 
 export type BriefSubject = {
@@ -114,7 +114,8 @@ const UNSAFE = [
 /** Phone-like runs: digits with spaces, dots, dashes or brackets. 9+ digits, so dates (8) and years survive. */
 const PHONE_LIKE = /\+?\d[\d\s().-]{6,}\d/g;
 
-function cleanText(value: string, max: number): string {
+/** Strips links, email addresses and phone numbers from model output, and caps its length. Shared by the AI features. */
+export function cleanText(value: string, max: number): string {
   let text = value;
   for (const pattern of UNSAFE) text = text.replace(pattern, "[removed]");
   text = text.replace(PHONE_LIKE, (run) => (run.replace(/\D/g, "").length >= 9 ? "[removed]" : run));

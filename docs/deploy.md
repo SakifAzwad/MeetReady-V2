@@ -350,7 +350,8 @@ Without this step everything still works: bookings just have no brief.
       ```
       One `meeting_brief` row with `outcome = ok`, a few hundred tokens each way, a few seconds.
 7. **Evals, once, on your laptop:** put the same key in `.env.local` as `GROQ_API_KEY`, then `npm run eval`.
-   Expect 6 passed; it prints each brief the model wrote. Run it again before changing the prompt or `AI_MODEL`.
+   Expect 14 passed (6 brief + 8 booking assistant, since Day 19); it prints each brief and each search the model
+   made. About 30 Groq requests in all. Run it again before changing a prompt or `AI_MODEL`.
 8. **If a brief is missing:** Inngest → the run's `brief` step says why (`limited` = our daily budget, `ai_off` = no
    key in Production, `failed` = the model failed; Sentry has it, tagged `ai-brief`). The `ai_calls` table shows
    every call's outcome.

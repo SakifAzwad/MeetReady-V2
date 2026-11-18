@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 18)
+# Handoff: starting a new chat (after Day 19)
 
-Read this first in a new chat. It replaces the long Days 1–18 conversations. Details live in `docs/day-01.md` …
-`docs/day-18.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–19 conversations. Details live in `docs/day-01.md` …
+`docs/day-19.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–18):**
+- **Built (Days 1–19):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -75,7 +75,16 @@ Read this first in a new chat. It replaces the long Days 1–18 conversations. D
     `<guest_input>` (typed tags removed); only first name, meeting type, notes, answers are sent. Limits
     `ai_brief_host` 40/day, `ai_brief_all` 400/day. Unit tests use `mockModel()` (`src/test/mock-model.ts`);
     evals `npm run eval` (real model, `.env.local` key, not in CI). Needs runbook step 16.
-- **Numbers:** 579 unit tests + 22 E2E tests + 6 smoke tests + 6 evals; typecheck, lint, format, `drizzle-kit check`
+  - Booking assistant, server side (Day 19): `assistant.ts` + `ask.ts`, `askAssistantAction` in the booking page's
+    `actions.ts`. Suggest-only: one read-only tool `findTimes {from, to, earliest|null, latest|null, timeZone|null}`;
+    `parseSearch` checks and narrows it (real dates/zone, past → today, max 14 days) and code converts with
+    `wallTimeToInstant`; slots from `getBookableSlots` (+ cached Google busy), filtered by hour on the searched
+    clock. Max 3 searches (`stepCountIs(4)`), 25 s, reply cleaned (`cleanText`, 300 chars), in the guest's language.
+    Shown times = `pickSuggestions` over the last non-empty tool result (3, spread over days/hours), never the
+    model's text; host and event type come from the URL. Stateless: one message (2–300 chars) per request. Limits
+    `ai_assistant_ip` 10/10 min, `ai_assistant_all` 100/day, `ai_assistant_host` 200/day; `ai_calls` feature
+    `booking_assistant`. Tests: `mockModelSteps` (scripted tool calls); 8 evals. No UI yet (Day 20).
+- **Numbers:** 604 unit tests + 22 E2E tests + 6 smoke tests + 14 evals; typecheck, lint, format, `drizzle-kit check`
   and build all green. 9 migrations (0000–0008).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -85,10 +94,10 @@ Read this first in a new chat. It replaces the long Days 1–18 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 18, then runbook step 16 (Groq key, Zero Data Retention on, `GROQ_API_KEY` in Production)
-   and its checks, then `npm run eval` once locally. The Day 17 production checks (deploy.md 15.5) were his to run.
-2. **Days 19–20: booking assistant** (tool calling over `getBookableSlots`/`createBooking`, books only after the
-   guest confirms, own rate limits). **Day 21: MCP server.** Opinions first, as always.
+1. **Sakif:** push Day 19, then `npm run eval` once locally (14 evals).
+2. **Day 20: the assistant's UI** on the public booking page (a suggestion selects that time in the widget), a fake
+   Groq for E2E (`GROQ_BASE_URL`, like the fake Google), the privacy page (the guest's message goes to Groq).
+   **Day 21: MCP server.** Opinions first, as always.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
@@ -205,3 +214,6 @@ Read this first in a new chat. It replaces the long Days 1–18 conversations. D
   than the feature needs. AI SDK errors carry the prompt and raw output: report only the kind of failure, through
   `scrubError`. Unit tests never call a model (`mockModel`); behaviour on real models is `npm run eval`. A new AI
   route gets its own lines in `LIMITS` and logs to `ai_calls`.
+- **AI tools (Day 19):** the model writes plain dates/hours/zone names; code validates and does the arithmetic.
+  What's shown or acted on comes from tool results, never the model's text. Fields a model fills under a strict
+  schema are required + nullable, never `.optional()`. Tools read; writing stays in our own forms.

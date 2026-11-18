@@ -32,6 +32,8 @@ describe("the agreed limits", () => {
       manage: { tokens: 10, windowMs: 60 * MIN },
       slots: { tokens: 60, windowMs: MIN },
       pages: { tokens: 120, windowMs: MIN },
+      ai_brief_host: { tokens: 40, windowMs: 24 * 60 * MIN },
+      ai_brief_all: { tokens: 400, windowMs: 24 * 60 * MIN },
     });
   });
 });

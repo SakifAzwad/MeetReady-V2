@@ -1,11 +1,11 @@
-# Handoff: starting a new chat (after Day 17)
+# Handoff: starting a new chat (after Day 18)
 
-Details live in `docs/day-01.md` …
-`docs/day-17.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–18 conversations. Details live in `docs/day-01.md` …
+`docs/day-18.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
-- **Built (Days 1–17):**
+- **Built (Days 1–18):**
   - Google login and onboarding.
   - Event types; weekly availability with date overrides.
   - Pure, tested slot generation.
@@ -65,8 +65,18 @@ Details live in `docs/day-01.md` …
     AES-256-GCM copy (`manage_token_encrypted`, key = HKDF of `BETTER_AUTH_SECRET`, booking id as AAD); old
     bookings get it on reschedule, else the reminder points to the first email. Needs runbook step 15 (keys in
     Production only).
-- **Numbers:** 556 unit tests + 21 E2E tests + 6 smoke tests; typecheck, lint, format, `drizzle-kit check` and
-  build all green. 8 migrations (0000–0007).
+  - AI meeting brief (Day 18): `src/server/ai/`. Vercel AI SDK v7 + `@ai-sdk/groq` (free plan), model
+    `openai/gpt-oss-120b` (`AI_MODEL`), reasoning "low", Groq strict JSON schema. `writeBrief` = one call
+    (`generateText` + `Output.object`, 1 retry, 20 s, 1500 output tokens), never throws; `cleanBrief` strips links,
+    emails and 9+-digit runs and caps lengths after the model; `prepareBrief` decides (confirmed → exists → has
+    notes/word answers → key set → budget), stores `booking_briefs`, logs `ai_calls` (tokens, ms, outcome, no text).
+    In `booking-changed`: host branch = `brief` step then `email-host`; guest branch doesn't wait; created only.
+    Host email + Bookings page show it labelled "Written by AI from X's answers". Guest text fenced in
+    `<guest_input>` (typed tags removed); only first name, meeting type, notes, answers are sent. Limits
+    `ai_brief_host` 40/day, `ai_brief_all` 400/day. Unit tests use `mockModel()` (`src/test/mock-model.ts`);
+    evals `npm run eval` (real model, `.env.local` key, not in CI). Needs runbook step 16.
+- **Numbers:** 579 unit tests + 22 E2E tests + 6 smoke tests + 6 evals; typecheck, lint, format, `drizzle-kit check`
+  and build all green. 9 migrations (0000–0008).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -75,12 +85,11 @@ Details live in `docs/day-01.md` …
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 17, then runbook step 15 (Inngest's Vercel integration, keys in Production only) and its
-   checks (emails through the queue, a reminder, the backfill).
-2. **Then the AI features** (booking assistant, MCP server, meeting brief), each AI route with its own line in
-   `LIMITS`. Long AI work can be an Inngest job. The slot hold waits (Sakif's call).
-3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now). That
-   includes reminders.
+1. **Sakif:** push Day 18, then runbook step 16 (Groq key, Zero Data Retention on, `GROQ_API_KEY` in Production)
+   and its checks, then `npm run eval` once locally. The Day 17 production checks (deploy.md 15.5) were his to run.
+2. **Days 19–20: booking assistant** (tool calling over `getBookableSlots`/`createBooking`, books only after the
+   guest confirms, own rate limits). **Day 21: MCP server.** Opinions first, as always.
+3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -113,6 +122,7 @@ Details live in `docs/day-01.md` …
     `src/server/redis.ts`).
   - Google Calendar over plain `fetch` (no SDK): `src/server/calendar/google-api.ts`.
   - Inngest (SDK v4) for background jobs and reminders: `src/server/jobs/`, served at `/api/inngest`.
+  - Vercel AI SDK v7 + Groq (free plan) for AI: `src/server/ai/` (provider chosen only in `index.ts`).
 - **Commands:** `npm test` (PGlite; set `TEST_DATABASE_URL` to also run the race tests on real Postgres),
   `npm run test:e2e` (Playwright; needs Postgres on :5432, wipes `meetready_e2e`; `E2E_SKIP_BUILD=1`,
   `E2E_BROWSER_CHANNEL=chrome`),
@@ -123,7 +133,8 @@ Details live in `docs/day-01.md` …
   migrations), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (derived on Vercel), `GOOGLE_CLIENT_ID/SECRET`, optional
   `RESEND_API_KEY`, `EMAIL_FROM`, `DEMO_BOOKING_PATH`, `NEXT_PUBLIC_SENTRY_DSN` (+ build-time `SENTRY_ORG`,
   `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`), `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or the `UPSTASH_REDIS_REST_*`
-  names; both or neither), `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` (Production; or `INNGEST_DEV=1` locally).
+  names; both or neither), `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` + `INNGEST_SERVE_ORIGIN` (Production; or `INNGEST_DEV=1`
+  locally), `GROQ_API_KEY` (Production; unset = AI off) + optional `AI_MODEL`.
   E2E only: `GOOGLE_CALENDAR_API_URL`, `GOOGLE_REVOKE_URL` (a fake Google on :3101). Local dev uses the Neon `dev` branch, never `production`.
 
 ## Rules and gotchas learned the hard way
@@ -189,3 +200,8 @@ Details live in `docs/day-01.md` …
 - **Inngest locally:** `npx inngest-cli@latest dev` (UI on :8288) and `INNGEST_DEV=1` for the app. Without either,
   jobs run inline. E2E sets the Inngest variables to empty on purpose. The free plan caps a run's life at 30 days
   (sleeps included): don't sleep until a far-off date, sweep instead.
+- **AI (Day 18):** the guest's text is untrusted input to the model: fence it, give the model no tools it doesn't
+  need, require a schema, and clean the output in code (`cleanBrief`) whatever the prompt says. Never send more
+  than the feature needs. AI SDK errors carry the prompt and raw output: report only the kind of failure, through
+  `scrubError`. Unit tests never call a model (`mockModel`); behaviour on real models is `npm run eval`. A new AI
+  route gets its own lines in `LIMITS` and logs to `ai_calls`.

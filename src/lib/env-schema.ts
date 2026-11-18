@@ -69,6 +69,12 @@ export function parseEnv(source: Record<string, string | undefined>) {
        */
       INNGEST_EVENT_KEY: emptyAsUnset(z.string().min(1).optional()),
       INNGEST_DEV: emptyAsUnset(z.string().min(1).optional()),
+      /**
+       * AI (Day 18): Groq's API key. Unset = AI features are off: no brief is written and
+       * nothing calls a model (local dev, CI, E2E). AI_MODEL picks the Groq model.
+       */
+      GROQ_API_KEY: emptyAsUnset(z.string().min(1).optional()),
+      AI_MODEL: emptyAsUnset(z.string().min(1).default("openai/gpt-oss-120b")),
       /** Rate-limit store (see redisConfig): both or neither, so a half-pasted pair fails at startup, not per request. */
       REDIS: z.preprocess(
         () => redisConfig(source),

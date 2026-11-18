@@ -1,10 +1,11 @@
 import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
-import { bookings, eventTypes, user } from "@/db/schema";
+import { bookingBriefs, bookings, eventTypes, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { addMinutes, subtractInterval } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
+import type { MeetingBrief } from "./ai/brief";
 import { busyLoadRange, getBookableSlots, getPublicEventType } from "./booking";
 import { CalendarUnavailableError, type ExternalBusy } from "./calendar/busy";
 import { hashManageToken, manageTokenSchema, openManageToken } from "./manage-token";
@@ -277,6 +278,8 @@ export type HostBookingRow = {
   eventColor: string;
   meetUrl: string | null;
   calendarSync: "synced" | "failed" | null;
+  /** Day 18: the AI meeting brief, when one was written. */
+  brief: MeetingBrief | null;
 };
 
 export async function listHostBookings(
@@ -304,9 +307,12 @@ export async function listHostBookings(
       eventColor: eventTypes.color,
       meetUrl: bookings.meetUrl,
       calendarSync: bookings.calendarSync,
+      // A left join: most bookings have no brief. Drizzle returns null for the whole object then.
+      brief: { summary: bookingBriefs.summary, agenda: bookingBriefs.agenda, prepare: bookingBriefs.prepare },
     })
     .from(bookings)
-    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId));
+    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(bookingBriefs, eq(bookingBriefs.bookingId, bookings.id));
 
   const mine = eq(bookings.hostId, hostId);
   switch (view) {

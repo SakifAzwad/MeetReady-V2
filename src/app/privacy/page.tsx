@@ -58,6 +58,13 @@ export default function PrivacyPage() {
             for it. You are not added as a guest on their Google event, so Google doesn&apos;t email you.
           </li>
           <li>
+            <strong>A short brief for the host, written by AI:</strong> if you leave notes or answer the
+            host&apos;s questions, that text, your first name and the meeting type are sent to Groq, which
+            writes a summary and agenda for the host. Your email address and the meeting time are not sent.
+            Groq isn&apos;t allowed to use it to train models, and MeetReady has asked Groq not to keep it
+            (Zero Data Retention). The brief is stored with the booking and shown only to the host.
+          </li>
+          <li>
             <strong>Emails:</strong> a confirmation with a calendar invite, a private link to cancel or move
             the meeting, and reminders a day and an hour before it. The link is stored twice, neither time as
             itself: a scrambled (hashed) form to check it, and an encrypted copy so later emails such as
@@ -147,6 +154,9 @@ export default function PrivacyPage() {
             booking links.
           </li>
           <li>Sentry: error reports, stripped as described above.</li>
+          <li>
+            Groq: writing the host&apos;s meeting brief from a guest&apos;s notes and answers (see above).
+          </li>
           <li>Google: sign-in and, if connected, Google Calendar.</li>
         </ul>
         <p>Data is not sold or shared with anyone else.</p>

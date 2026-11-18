@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
 import { Inngest } from "inngest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bookings } from "@/db/schema";
+import { bookingBriefs, bookings } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { APP, book, connectCalendar, SECRET, setupHost } from "@/test/booking-fixture";
 import { createTestDb } from "@/test/db";
 import { CalendarUnavailableError } from "../calendar/google-api";
+import type { BriefOutcome } from "../ai/briefs";
 import type { SyncAttempt } from "../calendar/sync";
 import { createMemorySender, type EmailMessage, type EmailSender } from "../email/sender";
 import { cancelBookingAsHost, rescheduleBookingByToken } from "../manage-booking";
@@ -54,6 +55,7 @@ function makeDeps(opts: { attempt?: (id: string) => Promise<SyncAttempt>; sender
   const sender = opts.sender ?? createMemorySender();
   const report = vi.fn();
   const attemptSync = vi.fn(opts.attempt ?? (async () => ({ outcome: "synced" }) as SyncAttempt));
+  const prepareBrief = vi.fn<(bookingId: string) => Promise<BriefOutcome>>(async () => "no_content");
   const deps: JobDeps = {
     db,
     sender,
@@ -62,8 +64,9 @@ function makeDeps(opts: { attempt?: (id: string) => Promise<SyncAttempt>; sender
     calendar: { attemptSync },
     report,
     now: () => NOW,
+    briefs: { prepare: prepareBrief },
   };
-  return { deps, sender, report, attemptSync };
+  return { deps, sender, report, attemptSync, prepareBrief };
 }
 
 function durable() {
@@ -111,7 +114,7 @@ describe("booking-changed", () => {
 
     const result = await onBookingChanged(changed(r.booking.id), run.steps, deps);
 
-    expect(result).toEqual({ calendar: "synced", guest: "sent", host: "sent" });
+    expect(result).toEqual({ calendar: "synced", brief: "no_content", guest: "sent", host: "sent" });
     expect(attemptSync).toHaveBeenCalledWith(r.booking.id);
     const mail = sender as ReturnType<typeof createMemorySender>;
     expect(recipients(mail.sent)).toEqual(["ada@example.com", "sakif@example.com"]);
@@ -120,6 +123,61 @@ describe("booking-changed", () => {
     expect(mail.keys.sort()).toEqual([`booking/${r.booking.id}/0/guest`, `booking/${r.booking.id}/0/host`]);
     // What Inngest would store: status words, no names or emails.
     expect(JSON.stringify([...run.memo.values()])).not.toMatch(/Ada|@|Private/);
+  });
+
+  it("writes the AI brief before the host's email, which carries it; the guest's never does (Day 18)", async () => {
+    const r = await book(db, START, LONG_AGO);
+    const { deps, sender, prepareBrief } = makeDeps();
+    prepareBrief.mockImplementation(async (id: string) => {
+      await db.insert(bookingBriefs).values({
+        bookingId: id,
+        summary: "Ada wants to talk about hiring.",
+        agenda: ["Hiring needs", "Availability"],
+        prepare: ["Your rates"],
+        model: "mock-model",
+      });
+      return "written" as const;
+    });
+
+    const result = await onBookingChanged(changed(r.booking.id), durable().steps, deps);
+
+    expect(result.brief).toBe("written");
+    const mail = sender as ReturnType<typeof createMemorySender>;
+    const host = mail.sent.find((m) => m.to === "sakif@example.com")!;
+    const guest = mail.sent.find((m) => m.to === "ada@example.com")!;
+    expect(host.text).toContain("Ada wants to talk about hiring.");
+    expect(host.text).toContain("Written by AI from Ada's answers");
+    expect(host.text).toMatch(/1\. Hiring needs[\s\S]*2\. Availability[\s\S]*- Your rates/);
+    expect(guest.text).not.toContain("hiring");
+  });
+
+  it("only a new booking gets a brief; moves and cancellations don't call the AI", async () => {
+    const r = await book(db, START, LONG_AGO);
+    await rescheduleBookingByToken(db, r.manageToken, new Date("2026-11-20T05:00:00Z"), LONG_AGO);
+    const { deps, prepareBrief } = makeDeps();
+    const result = await onBookingChanged(
+      changed(r.booking.id, 1, { change: "rescheduled", previousStartsAt: START.toISOString() }),
+      durable().steps,
+      deps,
+    );
+    expect(result.brief).toBe("not_needed");
+    expect(prepareBrief).not.toHaveBeenCalled();
+  });
+
+  it("the guest's email doesn't wait for the AI", async () => {
+    const r = await book(db, START, LONG_AGO);
+    const { deps, sender, prepareBrief } = makeDeps();
+    let finishBrief = () => {};
+    prepareBrief.mockImplementation(
+      () => new Promise<"written">((resolve) => (finishBrief = () => resolve("written"))),
+    );
+    const mail = sender as ReturnType<typeof createMemorySender>;
+
+    const run = onBookingChanged(changed(r.booking.id), durable().steps, deps);
+    await vi.waitFor(() => expect(mail.sent.map((m) => m.to)).toEqual(["ada@example.com"]));
+    finishBrief(); // the model answers
+    await run;
+    expect(recipients(mail.sent)).toEqual(["ada@example.com", "sakif@example.com"]);
   });
 
   it("a retry repeats only the step that failed: the guest isn't emailed twice", async () => {

@@ -11,6 +11,7 @@ import {
   Text,
 } from "@react-email/components";
 import { formatAnswer, type BookingAnswer } from "@/lib/validation/questions";
+import type { MeetingBrief } from "../ai/brief";
 
 /*
  * One template for every booking email: confirmed / rescheduled / cancelled,
@@ -41,6 +42,8 @@ export type BookingEmailProps = {
   actionUrl?: string;
   /** Reminders: the heading, worked out from the time left ("Starts in 1 hour"). */
   reminderHeading?: string;
+  /** Day 18: the AI meeting brief (host confirmation only). */
+  brief?: MeetingBrief;
 };
 
 export function bookingEmailHeading(p: BookingEmailProps): string {
@@ -95,6 +98,15 @@ const styles = {
     padding: "12px 20px",
   },
   footer: { color: MUTED, fontSize: 12, marginTop: 24 },
+  brief: {
+    backgroundColor: "#f5f7fb",
+    border: "1px solid #e2e6ef",
+    borderRadius: 8,
+    marginTop: 18,
+    padding: "12px 16px",
+  },
+  briefNote: { color: MUTED, fontSize: 12, margin: "2px 0 8px" },
+  item: { color: INK, fontSize: 15, margin: "2px 0" },
 };
 
 export function BookingEmail(p: BookingEmailProps) {
@@ -134,6 +146,36 @@ export function BookingEmail(p: BookingEmailProps) {
                 {p.guestName} ({p.guestEmail})
               </Text>
             </>
+          )}
+
+          {p.brief && p.audience === "host" && !cancelled && (
+            <Section style={styles.brief}>
+              <Text style={{ ...styles.value, fontWeight: 600 }}>Brief</Text>
+              <Text style={styles.briefNote}>
+                Written by AI from {p.guestName.split(" ")[0]}&apos;s answers. Their own words are below.
+              </Text>
+              <Text style={styles.value}>{p.brief.summary}</Text>
+              {p.brief.agenda.length > 0 && (
+                <>
+                  <Text style={styles.label}>Agenda</Text>
+                  {p.brief.agenda.map((item, i) => (
+                    <Text key={i} style={styles.item}>
+                      {i + 1}. {item}
+                    </Text>
+                  ))}
+                </>
+              )}
+              {p.brief.prepare.length > 0 && (
+                <>
+                  <Text style={styles.label}>To prepare</Text>
+                  {p.brief.prepare.map((item, i) => (
+                    <Text key={i} style={styles.item}>
+                      - {item}
+                    </Text>
+                  ))}
+                </>
+              )}
+            </Section>
           )}
 
           {p.guestNotes && p.audience === "host" && !cancelled && (

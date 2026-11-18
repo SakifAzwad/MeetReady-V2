@@ -3,6 +3,7 @@ import type { Database } from "@/db/types";
 import { formatWhen, locationText } from "@/lib/booking-format";
 import { formatDateKey } from "@/lib/scheduling/calendar";
 import { addDaysToKey, dateKeyInZone } from "@/lib/scheduling/time";
+import type { MeetingBrief } from "../ai/brief";
 import { getBookingDetails, type BookingDetails } from "../manage-booking";
 import { BookingEmail, bookingEmailHeading, type BookingEmailProps } from "./booking-email";
 import { buildIcs } from "./ics";
@@ -106,6 +107,8 @@ export async function composeChangeEmail(
   change: BookingChange,
   audience: Audience,
   manageToken: string | null,
+  /** Day 18: the AI brief, shown in the host's confirmation only. */
+  extras: { brief?: MeetingBrief | null } = {},
 ): Promise<EmailMessage> {
   const location = locationText(b);
   const dashboard = `${ctx.appUrl}/dashboard/bookings`;
@@ -127,6 +130,7 @@ export async function composeChangeEmail(
             guestEmail: b.guestEmail,
             guestNotes: b.guestNotes,
             answers: b.answers,
+            brief: extras.brief ?? undefined,
             actionUrl: dashboard,
           },
           zone,

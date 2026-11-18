@@ -9,7 +9,7 @@ guests book a time shown in their own timezone. Double booking is prevented by t
 ## Stack
 
 Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +
-`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · Upstash Redis (rate limits, calendar cache) · Google Calendar API · Inngest (background jobs, reminders) · PGlite (in-process Postgres for tests) · GitHub Actions
+`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · Upstash Redis (rate limits, calendar cache) · Google Calendar API · Inngest (background jobs, reminders) · Vercel AI SDK + Groq (AI meeting brief) · PGlite (in-process Postgres for tests) · GitHub Actions
 
 ## Getting started
 
@@ -32,6 +32,7 @@ npm run dev
 | `npm run typecheck` / `lint` / `format:check` | Same checks CI runs                                             |
 | `npm run db:generate`                         | New migration from `src/db/schema.ts`                           |
 | `npm run db:studio`                           | Browse the database                                             |
+| `npm run eval`                                | AI evals against the real model (needs `GROQ_API_KEY`)          |
 
 ## End-to-end tests
 
@@ -89,6 +90,9 @@ npm run test:e2e                                                       # wipes a
 - [Day 17: Background jobs and reminders](docs/day-17.md): Inngest with one step per side effect, idempotency keys,
   automatic retries for Google writes and emails, reminders from a database sweep instead of long sleeps, the
   manage link stored hashed and encrypted, a backfill when a calendar is connected, and an inline fallback.
+- [Day 18: AI meeting brief](docs/day-18.md): a summary and agenda for the host from the guest's answers, on Groq's
+  free plan through the AI SDK, with structured output, five layers against prompt injection, a cost log per call,
+  a fake model for unit tests, and evals against the real model.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

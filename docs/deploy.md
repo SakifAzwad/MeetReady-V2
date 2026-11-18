@@ -15,6 +15,7 @@ step says **why**, so it can be explained later. Expect about 30–40 minutes.
 - `next.config.ts`: security headers.
 - `.github/workflows/smoke.yml`: checks the live site after each production deploy.
 - `src/app/api/inngest/route.ts`: where Inngest runs the background jobs (step 15).
+- `src/server/ai/index.ts`: the only place that knows the AI provider is Groq (step 16).
 
 ## 0. Before you start
 
@@ -317,6 +318,43 @@ warning that says so.
 6. **If a run fails,** Inngest shows which step and its error (scrubbed: no guest data). The final failure also
    reaches Sentry, tagged `booking-emails`, `calendar-sync`, `calendar-backfill` or `reminders`.
 
+## 16. AI meeting briefs (Groq), added on Day 18
+
+Without this step everything still works: bookings just have no brief.
+
+1. **Groq account (free, no card):** <https://console.groq.com> → sign up with Google.
+2. **Zero Data Retention, before anything else:** <https://console.groq.com/settings/data-controls> → turn on
+   **Zero Data Retention** → save.
+   - **Why first:** the privacy page says MeetReady asks Groq not to keep guests' notes and answers. That has to be
+     true from the first brief. Without it, Groq may log requests for up to 30 days for troubleshooting.
+3. **API key:** <https://console.groq.com/keys> → **Create API Key** → name it `meetreadyv2-production` → copy it.
+   It's shown once. **It's a secret.**
+4. **Vercel → Settings → Environment Variables:** add `GROQ_API_KEY` = the key, **Production only**.
+   - **Why Production only:** previews then have no AI, like local dev and the tests: nothing spends the free
+     quota except real bookings.
+   - `AI_MODEL` isn't needed: the default is `openai/gpt-oss-120b`.
+5. **Deploy** (push Day 18). Migration 0008 runs first in the build.
+6. **Check it works:**
+   1. From a private window, book yourself on `/sakifazwad18/intro`, with your own email, and type in **Notes**:
+      "We're a small startup hiring two React developers. I'd like to talk about your availability and rates."
+   2. **Guest email:** arrives as usual. No brief in it.
+   3. **Host email:** a **Brief** box above the notes: "Written by AI from …'s answers", a summary, an agenda, maybe
+      "To prepare".
+   4. **Dashboard → Bookings:** the same Brief box on that booking.
+   5. **Inngest → Runs → `booking-changed`:** a `brief` step, output `"written"`, before `email-host`.
+   6. **Book once more with no notes:** no Brief box, and the `brief` step says `"no_content"` (no AI call).
+   7. **Neon → SQL Editor (`production`):**
+      ```sql
+      select feature, outcome, input_tokens, output_tokens, duration_ms, created_at
+      from ai_calls order by created_at desc limit 5;
+      ```
+      One `meeting_brief` row with `outcome = ok`, a few hundred tokens each way, a few seconds.
+7. **Evals, once, on your laptop:** put the same key in `.env.local` as `GROQ_API_KEY`, then `npm run eval`.
+   Expect 6 passed; it prints each brief the model wrote. Run it again before changing the prompt or `AI_MODEL`.
+8. **If a brief is missing:** Inngest → the run's `brief` step says why (`limited` = our daily budget, `ai_off` = no
+   key in Production, `failed` = the model failed; Sentry has it, tagged `ai-brief`). The `ai_calls` table shows
+   every call's outcome.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.
@@ -354,5 +392,6 @@ the new column and write to both; later, drop the old one.
   `https://meetreadyv2.vercel.app/api/inngest`.
 - **Inngest shows the app as out of sync or its runs fail with 401:** the signing key in Vercel doesn't match the
   Inngest environment. Redeploy (the integration syncs again), or Apps → Sync app.
+- **Bookings have no AI brief:** see step 16.8. `ai_off` means `GROQ_API_KEY` isn't set for Production.
 - **Roll back:** Vercel → Deployments → an earlier good one → **Promote to Production**. A rollback doesn't undo
   a migration, which is another reason migrations stay additive.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
 import { BookingAnswers } from "@/components/booking-answers";
+import { MeetingBriefCard } from "@/components/meeting-brief";
 import { Badge, Card } from "@/components/ui/card";
 import { db } from "@/db";
 import { cityName } from "@/lib/scheduling/daylight";
@@ -143,6 +144,9 @@ function BookingRow({
                 Join with Google Meet
               </a>
             </p>
+          )}
+          {b.brief && b.status === "confirmed" && (
+            <MeetingBriefCard brief={b.brief} guestName={b.guestName} className="mt-3" />
           )}
           {b.guestNotes && <p className="mt-2 text-sm whitespace-pre-line">&ldquo;{b.guestNotes}&rdquo;</p>}
           <BookingAnswers answers={b.answers} className="mt-3" />

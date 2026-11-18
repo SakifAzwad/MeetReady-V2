@@ -1,4 +1,5 @@
 import type { Database } from "@/db/types";
+import { getBrief, type BriefOutcome } from "../ai/briefs";
 import { upcomingBookingsToSync, type CalendarSync } from "../calendar/sync";
 import { audiencesFor, composeChangeEmail, type Audience, type BookingChange } from "../email/notifications";
 import type { EmailSender } from "../email/sender";
@@ -50,6 +51,8 @@ export type JobDeps = {
   report: (error: unknown, context: { area: string; bookingId?: string }) => void;
   /** The clock (tests pass a fixed one). Read inside steps, so a retry sees the time of the retry. */
   now: () => Date;
+  /** Day 18: writes the AI meeting brief for a new booking (never throws; see ai/briefs.ts). */
+  briefs: { prepare: (bookingId: string) => Promise<BriefOutcome> };
 };
 
 /** Thrown inside a step to make Inngest try again later. */
@@ -84,13 +87,25 @@ export async function onBookingChanged(data: BookingChangedData, steps: Steps, d
   // steps after it, so a guest address that keeps bouncing would have cost the host
   // their email. Side by side, each one succeeds or retries on its own.
   // allSettled, then fail: both finish (and are saved) before the run fails and retries.
-  const [guest, host] = await Promise.allSettled([
+  //
+  // Day 18: on the host's side only, the AI brief comes first, so their email can
+  // carry it. The guest's email doesn't wait for the model. The brief step never
+  // throws (a failed brief just isn't there), so it can't hold the host's email back.
+  const hostSide = async () => {
+    const brief: BriefOutcome =
+      data.change === "created"
+        ? await steps.run("brief", () => deps.briefs.prepare(data.bookingId))
+        : "not_needed";
+    const host = await steps.run("email-host", () => sendChangeEmail(deps, data, "host"));
+    return { brief, host };
+  };
+  const [guest, hostResult] = await Promise.allSettled([
     steps.run("email-guest", () => sendChangeEmail(deps, data, "guest")),
-    steps.run("email-host", () => sendChangeEmail(deps, data, "host")),
+    hostSide(),
   ]);
   if (guest.status === "rejected") throw guest.reason;
-  if (host.status === "rejected") throw host.reason;
-  return { calendar, guest: guest.value, host: host.value };
+  if (hostResult.status === "rejected") throw hostResult.reason;
+  return { calendar, brief: hostResult.value.brief, guest: guest.value, host: hostResult.value.host };
 }
 
 export type ChangeEmailOutcome = "sent" | "superseded" | "not_needed" | "missing";
@@ -123,12 +138,15 @@ export async function sendChangeEmail(
     audience === "guest" && change.kind !== "cancelled"
       ? await readManageToken(deps.db, b.id, deps.secret)
       : null;
+  // Day 18: the host's confirmation carries the AI brief, if one was written.
+  const brief = audience === "host" && change.kind === "created" ? await getBrief(deps.db, b.id) : null;
   const message = await composeChangeEmail(
     { appUrl: deps.appUrl, now: new Date(data.at) },
     b,
     change,
     audience,
     token,
+    { brief },
   );
   await deps.sender.send(message, { idempotencyKey: `booking/${b.id}/${b.sequence}/${audience}` });
   return "sent";

@@ -38,6 +38,15 @@ export const LIMITS = {
   slots: { tokens: 60, windowMs: MINUTE },
   /** Public page lookups in proxy.ts per IP: walking usernames to see who exists. */
   pages: { tokens: 120, windowMs: MINUTE },
+  /**
+   * AI meeting briefs (Day 18). Every call costs tokens. Bookings are already
+   * limited per IP and per inbox, but many IPs could still book one host all
+   * day, so: per host, and for the whole app (kept under Groq's free-plan daily
+   * cap, so going over is OUR "no", not a provider error). Over the limit, the
+   * booking simply has no brief.
+   */
+  ai_brief_host: { tokens: 40, windowMs: 24 * 60 * MINUTE },
+  ai_brief_all: { tokens: 400, windowMs: 24 * 60 * MINUTE },
 } as const satisfies Record<string, Policy>;
 
 export type LimitName = keyof typeof LIMITS;

@@ -327,6 +327,53 @@ export const bookingReminders = pgTable(
   (t) => [primaryKey({ columns: [t.bookingId, t.kind, t.startsAt] })],
 );
 
+// ─── AI (Day 18) ───────────────────────────────────────────────────────────────
+
+/**
+ * The host's meeting brief: a short summary and agenda an AI wrote from the
+ * guest's notes and answers (src/server/ai/brief.ts). One per booking. Kept
+ * apart from `bookings` so the booking row stays what the guest submitted,
+ * and this is clearly a derived, AI-written thing that can be dropped or
+ * regenerated.
+ */
+export const bookingBriefs = pgTable("booking_briefs", {
+  bookingId: uuid()
+    .primaryKey()
+    .references(() => bookings.id, { onDelete: "cascade" }),
+  summary: text().notNull(),
+  agenda: jsonb().$type<string[]>().notNull(),
+  prepare: jsonb().$type<string[]>().notNull(),
+  /** Which model wrote it, e.g. "openai/gpt-oss-120b", so a brief can be traced to its model. */
+  model: text().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+/** What happened to one AI call: written, the provider failed, or its answer didn't pass our checks. */
+export const aiCallOutcome = pgEnum("ai_call_outcome", ["ok", "error", "invalid_output"]);
+
+/**
+ * One row per call to an AI model, for cost and reliability per feature
+ * ("how many tokens did briefs use this month, and how often did they fail?").
+ * No prompts or answers are stored here: only counts.
+ */
+export const aiCalls = pgTable(
+  "ai_calls",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** "meeting_brief" today; the booking assistant and MCP server will add theirs. */
+    feature: text().notNull(),
+    model: text().notNull(),
+    hostId: text().references(() => user.id, { onDelete: "set null" }),
+    bookingId: uuid().references(() => bookings.id, { onDelete: "set null" }),
+    outcome: aiCallOutcome().notNull(),
+    inputTokens: integer(),
+    outputTokens: integer(),
+    durationMs: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.feature, t.createdAt)],
+);
+
 // ─── Google Calendar (Day 15) ──────────────────────────────────────────────────
 
 /**

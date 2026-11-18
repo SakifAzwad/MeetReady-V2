@@ -3,6 +3,8 @@ import * as Sentry from "@sentry/nextjs";
 import { Inngest } from "inngest";
 import { db } from "@/db";
 import { env } from "@/lib/env";
+import { briefDeps } from "@/server/ai";
+import { prepareBrief } from "@/server/ai/briefs";
 import { calendarSync } from "@/server/calendar";
 import { emailSender } from "@/server/email";
 import { BOOKING_CHANGED, CALENDAR_CONNECTED, type BookingChangedData, type JobEvent } from "./events";
@@ -28,6 +30,7 @@ const deps: JobDeps = {
   report: (error, { area, bookingId }) =>
     Sentry.captureException(error, { tags: { area }, extra: bookingId ? { bookingId } : undefined }),
   now: () => new Date(),
+  briefs: { prepare: (bookingId) => prepareBrief(briefDeps, bookingId) },
 };
 
 export const inngest = new Inngest({

@@ -88,6 +88,8 @@ export default defineConfig({
         INNGEST_DEV: "",
         INNGEST_EVENT_KEY: "",
         INNGEST_SIGNING_KEY: "",
+        // Empty = no AI calls (Day 18): tests never reach a real model, even with a key in .env.local.
+        GROQ_API_KEY: "",
       },
     },
   ],

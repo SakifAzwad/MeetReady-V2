@@ -1,15 +1,121 @@
 # MeetReady
 
-A Calendly-style meeting scheduler: hosts define event types and weekly availability, share a link, and
-guests book a time shown in their own timezone. Double booking is prevented by the database itself.
+A meeting scheduler in the style of Calendly, with AI built in. A host sets their meeting types and weekly hours
+and shares a link. Guests see free times in their own timezone and book one. Guests can also describe a time in
+their own words, and the host can book or check meetings from Claude.
 
-**Live:** [meetreadyv2.vercel.app](https://meetreadyv2.vercel.app) · try a booking page:
+**Live:** [meetreadyv2.vercel.app](https://meetreadyv2.vercel.app). Try a booking page:
 [meetreadyv2.vercel.app/sakifazwad18/intro](https://meetreadyv2.vercel.app/sakifazwad18/intro)
+
+![A guest types "Next week, a morning. I'm in London", gets three real free times, and picks one; the page switches to that day and time](docs/images/booking-assistant.gif)
+
+## Highlights
+
+- **Double booking can't happen, even in a race.** The booking re-checks the time, takes a per-host lock, and
+  Postgres has an exclusion constraint as the last guard. Tests start two bookings at the same moment against real
+  Postgres to prove it. ([Day 4](docs/day-04.md))
+- **Timezones are handled correctly, DST included.** Free times come from one pure function that is tested with
+  property-based tests. The booking page, emails, the AI assistant and the MCP tools all use that function.
+  ([Day 1](docs/day-01.md), [Day 9](docs/day-09.md))
+- **An AI booking assistant that can't make up times.** The model turns the guest's sentence into a search. Code
+  checks the search and runs it through the slot function. Suggested times come from the tool's results, never from
+  the model's text. ([Day 19](docs/day-19.md), [Day 20](docs/day-20.md))
+- **An MCP server, so Claude can read and book meetings.** MeetReady is its own OAuth 2.1 server, with Client ID
+  Metadata Documents, PKCE, tokens bound to the server and rotating refresh tokens. Where the client supports it,
+  booking needs a confirm form that the model can't fill in. ([Day 21](docs/day-21.md), [Day 22](docs/day-22.md))
+- **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
+  and evals against the real model. ([Day 18](docs/day-18.md))
+- **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
+  limits, and Sentry with a privacy scrubber. About 670 unit tests and 34 browser tests run in CI.
+  ([Days 11–17](#design-notes))
+
+## Screenshots
+
+|                                          Booking page, after the assistant answered                                           |                          On a phone                           |
+| :---------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------: |
+| ![Booking page with the assistant's three suggestions and the chosen time selected in the grid](docs/images/booking-page.png) | ![The booking page on a phone](docs/images/booking-phone.png) |
+
+**The host's dashboard.** The next seven days on the daylight band: working hours are outlined and meetings are
+filled in.
+
+![Host dashboard with the booking link and the next seven days](docs/images/dashboard.png)
+
+**Bookings, with the AI brief.** The meeting with Grace was booked through Claude, and the badge says so.
+
+![Bookings list with an AI meeting brief and a "Booked by you through Claude" badge](docs/images/bookings.png)
+
+**Connecting Claude.** The host pastes one address into Claude and approves it on MeetReady's own consent page.
+They can disconnect from the dashboard at any time.
+
+| ![Consent page: Claude wants to use your MeetReady account](docs/images/consent.png) | ![The AI assistants section of the dashboard, with Claude connected](docs/images/dashboard-assistants.png) |
+| :----------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------: |
+
+<!-- Claude booking through MeetReady (add your own screenshot from claude.ai):
+![Claude booking a meeting through MeetReady's MCP server, with the confirm step](docs/images/claude.png)
+-->
+
+## Architecture
+
+```mermaid
+flowchart LR
+  guest["Guest's browser"] --> pages
+  host["Host's browser"] --> pages
+  claude["Claude or another<br/>MCP client"] -- "MCP + OAuth 2.1" --> mcp
+
+  subgraph app["Next.js on Vercel"]
+    direction TB
+    pages["Pages and<br/>server actions"]
+    mcp["MCP server<br/>/api/mcp"]
+    oauth["Better Auth<br/>login + OAuth server"]
+    slots["Slot function<br/>(pure)"]
+    pages --> slots
+    mcp --> slots
+    mcp -. "checks token" .-> oauth
+  end
+
+  subgraph data["Data"]
+    direction TB
+    pg[("Postgres on Neon<br/>exclusion constraint")]
+    redis[("Upstash Redis<br/>rate limits, cache")]
+  end
+
+  subgraph services["Services"]
+    direction TB
+    groq["Groq<br/>assistant, briefs"]
+    inngest["Inngest<br/>background jobs"]
+    google["Google Calendar<br/>busy times, events"]
+    resend["Resend<br/>emails"]
+    sentry["Sentry<br/>errors"]
+    inngest --> google
+    inngest --> resend
+  end
+
+  app --> data
+  app --> services
+```
+
+The slot function is the centre. It takes working hours, bookings and Google busy times and returns free times,
+with no database or clock inside it. Every surface asks it, so the booking page, the AI assistant and Claude can
+never disagree about when the host is free. Writing to Google Calendar and sending emails run as background jobs with
+retries, so a booking is saved first and a slow service can't lose it.
+
+## AI features
+
+| Feature                                       | What the model does                                                                            | What code does                                                                                        | Docs                                               |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Meeting brief** for the host                | Writes a summary, an agenda and what to prepare                                                | Structured output checked with Zod, guest text treated as data, a cost log for every call             | [Day 18](docs/day-18.md)                           |
+| **Booking assistant** for guests              | Turns "Wednesday morning, I'm in London" into a search                                         | Checks the search, runs the slot function, returns up to three real times. Suggests only, never books | [Day 19](docs/day-19.md), [Day 20](docs/day-20.md) |
+| **MCP server** for Claude, ChatGPT and others | Calls `list_event_types`, `find_free_times`, `list_bookings`, `get_booking` and `book_meeting` | OAuth scopes for reading and booking, the booking page's own rules, a confirm form, safe retries      | [Day 21](docs/day-21.md), [Day 22](docs/day-22.md) |
+
+Models run on Groq through the Vercel AI SDK. Unit tests use a scripted fake model and the browser tests use a fake
+Groq server, so CI never calls a real model. `npm run eval` checks the prompts against the real one.
 
 ## Stack
 
-Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth (Google) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +
-`@date-fns/tz` · Vitest + fast-check · Playwright · Sentry · Upstash Redis (rate limits, calendar cache) · Google Calendar API · Inngest (background jobs, reminders) · Vercel AI SDK + Groq (AI meeting brief) · PGlite (in-process Postgres for tests) · GitHub Actions
+Next.js 16 (App Router, Cache Components) · TypeScript (strict) · PostgreSQL on Neon · Drizzle ORM · Better Auth
+(Google login and OAuth 2.1 server) · Zod · shadcn/ui-style components (Radix) · React Hook Form · date-fns +
+`@date-fns/tz` · Vercel AI SDK + Groq · MCP TypeScript SDK · Inngest · Upstash Redis · Google Calendar API ·
+Resend · Sentry · Vitest + fast-check · PGlite (Postgres in-process for tests) · Playwright · GitHub Actions
 
 ## Getting started
 
@@ -23,21 +129,28 @@ npm run db:migrate           # applies drizzle/*.sql (incl. the no-overlap const
 npm run dev
 ```
 
+Everything else (Groq, Upstash, Inngest, Resend, Sentry) is optional in development. Without a key, that feature is
+off or falls back: emails are saved as HTML files in your temp folder, background jobs run inline, and the AI
+features are turned off.
+
 ## Scripts
 
-| Script                                        | What it does                                                    |
-| --------------------------------------------- | --------------------------------------------------------------- |
-| `npm test`                                    | Unit, property-based and database tests (no external DB needed) |
-| `npm run test:e2e`                            | Browser tests: production build + real Postgres (see below)     |
-| `npm run typecheck` / `lint` / `format:check` | Same checks CI runs                                             |
-| `npm run db:generate`                         | New migration from `src/db/schema.ts`                           |
-| `npm run db:studio`                           | Browse the database                                             |
-| `npm run eval`                                | AI evals against the real model (needs `GROQ_API_KEY`)          |
+| Script                                        | What it does                                                         |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| `npm test`                                    | Unit, property-based and database tests (no external DB needed)      |
+| `npm run test:e2e`                            | Browser tests: production build + real Postgres (see below)          |
+| `npm run typecheck` / `lint` / `format:check` | Same checks CI runs                                                  |
+| `npm run db:generate`                         | New migration from `src/db/schema.ts`                                |
+| `npm run db:studio`                           | Browse the database                                                  |
+| `npm run eval`                                | AI evals against the real model (needs `GROQ_API_KEY`)               |
+| `npm run shots`                               | Retakes the README screenshots and GIF from demo data (needs ffmpeg) |
 
 ## End-to-end tests
 
-Playwright drives Chromium through the real flows (booking, the two-guest race, reschedule/cancel from the email
-link, booking questions, phone layouts) against `next build` + `next start` on port 3100 and a throwaway database.
+Playwright drives Chromium through the real flows against `next build` + `next start` on port 3100 and a throwaway
+database. The flows include booking, the two-guest race, rescheduling and cancelling from the email link, booking
+questions, phone layouts, the assistant, and connecting an MCP client and booking through it. Google and Groq are
+replaced by small fake servers.
 
 ```bash
 docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17   # or any local Postgres
@@ -50,6 +163,8 @@ npm run test:e2e                                                       # wipes a
 `npx playwright show-trace test-results/<test>/trace.zip`.
 
 ## Design notes
+
+Each day of the build has its own write-up with the decisions, the reasons and the bugs found along the way.
 
 - [Day 1: setup, schema, slot generation](docs/day-01.md): timezone model, DST handling, the exclusion
   constraint, and why slot generation is a pure function.
@@ -105,11 +220,14 @@ npm run test:e2e                                                       # wipes a
 - [Day 22: Booking through an assistant](docs/day-22.md): `book_meeting` over MCP with the same rules as the booking
   page, a confirm form the model can't fill in (MCP elicitation, where the client supports it), emails that tell the
   guest who scheduled it, safe retries, and a test of the real SDK on both protocol versions.
+- [Day 23: README and screenshots](docs/day-23.md): screenshots and the GIF taken by a Playwright script from seeded
+  demo data, so they can be retaken after any UI change.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.
 
 ## Credits
 
-MeetReady v1 (Jan–Feb 2024) was built by a team of 5 :
-[SakifAzwad/Meet-Ready](https://github.com/SakifAzwad/Meet-Ready). v2 keeps the idea and rewrites the code.
+MeetReady v1 (Jan–Feb 2024) was built by a team of 5:
+[SakifAzwad/Meet-Ready](https://github.com/SakifAzwad/Meet-Ready). v2 is a solo rebuild that keeps the idea and
+rewrites the code.

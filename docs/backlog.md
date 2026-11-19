@@ -1,11 +1,12 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 22).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 23).
 
 ## Next, in order
 
-1. **Push Day 22**, then runbook step 17.5 (book through Claude on production) (Sakif).
+1. **Push Day 23**, then add a screenshot of Claude booking through MeetReady as `docs/images/claude.png` and
+   uncomment its line in the README (Sakif: it needs his Claude account).
 2. **Next day: pick from the list below.** Candidates: list MeetReady in Claude's Connectors Directory (now that
    it can book), cancel and reschedule over MCP, or the Phase 2 items (analytics now has a `source` column to
    count).
@@ -17,7 +18,8 @@ rate limiting (Day 14); Google Calendar busy times (Day 15); privacy policy, ter
 retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI meeting brief on Groq (Day 18);
 booking assistant on the server, suggest-only (Day 19); its box on the booking page, with a fake Groq for E2E
 (Day 20); an MCP server with OAuth (CIMD), a consent page and four read tools for AI assistants (Day 21);
-`book_meeting` over MCP, with a confirm form where the client supports one (Day 22).
+`book_meeting` over MCP, with a confirm form where the client supports one (Day 22); the README for reviewers,
+with an architecture diagram and screenshots retaken by a script (Day 23).
 
 ## Ideas from reviews, deferred
 

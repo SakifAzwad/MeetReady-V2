@@ -56,11 +56,13 @@ They can disconnect from the dashboard at any time.
 
 ## Architecture
 
+## Architecture
+
 ```mermaid
 flowchart LR
   guest["Guest's browser"] --> pages
   host["Host's browser"] --> pages
-  claude["Claude or another<br/>MCP client"] -- "MCP + OAuth 2.1" --> mcp
+  claude["Claude or another<br/>MCP client"] -->|"MCP + OAuth 2.1"| mcp
 
   subgraph app["Next.js on Vercel"]
     direction TB
@@ -68,9 +70,10 @@ flowchart LR
     mcp["MCP server<br/>/api/mcp"]
     oauth["Better Auth<br/>login + OAuth server"]
     slots["Slot function<br/>(pure)"]
+
     pages --> slots
     mcp --> slots
-    mcp -. "checks token" .-> oauth
+    mcp -.->|checks token| oauth
   end
 
   subgraph data["Data"]
@@ -86,12 +89,16 @@ flowchart LR
     google["Google Calendar<br/>busy times, events"]
     resend["Resend<br/>emails"]
     sentry["Sentry<br/>errors"]
+
     inngest --> google
     inngest --> resend
   end
 
-  app --> data
-  app --> services
+  pages --> pg
+  pages --> redis
+  pages --> groq
+  pages --> inngest
+  pages --> sentry
 ```
 
 The slot function is the centre. It takes working hours, bookings and Google busy times and returns free times,

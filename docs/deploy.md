@@ -472,6 +472,10 @@ the new column and write to both; later, drop the old one.
 - **Inngest shows the app as out of sync or its runs fail with 401:** the signing key in Vercel doesn't match the
   Inngest environment. Redeploy (the integration syncs again), or Apps → Sync app.
 - **Bookings have no AI brief:** see step 16.8. `ai_off` means `GROQ_API_KEY` isn't set for Production.
+- **Claude says MeetReady has no tool for something a new deploy added** (e.g. "there's no tool for creating a
+  booking" after Day 22): Claude keeps the tool list from when the connector was connected; only the instructions
+  are re-read. Connectors → MeetReady → refresh its tools, or Disconnect and Connect; check the new tool is enabled;
+  then start a new chat. The server can't announce new tools: it's stateless and never pushes.
 - **An AI assistant can't connect, or stops working:** step 17.8. A host who disconnected it on the dashboard
   has to connect it again.
 - **No "Tell us when suits you" box on the booking page:** `GROQ_API_KEY` isn't set for this environment (previews

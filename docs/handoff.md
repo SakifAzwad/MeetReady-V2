@@ -277,4 +277,6 @@ Read this first in a new chat. It replaces the long Days 1–22 conversations. D
   Elicitation forms (`inputRequired`) exist only on 2026-07-28: pin `{ mode: { pin: "2026-07-28" } }` in tests that
   need them. Check the negotiated version before debugging a feature that exists in one version only. A write tool
   called by an AI will be retried: design the "already done" answer.
+- **New MCP tools don't appear in Claude by themselves** (Day 22, after deploy): Claude caches a connector's tool
+  list (instructions are re-read). Refresh or reconnect the connector, then a new chat. Runbook troubleshooting.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

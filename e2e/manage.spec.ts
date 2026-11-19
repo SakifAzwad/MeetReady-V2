@@ -1,4 +1,4 @@
-import { book, guestEmail, timeButtons } from "./support/booking";
+import { book, guestEmail, openRoomyDay, timeButtons } from "./support/booking";
 import { expect, test, waitForEmails } from "./fixtures";
 
 const MANAGE_LINK = /href="(http:\/\/localhost:\d+\/booking\/[A-Za-z0-9_-]{43})"/;
@@ -22,6 +22,7 @@ test("a guest reschedules, then cancels, from the link in their email", async ({
   // ─── Reschedule ───
   await guest.getByRole("button", { name: /Reschedule/ }).click();
   await expect(guest.getByText(/^Moving your meeting from/)).toBeVisible();
+  await openRoomyDay(guest); // the booking's day: the same rule picked it
   const [before] = (await db.query("select starts_at from bookings where host_id = $1", [host.id])).rows;
   // Not the first time: that's the meeting's own time (it doesn't block itself when moving).
   await timeButtons(guest).nth(2).click();

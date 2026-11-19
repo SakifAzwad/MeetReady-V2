@@ -9,7 +9,8 @@
   into `docs/images/`. After a UI change, one command retakes them all.
 - **The Claude screenshot is yours to add.** It needs your Claude account, so the README has it commented out.
   Save it as `docs/images/claude.png` and remove the comment markers.
-- **Tests:** no app code changed. The shots script passes, and typecheck, lint and format are green.
+- **Tests:** no app code changed. The shots script passes, and typecheck, lint and format are green. A follow-up
+  fixed two E2E tests that failed in CI late in the host's working day (see the stories); all 34 pass.
 
 ```
 README.md                         # rewritten: highlights, screenshots, Mermaid diagram, AI table
@@ -18,6 +19,8 @@ docs/images/                      # booking-assistant.gif, booking-page.png, boo
 e2e/shots/readme.shots.ts         # seeds the demo data, takes the screenshots, builds the GIF
 playwright.shots.config.ts        # the E2E setup (fake Google, fake Groq, fresh database), only the shots
 package.json                      # npm run shots
+e2e/support/booking.ts            # follow-up: openRoomyDay, so booking tests never depend on the time of day
+e2e/{booking,manage,calendar-sync}.spec.ts
 ```
 
 ## 1. Decisions
@@ -110,6 +113,23 @@ package.json                      # npm run shots
   the rest as Services, with one edge to each group.
 - **Lesson:** render a diagram before you publish it. Mermaid's layout follows the edges, so fewer, grouped edges
   give a cleaner picture.
+
+### CI failed at 3 PM, on code nobody changed
+
+- **What happened:** after the Day 23 push, two E2E tests timed out in CI: moving a booking from the guest's link,
+  and the calendar sync test. Day 23 changed no app code, and both had passed for weeks. Run locally at the same
+  hour, they failed the same way.
+- **Why:** the booking page opens on the first day with a free time, usually today. The run was at 3 PM in Dhaka:
+  the host works until 5 PM and needs an hour's notice, so today had only two times left. The test booked the first
+  and then tried to move it to the third, which didn't exist. In the morning there are plenty, so it had always
+  passed.
+- **What I did:** a helper, `openRoomyDay`, selects the first day with at least four free times (moving to the next
+  month if needed). Every test that books now uses it, and the reschedule steps use it to open the booking's own
+  day. The "second guest no longer sees that time" check now opens the booked day explicitly, so it can't pass by
+  looking at a different day. The full suite passed at 3:20 PM, inside the window that failed.
+- **Lesson:** a test that reads the real clock depends on when it runs. The rule from Day 11 was "don't depend on
+  today"; the page's default day is today in disguise. When a time-related test fails, first check what time it
+  ran.
 
 ## Next
 

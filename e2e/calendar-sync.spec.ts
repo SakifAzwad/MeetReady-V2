@@ -1,4 +1,4 @@
-import { book, guestEmail, timeButtons } from "./support/booking";
+import { book, guestEmail, openRoomyDay, timeButtons } from "./support/booking";
 import { connectCalendar, emailsTo, expect, fakeGoogle, test, waitForEmails } from "./fixtures";
 
 /*
@@ -46,6 +46,7 @@ test("a booking becomes an event with a Meet link; moving it moves the event; ca
   // Reschedule. The booking's own event is busy in Google, yet its time is still offered:
   // it doesn't block itself.
   await guest.getByRole("button", { name: /Reschedule/ }).click();
+  await openRoomyDay(guest); // the booking's day: the same rule picked it
   await expect(timeButtons(guest).first()).toContainText(bookedTime);
   await timeButtons(guest).nth(2).click();
   await guest.getByRole("button", { name: "Continue" }).click();

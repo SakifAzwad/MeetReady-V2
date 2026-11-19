@@ -1,4 +1,4 @@
-import { book, chooseTime, fillDetails, guestEmail, timeButtons } from "./support/booking";
+import { book, chooseTime, fillDetails, guestEmail, timeButtons, timeList } from "./support/booking";
 import { expect, test, waitForEmails } from "./fixtures";
 
 test("a guest books a time from the host's profile, and it's gone for the next guest", async ({
@@ -12,6 +12,12 @@ test("a guest books a time from the host's profile, and it's gone for the next g
   await expect(guest).toHaveURL(`/${host.username}/intro`);
 
   const time = await chooseTime(guest, host);
+  const day = (await guest
+    .getByRole("button", { pressed: true, name: /times? available$/ })
+    .getAttribute("aria-label"))!
+    .split(", ")
+    .slice(0, 2)
+    .join(", ");
 
   // The browser's checks first: nothing typed yet.
   await guest.getByRole("button", { name: "Confirm booking" }).click();
@@ -34,6 +40,8 @@ test("a guest books a time from the host's profile, and it's gone for the next g
   // A second guest no longer sees that time.
   const next = await newGuest();
   await next.goto(`/${host.username}/intro`);
+  await expect(timeList(next)).toBeVisible();
+  await next.getByRole("button", { name: new RegExp(`^${day}, `) }).click(); // the same day as the booking
   await expect(timeButtons(next).first()).toBeVisible();
   expect(await timeButtons(next).allInnerTexts()).not.toContain(time);
 });
@@ -138,8 +146,8 @@ test("picking another day from the details form keeps what the guest typed", asy
   await fillDetails(guest, "Ada Lovelace", email);
 
   // Another day in the calendar, while the form is open: back to that day's times.
-  const days = guest.getByRole("button", { name: /\d+ times? available$/ });
-  await days.nth(1).click();
+  const days = guest.getByRole("button", { name: /\d+ times? available$/, pressed: false });
+  await days.first().click();
   await timeButtons(guest).first().click();
   await guest.getByRole("button", { name: "Continue" }).click();
 

@@ -227,7 +227,8 @@ Read this first in a new chat. It replaces the long Days 1–23 conversations. D
 - **New top-level routes are also possible usernames:** add them to `RESERVED_USERNAMES` and proxy's `APP_ROUTES`.
 - **Env files:** `KEY=` arrives as `""`, not missing. Optional env vars use `emptyAsUnset`.
 - **Browser scripts:** use `locale: "en-US"` when checking AM/PM text. Don't depend on "today"; pick a fixed
-  day. Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".
+  day. The booking page opens on today, which runs out of times late in the host's day: E2E picks a day with
+  `openRoomyDay` (≥ 4 free times), also when rescheduling (Day 23 story: CI failed at 3 PM Dhaka). Use exact role names (`exact: true`): accessible names like "Move question 1 up" contain "Question".
   Empty the email outbox at the start.
 - **Rate limits are shared state.** Every E2E visitor sends its own random `x-forwarded-for` (fixtures), which the
   app trusts off Vercel; on Vercel, Vercel overwrites it. A new public endpoint gets a line in `LIMITS`.

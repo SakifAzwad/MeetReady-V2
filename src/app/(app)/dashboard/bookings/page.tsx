@@ -153,6 +153,10 @@ function BookingRow({
           <div className="mt-2 flex flex-wrap gap-2">
             {inProgress && <Badge className="border-primary/40 text-primary">Happening now</Badge>}
             {b.rescheduledAt && <Badge>Rescheduled</Badge>}
+            {/* Day 22: the host booked it through an AI assistant, so the guest's email said so too. */}
+            {b.source === "assistant" && (
+              <Badge>Booked by you through {b.assistantName ?? "an AI assistant"}</Badge>
+            )}
             {b.calendarSync === "failed" && (
               <>
                 <Badge className="border-destructive/40">

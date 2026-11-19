@@ -64,6 +64,12 @@ export const LIMITS = {
    * for a person and stops a loop.
    */
   mcp_host: { tokens: 120, windowMs: 10 * MINUTE },
+  /**
+   * Bookings made through an assistant (Day 22), per host per day. Each one
+   * emails a guest; a host books a few a day by hand, an assistant in a loop
+   * could book dozens. (book_email still applies per guest inbox.)
+   */
+  mcp_book_host: { tokens: 20, windowMs: 24 * 60 * MINUTE },
   /** Self-registered MCP clients per IP, only when MCP_ALLOW_DCR is on (each one is a database row). */
   mcp_register_ip: { tokens: 10, windowMs: 60 * MINUTE },
 } as const satisfies Record<string, Policy>;

@@ -418,6 +418,11 @@ export const bookingStatus = pgEnum("booking_status", ["confirmed", "cancelled"]
  */
 export const calendarSync = pgEnum("calendar_sync", ["synced", "failed"]);
 export const cancelledBy = pgEnum("cancelled_by", ["host", "guest"]);
+/**
+ * Day 22: who made the booking. `booking_page` = a guest on the public page;
+ * `assistant` = the host, through an AI assistant connected over MCP.
+ */
+export const bookingSource = pgEnum("booking_source", ["booking_page", "assistant"]);
 
 export const bookings = pgTable(
   "bookings",
@@ -474,6 +479,13 @@ export const bookings = pgTable(
     /** The Google Meet link Google created with the event (Google Meet event types only). */
     meetUrl: text(),
     calendarSync: calendarSync(),
+    /** Day 22. Existing rows (all from the page) get the default. */
+    source: bookingSource().notNull().default("booking_page"),
+    /**
+     * The OAuth client id of the assistant that booked it (source = assistant). No foreign key: the history
+     * stays when the host disconnects that assistant and its client row goes.
+     */
+    createdByClient: text(),
     ...timestamps,
   },
   (t) => [

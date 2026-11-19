@@ -102,6 +102,9 @@ npm run test:e2e                                                       # wipes a
 - [Day 21: MCP server for AI assistants](docs/day-21.md): MeetReady as its own OAuth 2.1 server (Better Auth, Client
   ID Metadata Documents, PKCE, audience-bound JWTs, rotating refresh tokens), a consent page, four read tools for
   Claude or ChatGPT over the booking page's own slot function, and a Disconnect that works at once.
+- [Day 22: Booking through an assistant](docs/day-22.md): `book_meeting` over MCP with the same rules as the booking
+  page, a confirm form the model can't fill in (MCP elicitation, where the client supports it), emails that tell the
+  guest who scheduled it, safe retries, and a test of the real SDK on both protocol versions.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

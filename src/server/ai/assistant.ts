@@ -85,7 +85,7 @@ function minutesOf(time: string | null): number | null | "invalid" {
   return m ? Number(m[1]) * 60 + Number(m[2]) : "invalid";
 }
 
-function isRealDate(key: string): key is DateKey {
+export function isRealDate(key: string): key is DateKey {
   if (!DATE.test(key)) return false;
   const { year, month, day } = parseDateKey(key as DateKey);
   const d = new Date(Date.UTC(year, month - 1, day));

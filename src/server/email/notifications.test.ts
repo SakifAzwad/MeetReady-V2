@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { user } from "@/db/schema";
+import { oauthClient, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { EVENT_TYPE_DEFAULTS, eventTypeSchema } from "@/lib/validation/event-type";
 import { createTestDb } from "@/test/db";
@@ -77,6 +77,42 @@ describe("booking emails", () => {
   }, 30_000);
 
   const to = (sent: EmailMessage[], email: string) => sent.find((m) => m.to === email)!;
+
+  it("Day 22: a booking the host made through an assistant tells the guest who scheduled it", async () => {
+    await db.insert(oauthClient).values({
+      id: "c1",
+      clientId: "https://claude.ai/oauth/client",
+      name: "Claude",
+      redirectUris: ["https://claude.ai/cb"],
+    });
+    const r = await createBooking(
+      db,
+      {
+        username: "sakif",
+        slug: "intro",
+        startsAt: new Date("2026-11-09T06:00:00Z"), // 12:00 Dhaka
+        guestName: "Grace",
+        guestEmail: "grace@example.com",
+        guestTimeZone: "Europe/London",
+        guestNotes: "",
+      },
+      NOW,
+      { byAssistant: { clientId: "https://claude.ai/oauth/client" } }, // no answers: the questions are skipped
+    );
+    if (!r.ok) throw new Error(`setup failed: ${r.error}`);
+    const sender = createMemorySender();
+    await notifyBookingConfirmed({ db, sender, appUrl: APP, now: NOW }, r.booking.id, r.manageToken);
+
+    const guest = to(sender.sent, "grace@example.com");
+    const host = to(sender.sent, "sakif@example.com");
+    // The guest didn't book it: not "Confirmed", and it says who did, with the way out.
+    expect(guest.subject).toBe("Scheduled: Intro call with Sakif Azwad – Mon 9 Nov");
+    expect(guest.html).toContain("Sakif scheduled a meeting with you");
+    expect(guest.text).toContain("Sakif Azwad booked this time with you using MeetReady");
+    expect(guest.html).toContain(`${APP}/booking/${r.manageToken}`);
+    expect(host.subject).toBe("Booked through Claude: Intro call with Grace – Mon 9 Nov");
+    expect(host.html).toContain("You booked Grace through Claude");
+  });
 
   it("confirmation: guest and host each get one, in their own timezone, with an invite", async () => {
     const sender = createMemorySender();

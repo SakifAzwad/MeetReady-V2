@@ -1,16 +1,25 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { z } from "zod";
-import { user } from "@/db/schema";
+import { bookings, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { formatTime } from "@/lib/scheduling/calendar";
 import type { Slot } from "@/lib/scheduling/generate-slots";
 import type { Interval } from "@/lib/scheduling/intervals";
-import { addDaysToKey, dateKeyInZone, wallTimeToInstant, type DateKey } from "@/lib/scheduling/time";
+import {
+  addDaysToKey,
+  dateKeyInZone,
+  isValidTimeZone,
+  wallTimeToInstant,
+  type DateKey,
+} from "@/lib/scheduling/time";
+import { guestDetailsSchema } from "@/lib/validation/booking";
 import { MCP_SCOPES } from "@/lib/mcp";
+import { tryAgainIn } from "@/lib/rate-limit-text";
 import { formatAnswer } from "@/lib/validation/questions";
 import { LOCATION_LABELS } from "@/lib/validation/event-type";
-import { findTimesInput, parseSearch, withinTimeOfDay } from "../ai/assistant";
-import { busyLoadRange, getBookableSlots, getPublicEventType } from "../booking";
+import { findTimesInput, isRealDate, parseSearch, withinTimeOfDay } from "../ai/assistant";
+import { busyLoadRange, createBooking, getBookableSlots, getPublicEventType } from "../booking";
+import type { ExternalBusy } from "../calendar/busy";
 import { listEventTypes } from "../event-types";
 import { getHostBooking, listHostBookings, type HostBookingRow } from "../manage-booking";
 import type { LimitResult } from "../rate-limit/limits";
@@ -24,7 +33,8 @@ import type { LimitResult } from "../rate-limit/limits";
  * Rules, the same as every host query since Day 2:
  *  - The host is the token's subject. No tool takes a host or user id.
  *  - Every query is scoped to that host; another host's booking is "not found".
- *  - Read-only today. Booking (bookings:write) comes on Day 22.
+ *  - Reads need bookings:read; book_meeting (Day 22) needs bookings:write and
+ *    goes through the same createBooking as a guest, with the same rules.
  *
  * And one rule for AI callers: guests write notes and answers, and those now
  * reach the HOST's assistant. A guest could write "ignore your instructions
@@ -41,10 +51,23 @@ export type McpDeps = {
   /** Per-host tool-call budget (LIMITS.mcp_host). */
   limit: (hostId: string) => Promise<LimitResult>;
   now: () => Date;
+  /** Day 22, booking: the host's Google Calendar, read LIVE at booking time (like the booking page). */
+  calendar?: ExternalBusy;
+  /** Bookings per host per day, and per guest inbox (LIMITS.mcp_book_host, LIMITS.book_email). */
+  bookLimit?: (hostId: string, guestEmail: string) => Promise<LimitResult>;
+  /** Encrypts the guest's manage link so the confirmation job can email it (Day 17). */
+  sealToken?: (token: string, bookingId: string) => string;
+  /** After a booking commits: the background job (Google Calendar, emails). */
+  onBooked?: (bookingId: string) => void;
 };
 
 /** Who's calling: from the access token, never from the request. */
-export type Caller = { userId: string; scopes: ReadonlySet<string> };
+export type Caller = {
+  userId: string;
+  scopes: ReadonlySet<string>;
+  /** The assistant (OAuth client id), recorded on bookings it makes. */
+  clientId?: string;
+};
 
 export type ToolResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -198,6 +221,7 @@ export async function listBookingsTool(
         ...(b.cancelledBy ? { cancelledBy: b.cancelledBy } : {}),
         hasNotes: !!b.guestNotes || b.answers.length > 0,
         hasBrief: b.brief !== null,
+        bookedBy: b.source === "assistant" ? "the user, through an assistant" : "the guest",
       })),
     },
   };
@@ -231,6 +255,7 @@ function bookingDetails(b: HostBookingRow, tz: string) {
       ? { cancelledBy: b.cancelledBy, cancellationReason: b.cancellationReason }
       : {}),
     rescheduled: b.rescheduledAt !== null,
+    bookedBy: b.source === "assistant" ? "the user, through an assistant" : "the guest",
     guestName: b.guestName,
     guestEmail: b.guestEmail,
     meetUrl: b.meetUrl,
@@ -244,9 +269,193 @@ function bookingDetails(b: HostBookingRow, tz: string) {
   };
 }
 
+// ─── book_meeting (Day 22) ──────────────────────────────────────────────────────
+
+export const bookMeetingInput = z.object({
+  eventType: z.string().describe("The meeting type's slug, from list_event_types."),
+  date: z.string().describe("The day, YYYY-MM-DD, as find_free_times listed it."),
+  time: z.string().describe("The start time, HH:mm (24-hour), one of the times find_free_times listed."),
+  timeZone: z
+    .string()
+    .nullable()
+    .describe(
+      "The IANA timezone that date and time are on (find_free_times' timeZone). Null for the user's own.",
+    ),
+  guestName: z.string().describe("The guest's name, as the user gave it."),
+  guestEmail: z.string().describe("The guest's email address. MeetReady emails them the invitation."),
+  guestTimeZone: z
+    .string()
+    .nullable()
+    .describe(
+      "The guest's IANA timezone if the user said where they are (their emails use it). Null for the user's own.",
+    ),
+});
+
+/** How long a booking counts as "the one you just made" when an assistant retries the same call. */
+export const RETRY_WINDOW_MS = 10 * 60_000;
+
+/**
+ * What the host must see and agree to: everything that will happen. Shown in
+ * the assistant's confirm form when it has one (MCP elicitation).
+ */
+export type Confirmation = {
+  /** The client can show a form, and this call hasn't been answered yet: ask. */
+  canAsk: boolean;
+  /** The host's answer to the form on a retried call. Null: not asked (or the client can't). */
+  answer: "accepted" | "declined" | null;
+};
+
+export type BookOutcome =
+  | ToolResult<Record<string, unknown>>
+  /** Ask the host first: the MCP layer turns this into a confirm form. */
+  | { ok: "confirm"; message: string };
+
+export async function bookMeetingTool(
+  deps: McpDeps,
+  caller: Caller,
+  args: z.infer<typeof bookMeetingInput>,
+  confirmation: Confirmation,
+): Promise<BookOutcome> {
+  const host = await loadHost(deps, caller);
+  if (!host.ok) return host;
+  const tz = args.timeZone?.trim() || host.data.timeZone;
+  if (!isValidTimeZone(tz)) return fail(`Unknown timezone "${tz}". Use an IANA name.`);
+  const guestTz = args.guestTimeZone?.trim() || host.data.timeZone;
+  if (!isValidTimeZone(guestTz))
+    return fail(`Unknown guest timezone "${guestTz}". Use an IANA name, or null.`);
+  if (!isRealDate(args.date)) return fail("The date must be a real date in YYYY-MM-DD form.");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(args.time)) return fail("The time must be HH:mm in 24-hour time.");
+  const guest = guestDetailsSchema.pick({ guestName: true, guestEmail: true }).safeParse(args);
+  if (!guest.success)
+    return fail(`Check the guest's details: ${guest.error.issues[0]?.message ?? "invalid"}.`);
+  const { guestName, guestEmail } = guest.data;
+
+  const eventType = await getPublicEventType(deps.db, host.data.username, args.eventType);
+  if (!eventType) {
+    return fail(`No active meeting type "${args.eventType}". list_event_types shows the slugs.`);
+  }
+  // Code turns the wall time into an instant (DST-safe), never the model (Day 19).
+  const startsAt = wallTimeToInstant(args.date, args.time, tz);
+  const now = deps.now();
+  const when = { start: localTime(startsAt, tz), timeZone: tz };
+
+  // Is it free right now? Checked before asking the host, so they're never asked to approve a time that
+  // can't be booked. (createBooking checks again, under the lock, with Google read live.)
+  const window = { start: startsAt, end: new Date(startsAt.getTime() + 60_000) };
+  let free: boolean;
+  try {
+    const externalBusy = await deps.busyTimes(caller.userId, busyLoadRange(window));
+    const slots = await getBookableSlots(deps.db, eventType, window, now, { externalBusy });
+    free = slots.some((s) => s.start.getTime() === startsAt.getTime());
+  } catch {
+    return fail(
+      "Your Google Calendar can't be read right now, so the time can't be checked. Try again soon.",
+    );
+  }
+  if (!free) {
+    const retried = await recentAssistantBooking(deps, caller.userId, startsAt, guestEmail, now);
+    if (retried)
+      return { ok: true, data: { booked: true, alreadyBooked: true, bookingId: retried, ...when } };
+    return fail(
+      `${when.start} (${tz}) isn't free for ${eventType.title}: it's outside your hours, too soon, or taken. Use find_free_times.`,
+    );
+  }
+
+  if (confirmation.answer === "declined") {
+    return { ok: true, data: { booked: false, reason: "The user declined in the confirmation form." } };
+  }
+  if (confirmation.canAsk && confirmation.answer === null) {
+    return {
+      ok: "confirm",
+      message: `Book "${eventType.title}" with ${guestName} (${guestEmail}) on ${when.start} (${tz})? MeetReady will email ${guestName} the invitation, with a link to reschedule or cancel.`,
+    };
+  }
+
+  const limited = await deps.bookLimit?.(caller.userId, guestEmail);
+  if (limited && !limited.ok) {
+    return fail(`Too many bookings for now. Try again ${tryAgainIn(limited.retryAfterSeconds)}.`);
+  }
+  const result = await createBooking(
+    deps.db,
+    {
+      username: host.data.username,
+      slug: eventType.slug,
+      startsAt,
+      guestName,
+      guestEmail,
+      guestTimeZone: guestTz,
+      guestNotes: "",
+    },
+    now,
+    {
+      calendar: deps.calendar,
+      sealToken: deps.sealToken,
+      byAssistant: { clientId: caller.clientId ?? "unknown" },
+    },
+  );
+  if (!result.ok) {
+    if (result.error === "calendar_unavailable") {
+      return fail("Your Google Calendar can't be read right now, so nothing was booked. Try again soon.");
+    }
+    if (result.error === "slot_unavailable" || result.error === "slot_taken") {
+      const retried = await recentAssistantBooking(deps, caller.userId, startsAt, guestEmail, now);
+      if (retried)
+        return { ok: true, data: { booked: true, alreadyBooked: true, bookingId: retried, ...when } };
+      return fail(`${when.start} (${tz}) was just taken. Nothing was booked; use find_free_times again.`);
+    }
+    return fail(`No active meeting type "${args.eventType}". list_event_types shows the slugs.`);
+  }
+  deps.onBooked?.(result.booking.id);
+  return {
+    ok: true,
+    data: {
+      booked: true,
+      bookingId: result.booking.id,
+      meetingType: eventType.title,
+      ...when,
+      end: localTime(result.booking.endsAt, tz),
+      guestName,
+      guestEmail,
+      guestTimeZone: guestTz,
+      emailed: `${guestName} gets an invitation from MeetReady with a link to reschedule or cancel.`,
+    },
+  };
+}
+
+/**
+ * A retried call: the assistant timed out, called again, and its first try
+ * already booked the time. This host's booking for the same guest at the same
+ * start, made through an assistant in the last 10 minutes, IS that booking.
+ */
+async function recentAssistantBooking(
+  deps: McpDeps,
+  hostId: string,
+  startsAt: Date,
+  guestEmail: string,
+  now: Date,
+): Promise<string | null> {
+  const [row] = await deps.db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.hostId, hostId),
+        eq(bookings.startsAt, startsAt),
+        eq(bookings.guestEmail, guestEmail),
+        eq(bookings.source, "assistant"),
+        eq(bookings.status, "confirmed"),
+        gte(bookings.createdAt, new Date(now.getTime() - RETRY_WINDOW_MS)),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
 // ─── Scopes ─────────────────────────────────────────────────────────────────────
 
-/** Every Day 21 tool reads. The route also requires this scope; the check here keeps each tool honest. */
+/** The four read tools. The route also requires this scope; the check here keeps each tool honest. */
 export const READ_SCOPE = MCP_SCOPES.read;
+/** book_meeting (Day 22). */
+export const WRITE_SCOPE = MCP_SCOPES.write;
 
 export const hasScope = (caller: Caller, scope: string) => caller.scopes.has(scope);

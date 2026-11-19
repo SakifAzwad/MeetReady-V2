@@ -407,6 +407,13 @@ a Client ID Metadata Document, so there's no client to create by hand. Without t
    - "What meeting types do I have on MeetReady?"
    - "When am I free for an intro call next Tuesday afternoon?" (times on your clock, Dhaka)
    - "What's coming up this week?" then "Tell me more about the first one."
+   - **Booking (since Day 22; migration 0010 runs in the build):** "Book an intro call with Test Guest at
+     sakifazwad18@gmail.com on <a free weekday> at <a free time>." Claude should tell you what it will book and ask
+     before using `book_meeting` (Claude.ai can't show MeetReady's own confirm form yet; Claude Code can). Use your
+     own address as the guest: Resend's test sender only reaches you. You get two emails: "Scheduled: Intro call
+     with Sakif Azwad" (the guest's, "Sakif scheduled a meeting with you", with Reschedule or cancel) and "Booked
+     through Claude: …" (yours). **Dashboard → Bookings** shows "Booked by you through Claude". Cancel it there
+     afterwards.
 6. **Dashboard → AI assistants:** Claude is listed, "Can read and book". **Disconnect** → confirm. Ask Claude
    something again: it fails or asks you to reconnect. Reconnect it (step 4.1 → Connect).
 7. **Neon → SQL Editor (`production`):**
@@ -421,6 +428,8 @@ a Client ID Metadata Document, so there's no client to create by hand. Without t
      Client Registration, which is off. Set `MCP_ALLOW_DCR` = `1` for **Production** → redeploy → connect again.
      Such a connection is read-only (self-registered clients get the read scope only). Tell me: we'd rather fix it.
    - Sentry, tag `mcp`, for errors inside a tool.
+   - **"Too many bookings for now":** 20 bookings a day per host through assistants, and 3 an hour per guest inbox
+     (`LIMITS` in `src/server/rate-limit/limits.ts`).
 9. **ChatGPT (optional, if your plan has developer mode):** Settings → Apps → Advanced settings → **Developer
    mode** on → **Create** → URL `https://meetreadyv2.vercel.app/api/mcp`, authentication **OAuth** → the same
    consent page. OpenAI's docs disagree on which plans can use it; skip this if you don't see the option.

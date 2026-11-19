@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
-import { bookingBriefs, bookings, eventTypes, user } from "@/db/schema";
+import { bookingBriefs, bookings, eventTypes, oauthClient, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { addMinutes, subtractInterval } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
@@ -48,6 +48,9 @@ export type BookingDetails = {
   calendarEventId: string | null;
   meetUrl: string | null;
   calendarSync: "synced" | "failed" | null;
+  /** Day 22: who made it, and which assistant (its registered name) when the host used one. */
+  source: "booking_page" | "assistant";
+  assistantName: string | null;
 };
 
 const detailsColumns = {
@@ -78,14 +81,20 @@ const detailsColumns = {
   calendarEventId: bookings.calendarEventId,
   meetUrl: bookings.meetUrl,
   calendarSync: bookings.calendarSync,
+  source: bookings.source,
+  assistantName: oauthClient.name,
 };
 
 function selectDetails(db: Database) {
-  return db
-    .select(detailsColumns)
-    .from(bookings)
-    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
-    .innerJoin(user, eq(user.id, bookings.hostId));
+  return (
+    db
+      .select(detailsColumns)
+      .from(bookings)
+      .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+      .innerJoin(user, eq(user.id, bookings.hostId))
+      // Only for bookings an assistant made; null (and harmless) for the rest, or once the client is gone.
+      .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient))
+  );
 }
 
 export async function getBookingDetails(db: Database, bookingId: string): Promise<BookingDetails | null> {
@@ -280,6 +289,9 @@ export type HostBookingRow = {
   calendarSync: "synced" | "failed" | null;
   /** Day 18: the AI meeting brief, when one was written. */
   brief: MeetingBrief | null;
+  /** Day 22: made by the host through an assistant (its registered name), or by a guest on the page. */
+  source: "booking_page" | "assistant";
+  assistantName: string | null;
 };
 
 /** The Bookings page's columns, joined to the event type and the brief. Unscoped: callers add the host. */
@@ -304,10 +316,13 @@ const hostBookingQuery = (db: Database) =>
       calendarSync: bookings.calendarSync,
       // A left join: most bookings have no brief. Drizzle returns null for the whole object then.
       brief: { summary: bookingBriefs.summary, agenda: bookingBriefs.agenda, prepare: bookingBriefs.prepare },
+      source: bookings.source,
+      assistantName: oauthClient.name,
     })
     .from(bookings)
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
-    .leftJoin(bookingBriefs, eq(bookingBriefs.bookingId, bookings.id));
+    .leftJoin(bookingBriefs, eq(bookingBriefs.bookingId, bookings.id))
+    .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient));
 
 export async function listHostBookings(
   db: Database,

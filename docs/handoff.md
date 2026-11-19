@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 21)
+# Handoff: starting a new chat (after Day 22)
 
-Read this first in a new chat. It replaces the long Days 1–21 conversations. Details live in `docs/day-01.md` …
-`docs/day-21.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–22 conversations. Details live in `docs/day-01.md` …
+`docs/day-22.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -113,8 +113,20 @@ Read this first in a new chat. It replaces the long Days 1–21 conversations. D
     Dashboard "AI assistants": address, connected list, Disconnect (`disconnectAssistant`: consent deleted, refresh
     tokens revoked). Migration 0009 (8 tables). E2E `mcp.spec.ts`: pre-registered client linked to the resource
     (`oauth_client_resource`), consent in the browser, PKCE, official `@modelcontextprotocol/client`.
-- **Numbers:** 649 unit tests + 32 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`, 18 Nov);
-  typecheck, lint, format, `drizzle-kit check` and build all green. 10 migrations (0000–0009).
+  - Booking over MCP (Day 22): `book_meeting` (scope `bookings:write`) in `tools.ts`: input `date` + `time` +
+    `timeZone` (as `find_free_times` gives them) + guest name/email + `guestTimeZone` (null = host's). Checks, then a
+    free-time pre-check (cached Google), then the confirm form if `canShowForm` (2026-07-28 era AND the request's
+    `io.modelcontextprotocol/clientCapabilities` has `elicitation.form`): `runTool` turns `{ ok: "confirm" }` into
+    `inputRequired(...)`; the retried call's answer is read by `confirmationAnswer` (accept + `book: true` only).
+    Then `bookLimit` (`mcp_book_host` 20/day + `book_email`), `createBooking(…, { byAssistant: { clientId } })`
+    (questions skipped, `source = 'assistant'`, `created_by_client`), `onBooked` → `after()` → `jobs.bookingChanged`.
+    Retry: a booking by this host for the same guest + start via an assistant in the last 10 min = `alreadyBooked`.
+    Annotations `readOnlyHint: false, openWorldHint: true` (Claude.ai asks in chat; it has no elicitation yet).
+    Emails: `scheduledBy` → guest "Scheduled: …" / "Sakif scheduled a meeting with you"; host "Booked through
+    Claude: …". Bookings page badge "Booked by you through Claude"; read tools say `bookedBy`. Migration 0010.
+    `protocol.test.ts`: real SDK client ↔ our server in-process (client `fetch` → `handler.fetch`), both eras.
+- **Numbers:** 670 unit tests + 34 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`, 18 Nov);
+  typecheck, lint, format, `drizzle-kit check` and build all green. 11 migrations (0000–0010).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -123,9 +135,9 @@ Read this first in a new chat. It replaces the long Days 1–21 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 21, then runbook step 17 (connect Claude to production; CIMD is only testable there).
-2. **Day 22: `book_meeting`** over MCP: the guest email says the host scheduled it, a `source` column, no host
-   questions, no AI brief, its own limits, tool annotations so assistants confirm first. Opinions first.
+1. **Sakif:** push Day 22, then runbook step 17.5 (book through Claude, yourself as the guest, then cancel).
+2. **Next day: Sakif picks from `docs/backlog.md`:** Claude Connectors Directory listing, cancel/reschedule over
+   MCP, or Phase 2 (analytics can count bookings by `source`). Opinions first, as always.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
@@ -261,4 +273,8 @@ Read this first in a new chat. It replaces the long Days 1–21 conversations. D
   checks the consent. A new OAuth client in tests must be linked to the resource (`invalid_target` otherwise).
   Playwright's `page.route` doesn't catch HTTP redirects: read a 302's `Location` with `maxRedirects: 0`. Check
   what real clients speak before following a library's strict setting (`legacy: "reject"`).
+- **MCP protocol versions (Day 22):** the SDK's `Client` defaults to `versionNegotiation: 'legacy'` (2025-11-25).
+  Elicitation forms (`inputRequired`) exist only on 2026-07-28: pin `{ mode: { pin: "2026-07-28" } }` in tests that
+  need them. Check the negotiated version before debugging a feature that exists in one version only. A write tool
+  called by an AI will be retried: design the "already done" answer.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

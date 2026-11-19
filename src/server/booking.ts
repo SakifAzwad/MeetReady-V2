@@ -337,6 +337,12 @@ export async function createBooking(
      * Passed by the booking action; tests that don't send emails leave it out.
      */
     sealToken?: (token: string, bookingId: string) => string;
+    /**
+     * Day 22: the HOST is booking, through an AI assistant (MCP). Same rules
+     * and the same three layers; only the guest's questions are skipped (they
+     * are for guests to answer), and the booking records who made it.
+     */
+    byAssistant?: { clientId: string };
   } = {},
 ): Promise<BookingResult> {
   const window = { start: request.startsAt, end: addMinutes(request.startsAt, 1) };
@@ -358,7 +364,13 @@ export async function createBooking(
 
       // Answers are checked against the questions as they are NOW, before the
       // lock: a bad request shouldn't make other guests of this host wait.
-      if (request.questionsVersion !== undefined && request.questionsVersion !== eventType.questionsVersion) {
+      // A host booking through an assistant answers none (the questions are for guests).
+      const questions = options.byAssistant ? [] : eventType.questions;
+      if (
+        !options.byAssistant &&
+        request.questionsVersion !== undefined &&
+        request.questionsVersion !== eventType.questionsVersion
+      ) {
         return {
           ok: false,
           error: "questions_changed",
@@ -366,7 +378,7 @@ export async function createBooking(
           questionsVersion: eventType.questionsVersion,
         } as const;
       }
-      const answers = answersSchema(eventType.questions).safeParse(request.answers ?? {});
+      const answers = answersSchema(questions).safeParse(options.byAssistant ? {} : (request.answers ?? {}));
       if (!answers.success) {
         const answerErrors: Record<string, string> = {};
         for (const issue of answers.error.issues) answerErrors[String(issue.path[0] ?? "")] ??= issue.message;
@@ -402,9 +414,12 @@ export async function createBooking(
           guestTimeZone: request.guestTimeZone,
           guestNotes: request.guestNotes || null,
           // A snapshot: label and type are copied, so later edits to the questions don't change it.
-          answers: toAnswerSnapshot(eventType.questions, answers.data),
+          answers: toAnswerSnapshot(questions, answers.data),
           startsAt: start,
           endsAt: addMinutes(start, eventType.durationMinutes),
+          ...(options.byAssistant
+            ? { source: "assistant" as const, createdByClient: options.byAssistant.clientId }
+            : {}),
         })
         .returning({ id: bookings.id, startsAt: bookings.startsAt, endsAt: bookings.endsAt });
       return { ok: true, booking: row!, manageToken: token } as const;

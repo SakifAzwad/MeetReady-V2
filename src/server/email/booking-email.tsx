@@ -44,11 +44,20 @@ export type BookingEmailProps = {
   reminderHeading?: string;
   /** Day 18: the AI meeting brief (host confirmation only). */
   brief?: MeetingBrief;
+  /**
+   * Day 22: the host booked this through an AI assistant (its name, e.g. "Claude"). The guest didn't
+   * book it, so their confirmation says who did; the host's says which assistant.
+   */
+  scheduledBy?: string;
 };
 
 export function bookingEmailHeading(p: BookingEmailProps): string {
   const host = p.hostName.split(" ")[0];
   if (p.kind === "reminder") return p.reminderHeading ?? "Your meeting is coming up";
+  if (p.kind === "confirmed" && p.scheduledBy)
+    return p.audience === "guest"
+      ? `${host} scheduled a meeting with you`
+      : `You booked ${p.guestName} through ${p.scheduledBy}`;
   if (p.kind === "confirmed")
     return p.audience === "guest" ? `You're booked with ${host}` : `New booking: ${p.guestName}`;
   if (p.kind === "rescheduled")
@@ -120,6 +129,12 @@ export function BookingEmail(p: BookingEmailProps) {
         <Text style={styles.brand}>MeetReady</Text>
         <Container style={styles.card}>
           <Heading style={styles.heading}>{heading}</Heading>
+          {p.scheduledBy && p.kind === "confirmed" && p.audience === "guest" && (
+            <Text style={styles.value}>
+              {p.hostName} booked this time with you using MeetReady. If it doesn&apos;t suit you, reschedule
+              or cancel with the button below.
+            </Text>
+          )}
 
           <Text style={styles.label}>What</Text>
           <Text style={styles.value}>

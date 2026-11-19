@@ -67,7 +67,13 @@ async function compose(
   };
   const element = <BookingEmail {...full} />;
   const method = props.kind === "cancelled" ? "CANCEL" : "REQUEST";
-  const prefix = { confirmed: "Confirmed", rescheduled: "Rescheduled", cancelled: "Cancelled" }[props.kind];
+  // Day 22: the guest didn't book a meeting the host's assistant made, so it isn't "Confirmed" to them.
+  const prefix =
+    props.kind === "confirmed" && props.scheduledBy
+      ? props.audience === "guest"
+        ? "Scheduled"
+        : `Booked through ${props.scheduledBy}`
+      : { confirmed: "Confirmed", rescheduled: "Rescheduled", cancelled: "Cancelled" }[props.kind];
   return {
     to,
     subject: `${prefix}: ${b.eventTitle} with ${props.audience === "guest" ? b.hostName : b.guestName} – ${formatDateKey(dateKeyInZone(b.startsAt, timeZone), "short")}`,
@@ -117,10 +123,18 @@ export async function composeChangeEmail(
   const hostIcs = b.calendarSync !== "synced";
   const zone = audience === "guest" ? b.guestTimeZone : b.hostTimeZone;
   const to = audience === "guest" ? b.guestEmail : b.hostEmail;
+  // Day 22: made by the host through an assistant. Its name, or a generic one if the client is gone.
+  const scheduledBy = b.source === "assistant" ? b.assistantName?.trim() || "an AI assistant" : undefined;
 
   if (change.kind === "created") {
     return audience === "guest"
-      ? compose(b, { kind: "confirmed", audience, location, actionUrl: manage }, zone, to, ctx.now)
+      ? compose(
+          b,
+          { kind: "confirmed", audience, location, actionUrl: manage, scheduledBy },
+          zone,
+          to,
+          ctx.now,
+        )
       : compose(
           b,
           {
@@ -132,6 +146,7 @@ export async function composeChangeEmail(
             answers: b.answers,
             brief: extras.brief ?? undefined,
             actionUrl: dashboard,
+            scheduledBy,
           },
           zone,
           to,

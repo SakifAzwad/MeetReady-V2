@@ -50,11 +50,8 @@ They can disconnect from the dashboard at any time.
 | ![Consent page: Claude wants to use your MeetReady account](docs/images/consent.png) | ![The AI assistants section of the dashboard, with Claude connected](docs/images/dashboard-assistants.png) |
 | :----------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------: |
 
-<!-- Claude booking through MeetReady (add your own screenshot from claude.ai):
+Claude booking through MeetReady (add your own screenshot from claude.ai):
 ![Claude booking a meeting through MeetReady's MCP server, with the confirm step](docs/images/claude.png)
--->
-
-## Architecture
 
 ## Architecture
 

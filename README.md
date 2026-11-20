@@ -20,13 +20,14 @@ their own words, and the host can book or check meetings from Claude.
 - **An AI booking assistant that can't make up times.** The model turns the guest's sentence into a search. Code
   checks the search and runs it through the slot function. Suggested times come from the tool's results, never from
   the model's text. ([Day 19](docs/day-19.md), [Day 20](docs/day-20.md))
-- **An MCP server, so Claude can read and book meetings.** MeetReady is its own OAuth 2.1 server, with Client ID
-  Metadata Documents, PKCE, tokens bound to the server and rotating refresh tokens. Where the client supports it,
-  booking needs a confirm form that the model can't fill in. ([Day 21](docs/day-21.md), [Day 22](docs/day-22.md))
+- **An MCP server, so Claude can read, book, move and cancel meetings.** MeetReady is its own OAuth 2.1 server, with
+  Client ID Metadata Documents, PKCE, tokens bound to the server and rotating refresh tokens. Where the client
+  supports it, every change needs a confirm form that the model can't fill in.
+  ([Day 21](docs/day-21.md), [Day 22](docs/day-22.md), [Day 24](docs/day-24.md))
 - **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
   and evals against the real model. ([Day 18](docs/day-18.md))
 - **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
-  limits, and Sentry with a privacy scrubber. About 670 unit tests and 34 browser tests run in CI.
+  limits, and Sentry with a privacy scrubber. About 720 unit tests and 35 browser tests run in CI.
   ([Days 11–17](#design-notes))
 
 ## Screenshots
@@ -105,11 +106,11 @@ retries, so a booking is saved first and a slow service can't lose it.
 
 ## AI features
 
-| Feature                                       | What the model does                                                                            | What code does                                                                                        | Docs                                               |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Meeting brief** for the host                | Writes a summary, an agenda and what to prepare                                                | Structured output checked with Zod, guest text treated as data, a cost log for every call             | [Day 18](docs/day-18.md)                           |
-| **Booking assistant** for guests              | Turns "Wednesday morning, I'm in London" into a search                                         | Checks the search, runs the slot function, returns up to three real times. Suggests only, never books | [Day 19](docs/day-19.md), [Day 20](docs/day-20.md) |
-| **MCP server** for Claude, ChatGPT and others | Calls `list_event_types`, `find_free_times`, `list_bookings`, `get_booking` and `book_meeting` | OAuth scopes for reading and booking, the booking page's own rules, a confirm form, safe retries      | [Day 21](docs/day-21.md), [Day 22](docs/day-22.md) |
+| Feature                                       | What the model does                                                                                                                    | What code does                                                                                                                       | Docs                                                                         |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| **Meeting brief** for the host                | Writes a summary, an agenda and what to prepare                                                                                        | Structured output checked with Zod, guest text treated as data, a cost log for every call                                            | [Day 18](docs/day-18.md)                                                     |
+| **Booking assistant** for guests              | Turns "Wednesday morning, I'm in London" into a search                                                                                 | Checks the search, runs the slot function, returns up to three real times. Suggests only, never books                                | [Day 19](docs/day-19.md), [Day 20](docs/day-20.md)                           |
+| **MCP server** for Claude, ChatGPT and others | Calls `list_event_types`, `find_free_times`, `list_bookings`, `get_booking`, `book_meeting`, `reschedule_booking` and `cancel_booking` | OAuth scopes for reading and changing, the booking page's own rules, a confirm form per change, safe retries, cleaned text to guests | [Day 21](docs/day-21.md), [Day 22](docs/day-22.md), [Day 24](docs/day-24.md) |
 
 Models run on Groq through the Vercel AI SDK. Unit tests use a scripted fake model and the browser tests use a fake
 Groq server, so CI never calls a real model. `npm run eval` checks the prompts against the real one.
@@ -226,6 +227,9 @@ Each day of the build has its own write-up with the decisions, the reasons and t
   guest who scheduled it, safe retries, and a test of the real SDK on both protocol versions.
 - [Day 23: README and screenshots](docs/day-23.md): screenshots and the GIF taken by a Playwright script from seeded
   demo data, so they can be retaken after any UI change.
+- [Day 24: Cancel and reschedule over MCP](docs/day-24.md): two destructive, idempotent tools for any of the host's
+  upcoming bookings, one move core shared with the guest's reschedule, a free-time search that ignores the booking
+  being moved, cleaned cancel reasons, and emails and labels that say the host did it, through which assistant.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

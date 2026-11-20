@@ -10,7 +10,7 @@ import { busyLoadRange, createBooking, getBookableSlots, getPublicEventType } fr
 import type { ExternalBusy } from "./calendar/busy";
 import { CalendarUnavailableError } from "./calendar/google-api";
 import { createEventType } from "./event-types";
-import { getBookingByToken, rescheduleBookingByToken } from "./manage-booking";
+import { getBookingByToken, rescheduleBookingAsHost, rescheduleBookingByToken } from "./manage-booking";
 import { suggestTimes } from "./share";
 
 /*
@@ -171,6 +171,30 @@ describe("rescheduling with a calendar", () => {
     expect(await rescheduleBookingByToken(db, token, tuesday, NOW, { calendar })).toMatchObject({ ok: true });
     expect(calendar.busyTimes.mock.calls[0]?.[0]).toBe("alice");
     expect(calendar.busyTimes.mock.calls[0]?.[2]).toBe("live");
+  });
+});
+
+describe("a host's move with a calendar (Day 24)", () => {
+  it("doesn't count the meeting's own Google event as busy, but does count others; fails closed", async () => {
+    const created = await createBooking(db, request("03:30"), NOW);
+    if (!created.ok) throw new Error("setup failed");
+    const id = created.booking.id;
+    // Google has the meeting itself (03:30–04:00) and something else at 05:00.
+    const calendar = calendarWith([
+      { start: at("03:30"), end: at("04:00") },
+      { start: at("05:00"), end: at("06:00") },
+    ]);
+    expect(await rescheduleBookingAsHost(db, "alice", id, at("05:00"), NOW, { calendar })).toEqual({
+      ok: false,
+      error: "slot_unavailable",
+    });
+    expect(
+      await rescheduleBookingAsHost(db, "alice", id, at("03:00"), NOW, { calendar: brokenCalendar() }),
+    ).toEqual({ ok: false, error: "calendar_unavailable" });
+    // 03:00–03:30 plus its 15-minute buffer runs into 03:30: only its OWN event is there, so it may move.
+    expect(await rescheduleBookingAsHost(db, "alice", id, at("03:00"), NOW, { calendar })).toMatchObject({
+      ok: true,
+    });
   });
 });
 

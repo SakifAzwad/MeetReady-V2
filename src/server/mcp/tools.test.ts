@@ -481,6 +481,7 @@ describe("book_meeting (Day 22)", () => {
       const r = await bookMeetingTool(d, writer, args, { canAsk: true, answer: null });
       expect(r).toEqual({
         ok: "confirm",
+        action: "book",
         message:
           'Book "Intro call" with Ada Lovelace (ada@example.com) on 2026-11-26 14:00 (Asia/Dhaka)? MeetReady will email Ada Lovelace the invitation, with a link to reschedule or cancel.',
       });
@@ -622,6 +623,7 @@ describe("book_meeting (Day 22)", () => {
       "bookings:write",
       async () => ({
         ok: "confirm" as const,
+        action: "book" as const,
         message: "Book it?",
       }),
     );

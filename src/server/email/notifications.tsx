@@ -12,9 +12,11 @@ import type { EmailMessage, EmailSender } from "./sender";
 /*
  * Who gets which email:
  *   booked        -> guest (with manage link) + host
- *   rescheduled   -> guest + host
+ *   rescheduled by guest -> guest + host
  *   cancelled by guest -> guest (receipt) + host
- *   cancelled by host  -> guest only (the host did it)
+ *   cancelled or moved by the host -> guest only (the host did it)
+ *     ...through an AI assistant (Day 24) -> guest + host (a receipt: the
+ *     assistant may have acted while the host wasn't looking)
  *   reminder (Day 17)  -> guest only, a day and an hour before
  *
  * Each recipient sees times in THEIR timezone, and every change email carries
@@ -42,9 +44,15 @@ export type BookingChange =
 
 export type Audience = "guest" | "host";
 
-/** The table above, as code. */
-export function audiencesFor(b: Pick<BookingDetails, "cancelledBy">, change: BookingChange): Audience[] {
-  if (change.kind === "cancelled" && b.cancelledBy === "host") return ["guest"];
+/** The table above, as code. The row is read at this change's sequence, so its fields describe this change. */
+export function audiencesFor(
+  b: Pick<BookingDetails, "cancelledBy" | "rescheduledBy" | "changedByClient">,
+  change: BookingChange,
+): Audience[] {
+  const byHost =
+    (change.kind === "cancelled" && b.cancelledBy === "host") ||
+    (change.kind === "rescheduled" && b.rescheduledBy === "host");
+  if (byHost && !b.changedByClient) return ["guest"];
   return ["guest", "host"];
 }
 
@@ -68,12 +76,15 @@ async function compose(
   const element = <BookingEmail {...full} />;
   const method = props.kind === "cancelled" ? "CANCEL" : "REQUEST";
   // Day 22: the guest didn't book a meeting the host's assistant made, so it isn't "Confirmed" to them.
+  // Day 24: the host's receipt for a change their assistant made says so in the subject too.
   const prefix =
     props.kind === "confirmed" && props.scheduledBy
       ? props.audience === "guest"
         ? "Scheduled"
         : `Booked through ${props.scheduledBy}`
-      : { confirmed: "Confirmed", rescheduled: "Rescheduled", cancelled: "Cancelled" }[props.kind];
+      : props.audience === "host" && props.changedThrough && props.kind !== "confirmed"
+        ? `${props.kind === "rescheduled" ? "Moved" : "Cancelled"} through ${props.changedThrough}`
+        : { confirmed: "Confirmed", rescheduled: "Rescheduled", cancelled: "Cancelled" }[props.kind];
   return {
     to,
     subject: `${prefix}: ${b.eventTitle} with ${props.audience === "guest" ? b.hostName : b.guestName} – ${formatDateKey(dateKeyInZone(b.startsAt, timeZone), "short")}`,
@@ -125,6 +136,8 @@ export async function composeChangeEmail(
   const to = audience === "guest" ? b.guestEmail : b.hostEmail;
   // Day 22: made by the host through an assistant. Its name, or a generic one if the client is gone.
   const scheduledBy = b.source === "assistant" ? b.assistantName?.trim() || "an AI assistant" : undefined;
+  // Day 24: the latest cancel or move was made through an assistant.
+  const changedThrough = b.changedByClient ? b.changeAssistantName?.trim() || "an AI assistant" : undefined;
 
   if (change.kind === "created") {
     return audience === "guest"
@@ -163,7 +176,14 @@ export async function composeChangeEmail(
     return audience === "guest"
       ? compose(
           b,
-          { kind: "rescheduled", audience, location, previousWhen, actionUrl: manage },
+          {
+            kind: "rescheduled",
+            audience,
+            location,
+            previousWhen,
+            actionUrl: manage,
+            rescheduledBy: b.rescheduledBy,
+          },
           zone,
           to,
           ctx.now,
@@ -177,6 +197,8 @@ export async function composeChangeEmail(
             guestEmail: b.guestEmail,
             previousWhen,
             actionUrl: dashboard,
+            rescheduledBy: b.rescheduledBy,
+            changedThrough,
           },
           zone,
           to,
@@ -194,7 +216,7 @@ export async function composeChangeEmail(
     ? compose(b, { ...common, audience }, zone, to, ctx.now)
     : compose(
         b,
-        { ...common, audience, guestEmail: b.guestEmail, actionUrl: dashboard },
+        { ...common, audience, guestEmail: b.guestEmail, actionUrl: dashboard, changedThrough },
         zone,
         to,
         ctx.now,

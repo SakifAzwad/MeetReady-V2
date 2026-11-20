@@ -59,8 +59,8 @@ export function AssistantsSection({
                   )}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  {a.scopes.includes(MCP_SCOPES.write) ? "Can read and book" : "Can read"}. Connected{" "}
-                  {formatDateKey(dateKeyInZone(a.connectedAt, timeZone), "short")}.
+                  {a.scopes.includes(MCP_SCOPES.write) ? "Can read, book and change bookings" : "Can read"}.
+                  Connected {formatDateKey(dateKeyInZone(a.connectedAt, timeZone), "short")}.
                 </p>
               </div>
               <DisconnectButton clientId={a.clientId} name={a.name} />

@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 23)
+# Handoff: starting a new chat (after Day 24)
 
-Read this first in a new chat. It replaces the long Days 1–23 conversations. Details live in `docs/day-01.md` …
-`docs/day-23.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–24 conversations. Details live in `docs/day-01.md` …
+`docs/day-24.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -129,9 +129,24 @@ Read this first in a new chat. It replaces the long Days 1–23 conversations. D
     diagram, an AI features table, screenshots and a GIF. Images in `docs/images/`, made by `npm run shots`
     (`playwright.shots.config.ts` → `e2e/shots/readme.shots.ts`: seeds a demo host `sakifazwad18` with bookings, a
     brief and Claude connected, then captures; the GIF is page screenshots in a loop → ffmpeg, no Playwright video).
-    Retake after UI changes. `claude.png` is Sakif's own (commented out in the README until added).
-- **Numbers:** 670 unit tests + 34 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`, 18 Nov);
-  typecheck, lint, format, `drizzle-kit check` and build all green. 11 migrations (0000–0010).
+    Retake after UI changes. `claude.png` is Sakif's own (added after Day 23).
+  - Cancel and reschedule over MCP (Day 24): `cancel_booking` + `reschedule_booking` (scope `bookings:write`), for ANY
+    of the host's confirmed, not-started bookings (guest-made too). Annotations destructive + idempotent; two tools so
+    Claude.ai's per-tool approval can differ. Same pattern as `book_meeting`: checks → pre-check → confirm form
+    (`{ ok: "confirm", action }`; one checkbox per action in `CONFIRM_SCHEMAS`, `confirmationAnswer(…, action)`) →
+    `changeLimit` (`mcp_change_host` 20/day + `book_email`) → the shared function → `onChanged` → `after()` →
+    `jobs.bookingChanged`. Retries: already cancelled → `alreadyCancelled`; already at that start → `alreadyThere`
+    (no window needed). Cancel reason through `cleanReason` (= `cleanText`, 500), shown in the confirm message.
+    `find_free_times` takes an OPTIONAL `bookingId` (stale cached schemas send none): `excludeBookingId` +
+    `subtractInterval` of its own time. Move core: `moveBooking(db, find, newStart, now, options, recordWho)` in
+    `manage-booking.ts`, used by `rescheduleBookingByToken` (guest) and `rescheduleBookingAsHost`; host lookups via
+    `getHostBookingDetails` (id AND host). Migration 0011: `rescheduled_by` (reuses the `cancelled_by` enum),
+    `changed_by_client` (assistant behind the LATEST cancel/move; null when a person did it). Emails: guest "Sakif
+    moved your meeting"; host receipt "Moved/Cancelled through Claude: …" only when an assistant did it
+    (`audiencesFor`). Bookings labels in `src/lib/booking-labels.ts`. Consent: "Book, move and cancel meetings…";
+    dashboard: "Can read, book and change bookings". No dashboard Move button yet (backlog).
+- **Numbers:** 720 unit tests + 35 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 12 migrations (0000–0011).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -140,10 +155,9 @@ Read this first in a new chat. It replaces the long Days 1–23 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 23, then add `docs/images/claude.png` (Claude booking through MeetReady) and uncomment it in
-   the README.
-2. **Next day: Sakif picks from `docs/backlog.md`:** Claude Connectors Directory listing, cancel/reschedule over
-   MCP, or Phase 2 (analytics can count bookings by `source`). Opinions first, as always.
+1. **Sakif:** push Day 24, then runbook step 17.5 "Moving and cancelling" (refresh the Claude connector first).
+2. **Next day: Sakif picks from `docs/backlog.md`:** Claude Connectors Directory listing, the dashboard's Move
+   button, or Phase 2 (analytics can count bookings by `source`). Opinions first, as always.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
@@ -286,4 +300,12 @@ Read this first in a new chat. It replaces the long Days 1–23 conversations. D
   called by an AI will be retried: design the "already done" answer.
 - **New MCP tools don't appear in Claude by themselves** (Day 22, after deploy): Claude caches a connector's tool
   list (instructions are re-read). Refresh or reconnect the connector, then a new chat. Runbook troubleshooting.
+- **A tool's input schema is a public API** (Day 24): a new REQUIRED field breaks every call from a client holding
+  the cached old schema. Fields added later are optional (`nullish`); the "required + nullable" rule is for
+  schemas sent to a model under strict mode (Groq), not for MCP fields added after release.
+- **"Latest change" columns** (Day 24): `changed_by_client` describes only the latest cancel or move. Emails are
+  safe (they read the row at the change's `sequence`); anything else must ask which change was the latest
+  (`booking-labels.ts`).
+- **"X doesn't block Y" tests need X to OVERLAP Y** (Day 24 story): adjacent isn't overlapping, and a start that
+  isn't on the slot interval fails for the wrong reason. Remove the code under test once and watch the test fail.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

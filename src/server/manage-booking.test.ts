@@ -11,8 +11,10 @@ import {
   cancelBookingAsHost,
   cancelBookingByToken,
   getBookingByToken,
+  getHostBookingDetails,
   listHostBookings,
   listHostBookingsBetween,
+  rescheduleBookingAsHost,
   rescheduleBookingByToken,
 } from "./manage-booking";
 import { hashManageToken } from "./manage-token";
@@ -148,6 +150,8 @@ describe("managing bookings", () => {
         startsAt: at("14:00"),
         endsAt: at("14:30"),
         sequence: 1,
+        rescheduledBy: "guest",
+        changedByClient: null,
       });
       const free = await freeTimes();
       expect(free).toContain("10:00");
@@ -241,6 +245,84 @@ describe("managing bookings", () => {
         [],
       );
       expect(await listHostBookingsBetween(db, "bob", range)).toEqual([]);
+    });
+
+    it("cancels through an assistant: recorded, and a later change by the guest clears it", async () => {
+      const { booking, manageToken } = await book("intro", "10:00");
+      await cancelBookingAsHost(db, "alice", booking.id, null, NOW, { byAssistant: { clientId: "claude" } });
+      expect(await getBookingByToken(db, manageToken)).toMatchObject({
+        cancelledBy: "host",
+        changedByClient: "claude",
+      });
+
+      const other = await book("intro", "11:00", "b");
+      await cancelBookingAsHost(db, "alice", other.booking.id, null, NOW);
+      expect((await getBookingByToken(db, other.manageToken))?.changedByClient).toBeNull();
+    });
+
+    describe("reschedules (Day 24)", () => {
+      it("moves their booking: same id and link, new time, recorded as the host's move", async () => {
+        const { booking, manageToken } = await book("intro", "10:00");
+        const r = await rescheduleBookingAsHost(db, "alice", booking.id, at("14:00"), NOW, {
+          byAssistant: { clientId: "claude" },
+        });
+        expect(r).toEqual({ ok: true, bookingId: booking.id, previousStartsAt: at("10:00"), sequence: 1 });
+        expect(await getBookingByToken(db, manageToken)).toMatchObject({
+          startsAt: at("14:00"),
+          endsAt: at("14:30"),
+          rescheduledBy: "host",
+          changedByClient: "claude",
+        });
+        const free = await freeTimes();
+        expect(free).toContain("10:00");
+        expect(free).not.toContain("14:00");
+
+        // The guest moves it back themselves: no longer the assistant's change.
+        await rescheduleBookingByToken(db, manageToken, at("15:00"), NOW);
+        expect(await getBookingByToken(db, manageToken)).toMatchObject({
+          rescheduledBy: "guest",
+          changedByClient: null,
+        });
+      });
+
+      it("follows the guest's rules: not into another booking, outside hours, or onto a started meeting", async () => {
+        await book("intro", "14:00", "other");
+        const { booking } = await book("intro", "10:00");
+        const move = (time: string, now = NOW) =>
+          rescheduleBookingAsHost(db, "alice", booking.id, at(time), now);
+        expect(await move("14:00")).toEqual({ ok: false, error: "slot_unavailable" });
+        expect(await move("18:00")).toEqual({ ok: false, error: "slot_unavailable" });
+        expect(await move("15:00", at("10:05"))).toEqual({ ok: false, error: "not_changeable" });
+      });
+
+      it("can move a meeting into a time that overlaps its own old time", async () => {
+        const { booking } = await book("long", "10:00");
+        expect((await rescheduleBookingAsHost(db, "alice", booking.id, at("10:30"), NOW)).ok).toBe(true);
+      });
+
+      it("can't move a cancelled booking", async () => {
+        const { booking } = await book("intro", "10:00");
+        await cancelBookingAsHost(db, "alice", booking.id, null, NOW);
+        expect(await rescheduleBookingAsHost(db, "alice", booking.id, at("15:00"), NOW)).toEqual({
+          ok: false,
+          error: "not_changeable",
+        });
+      });
+    });
+
+    // IDOR, again: knowing a booking id must not be enough.
+    it("can't read or move another host's booking, or a made-up id", async () => {
+      const { booking, manageToken } = await book("intro", "10:00");
+      expect(await getHostBookingDetails(db, "bob", booking.id)).toBeNull();
+      expect(await rescheduleBookingAsHost(db, "bob", booking.id, at("15:00"), NOW)).toEqual({
+        ok: false,
+        error: "not_found",
+      });
+      expect(await rescheduleBookingAsHost(db, "alice", "not-a-uuid", at("15:00"), NOW)).toEqual({
+        ok: false,
+        error: "not_found",
+      });
+      expect((await getBookingByToken(db, manageToken))?.startsAt).toEqual(at("10:00"));
     });
 
     // IDOR, again: knowing a booking id must not be enough.

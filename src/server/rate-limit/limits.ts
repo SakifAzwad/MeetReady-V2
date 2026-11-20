@@ -70,6 +70,12 @@ export const LIMITS = {
    * could book dozens. (book_email still applies per guest inbox.)
    */
   mcp_book_host: { tokens: 20, windowMs: 24 * 60 * MINUTE },
+  /**
+   * Cancels and moves through an assistant (Day 24), per host per day, together. Each one emails a guest;
+   * book_email (3 an hour per guest inbox) also applies, so a looping assistant can't flood one person
+   * with "moved" emails.
+   */
+  mcp_change_host: { tokens: 20, windowMs: 24 * 60 * MINUTE },
   /** Self-registered MCP clients per IP, only when MCP_ALLOW_DCR is on (each one is a database row). */
   mcp_register_ip: { tokens: 10, windowMs: 60 * MINUTE },
 } as const satisfies Record<string, Policy>;

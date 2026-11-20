@@ -1,15 +1,14 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 23).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 24).
 
 ## Next, in order
 
-1. **Push Day 23**, then add a screenshot of Claude booking through MeetReady as `docs/images/claude.png` and
-   uncomment its line in the README (Sakif: it needs his Claude account).
-2. **Next day: pick from the list below.** Candidates: list MeetReady in Claude's Connectors Directory (now that
-   it can book), cancel and reschedule over MCP, or the Phase 2 items (analytics now has a `source` column to
-   count).
+1. **Push Day 24**, then runbook step 17.5 "Moving and cancelling" (refresh the connector first).
+2. **Next day: pick from the list below.** Candidates: list MeetReady in Claude's Connectors Directory (it can
+   book, move and cancel now), the dashboard's Move button, or the Phase 2 items (analytics now has a `source`
+   column to count).
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
@@ -19,7 +18,8 @@ retries, reminder emails, backfill on connect and ordered syncs (Day 17); AI mee
 booking assistant on the server, suggest-only (Day 19); its box on the booking page, with a fake Groq for E2E
 (Day 20); an MCP server with OAuth (CIMD), a consent page and four read tools for AI assistants (Day 21);
 `book_meeting` over MCP, with a confirm form where the client supports one (Day 22); the README for reviewers,
-with an architecture diagram and screenshots retaken by a script (Day 23).
+with an architecture diagram and screenshots retaken by a script (Day 23); `cancel_booking` and
+`reschedule_booking` over MCP, any of the host's upcoming bookings, with confirm forms (Day 24).
 
 ## Ideas from reviews, deferred
 
@@ -40,9 +40,11 @@ with an architecture diagram and screenshots retaken by a script (Day 23).
 | **Assistant remembers the conversation** (follow-ups like "later that day")        | Day 19 | One message per request keeps it stateless: no history to store, cap or inject into. A follow-up means sending past turns back each time, which multiplies tokens on the free plan.                                                                                                                                                                                                                  | If guests often rephrase                           |
 | **More AI throughput** (Groq Dev tier, or a smaller model for the assistant)       | Day 19 | The free plan's 8,000 tokens a minute is about 2–3 assistant requests a minute, app-wide; past that, guests get "try again" and briefs go missing. Paying, or a lighter model re-checked with the evals, lifts it.                                                                                                                                                                                   | If `ai_calls` shows `failed` from 429s             |
 | **Assistant when rescheduling** (the guest's manage page)                          | Day 20 | The action has no reschedule token, so the booking's own time would count as busy, and the slots it suggests wouldn't match the grid there (which frees it). Needs the token passed through, checked like `/api/slots` does.                                                                                                                                                                         | If guests reschedule often                         |
-| **Cancel and reschedule over MCP**                                                 | Day 21 | Destructive and they email the guest; the read tools and `book_meeting` come first. Same rules as the dashboard's cancel (host-scoped, `cancelBookingAsHost`), plus a confirmation the assistant must show.                                                                                                                                                                                          | After `book_meeting` (Day 22)                      |
 | **List MeetReady in Claude's Connectors Directory** (then ChatGPT's app directory) | Day 21 | Today every host pastes the MCP address into Claude by hand (a custom connector). A listing makes it one click, and "listed in Anthropic's directory" is a checkable CV line. Wait for `book_meeting` (a fuller product to review), a reviewer account with demo data, and ideally Google app verification (reviewers would hit the "unverified app" warning). Submit at claude.ai/directory/manage. | After Day 22                                       |
 | **A note from the host in `book_meeting`** ("We'll go over the Q1 plan")           | Day 22 | More email copy, and text written by a model going into a guest's inbox: it needs the same cleaning as the AI brief (`cleanText`) and a label saying who wrote it.                                                                                                                                                                                                                                   | If hosts ask                                       |
+| **A Move button on the dashboard** (host reschedules by hand)                      | Day 24 | `rescheduleBookingAsHost` exists since Day 24 (assistants use it), so it's a picker on the Bookings page reusing the booking widget in "reschedule" mode, plus "Sakif moved your meeting" emails without the receipt. UI work, so its own day.                                                                                                                                                       | When a host asks, or with the activity log         |
+| **Bulk changes over MCP** ("cancel everything on Friday")                          | Day 24 | Each cancel or move is one confirmed call today, so a bulk request means several confirmations. A bulk tool needs one form listing every booking it touches, and a bigger blast radius if the model is wrong.                                                                                                                                                                                        | If hosts ask                                       |
+| **A separate scope for moving and cancelling** (`bookings:manage`)                 | Day 24 | `bookings:write` gained cancel and move without re-consent; the consent page's wording changed with it. With one host that's fine. With real users, a new scope would make each host approve the new power.                                                                                                                                                                                          | Before real users, with the directory listing      |
 | **Show the MCP tool calls to the host** (an activity log per assistant)            | Day 21 | Today the dashboard shows which assistants are connected, not what they read. A log is a table and a page; useful once assistants can write.                                                                                                                                                                                                                                                         | With `book_meeting`, if hosts ask                  |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                    | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                                                                                                                                            | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)         | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                                                                                                                                    | As polish, after the AI features                   |
@@ -108,7 +110,7 @@ with an architecture diagram and screenshots retaken by a script (Day 23).
   - English and Bangla.
 - **AI:**
   - booking assistant (done: server Day 19, suggest-only; box on the booking page Day 20);
-  - MCP server (done: reading Day 21, booking Day 22);
+  - MCP server (done: reading Day 21, booking Day 22, cancel and move Day 24);
   - meeting brief for the host (done, Day 18);
   - email-to-booking;
   - smart slot ranking (with preferred hours);

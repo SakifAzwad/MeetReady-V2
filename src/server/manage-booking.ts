@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm";
+import { alias, type PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
 import { bookingBriefs, bookings, eventTypes, oauthClient, user } from "@/db/schema";
@@ -51,7 +52,15 @@ export type BookingDetails = {
   /** Day 22: who made it, and which assistant (its registered name) when the host used one. */
   source: "booking_page" | "assistant";
   assistantName: string | null;
+  /** Day 24: who moved it last (null: never, or a guest before Day 24). */
+  rescheduledBy: "host" | "guest" | null;
+  /** Day 24: the latest cancel or move was made through an assistant: its id, and its name if it still exists. */
+  changedByClient: string | null;
+  changeAssistantName: string | null;
 };
+
+/** The assistant behind the latest change (Day 24): the same table, joined a second time. */
+const changeClient = alias(oauthClient, "change_client");
 
 const detailsColumns = {
   id: bookings.id,
@@ -83,6 +92,9 @@ const detailsColumns = {
   calendarSync: bookings.calendarSync,
   source: bookings.source,
   assistantName: oauthClient.name,
+  rescheduledBy: bookings.rescheduledBy,
+  changedByClient: bookings.changedByClient,
+  changeAssistantName: changeClient.name,
 };
 
 function selectDetails(db: Database) {
@@ -94,6 +106,7 @@ function selectDetails(db: Database) {
       .innerJoin(user, eq(user.id, bookings.hostId))
       // Only for bookings an assistant made; null (and harmless) for the rest, or once the client is gone.
       .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient))
+      .leftJoin(changeClient, eq(changeClient.clientId, bookings.changedByClient))
   );
 }
 
@@ -153,6 +166,7 @@ export async function cancelBookingByToken(
       cancelledAt: now,
       cancelledBy: "guest",
       cancellationReason: reason,
+      changedByClient: null,
       sequence: sql`${bookings.sequence} + 1`,
     })
     .where(and(eq(bookings.manageTokenHash, hash), changeable(now)))
@@ -167,6 +181,13 @@ export type RescheduleResult =
   | { ok: true; bookingId: string; previousStartsAt: Date; sequence: number }
   | { ok: false; error: ManageError | "slot_unavailable" | "slot_taken" | "calendar_unavailable" };
 
+/** Shared by the guest's and the host's reschedule (and the race-test seam). */
+type MoveOptions = {
+  /** The host's calendar: checked live, fail closed (same as createBooking). */
+  calendar?: ExternalBusy;
+  afterCheck?: () => Promise<void>;
+};
+
 /**
  * Moves a booking to a new start. Same three layers as createBooking:
  * per-host lock, re-check with generateSlots (ignoring this booking, so a
@@ -175,29 +196,24 @@ export type RescheduleResult =
  *
  * The booking keeps its id and manage link; `sequence` goes up so calendar
  * apps treat the new invite as an update of the old one.
+ *
+ * Day 24: one core for both people who can move a meeting. Only two things
+ * differ: how the booking is found (the guest's token hash, or the host's id
+ * in the WHERE clause) and what's recorded about who moved it.
  */
-export async function rescheduleBookingByToken(
+async function moveBooking(
   db: Database,
-  token: string,
+  find: (db: Database) => Promise<BookingDetails | null>,
   newStart: Date,
   now: Date,
-  /** Same as createBooking: the host's calendar (checked live, fail closed), and the race-test seam. */
-  options: {
-    calendar?: ExternalBusy;
-    afterCheck?: () => Promise<void>;
-    /**
-     * Day 17: bookings made before Day 17 have no encrypted copy of the token.
-     * The guest just proved they hold it, so it's saved now (only if missing),
-     * and later emails about this booking can carry the link again.
-     */
-    sealToken?: (token: string, bookingId: string) => string;
-  } = {},
+  options: MoveOptions,
+  /** Columns written with the move: who moved it, and anything else the caller needs saved. */
+  recordWho: (bookingId: string) => PgUpdateSetSource<typeof bookings>,
 ): Promise<RescheduleResult> {
-  if (!manageTokenSchema.safeParse(token).success) return { ok: false, error: "not_found" };
   const window = { start: newStart, end: addMinutes(newStart, 1) };
   let externalBusy: { start: Date; end: Date }[] = [];
   if (options.calendar) {
-    const current = await getBookingByToken(db, token);
+    const current = await find(db);
     if (!current) return { ok: false, error: "not_found" };
     try {
       // The booking's own event is in the host's calendar (Day 16): it mustn't block its own move.
@@ -212,12 +228,12 @@ export async function rescheduleBookingByToken(
   }
   try {
     return await db.transaction(async (tx) => {
-      const current = await getBookingByToken(tx, token);
+      const current = await find(tx);
       if (!current) return { ok: false, error: "not_found" } as const;
 
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${current.hostId}, 0))`);
 
-      // Re-read under the lock: the guest may have cancelled in another tab.
+      // Re-read under the lock: the booking may have been cancelled or moved meanwhile.
       const [fresh] = await tx
         .select({ status: bookings.status, startsAt: bookings.startsAt })
         .from(bookings)
@@ -241,7 +257,6 @@ export async function rescheduleBookingByToken(
       }
       await options.afterCheck?.();
 
-      const sealed = options.sealToken?.(token, current.id);
       const [moved] = await tx
         .update(bookings)
         .set({
@@ -249,7 +264,7 @@ export async function rescheduleBookingByToken(
           endsAt: addMinutes(newStart, eventType.durationMinutes),
           rescheduledAt: now,
           sequence: sql`${bookings.sequence} + 1`,
-          ...(sealed && { manageTokenEncrypted: sql`coalesce(${bookings.manageTokenEncrypted}, ${sealed})` }),
+          ...recordWho(current.id),
         })
         .where(eq(bookings.id, current.id))
         .returning({ sequence: bookings.sequence });
@@ -264,6 +279,38 @@ export async function rescheduleBookingByToken(
     if (pgErrorCode(error) === PG_EXCLUSION_VIOLATION) return { ok: false, error: "slot_taken" };
     throw error;
   }
+}
+
+export async function rescheduleBookingByToken(
+  db: Database,
+  token: string,
+  newStart: Date,
+  now: Date,
+  options: MoveOptions & {
+    /**
+     * Day 17: bookings made before Day 17 have no encrypted copy of the token.
+     * The guest just proved they hold it, so it's saved now (only if missing),
+     * and later emails about this booking can carry the link again.
+     */
+    sealToken?: (token: string, bookingId: string) => string;
+  } = {},
+): Promise<RescheduleResult> {
+  if (!manageTokenSchema.safeParse(token).success) return { ok: false, error: "not_found" };
+  return moveBooking(
+    db,
+    (d) => getBookingByToken(d, token),
+    newStart,
+    now,
+    options,
+    (bookingId) => {
+      const sealed = options.sealToken?.(token, bookingId);
+      return {
+        rescheduledBy: "guest",
+        changedByClient: null,
+        ...(sealed && { manageTokenEncrypted: sql`coalesce(${bookings.manageTokenEncrypted}, ${sealed})` }),
+      };
+    },
+  );
 }
 
 // ─── Host: by session ───────────────────────────────────────────────────────────
@@ -292,6 +339,10 @@ export type HostBookingRow = {
   /** Day 22: made by the host through an assistant (its registered name), or by a guest on the page. */
   source: "booking_page" | "assistant";
   assistantName: string | null;
+  /** Day 24: who moved it last, and whether the latest cancel or move went through an assistant (its name). */
+  rescheduledBy: "host" | "guest" | null;
+  changedByClient: string | null;
+  changeAssistantName: string | null;
 };
 
 /** The Bookings page's columns, joined to the event type and the brief. Unscoped: callers add the host. */
@@ -318,11 +369,15 @@ const hostBookingQuery = (db: Database) =>
       brief: { summary: bookingBriefs.summary, agenda: bookingBriefs.agenda, prepare: bookingBriefs.prepare },
       source: bookings.source,
       assistantName: oauthClient.name,
+      rescheduledBy: bookings.rescheduledBy,
+      changedByClient: bookings.changedByClient,
+      changeAssistantName: changeClient.name,
     })
     .from(bookings)
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
     .leftJoin(bookingBriefs, eq(bookingBriefs.bookingId, bookings.id))
-    .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient));
+    .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient))
+    .leftJoin(changeClient, eq(changeClient.clientId, bookings.changedByClient));
 
 export async function listHostBookings(
   db: Database,
@@ -374,6 +429,8 @@ export async function cancelBookingAsHost(
   bookingId: string,
   reason: string | null,
   now: Date,
+  /** Day 24: the host is cancelling through an AI assistant (MCP): recorded for the emails and the page. */
+  options: { byAssistant?: { clientId: string } } = {},
 ): Promise<{ ok: true; sequence: number } | { ok: false; error: ManageError }> {
   if (!z.uuid().safeParse(bookingId).success) return { ok: false, error: "not_found" };
   const [row] = await db
@@ -383,6 +440,7 @@ export async function cancelBookingAsHost(
       cancelledAt: now,
       cancelledBy: "host",
       cancellationReason: reason,
+      changedByClient: options.byAssistant?.clientId ?? null,
       sequence: sql`${bookings.sequence} + 1`,
     })
     .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId), changeable(now)))
@@ -394,6 +452,45 @@ export async function cancelBookingAsHost(
     .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
   // Another host's booking looks exactly like a missing one.
   return { ok: false, error: exists ? "not_changeable" : "not_found" };
+}
+
+/** One booking's full details, if it's this host's (Day 24). Another host's booking and a made-up id: null. */
+export async function getHostBookingDetails(
+  db: Database,
+  hostId: string,
+  bookingId: string,
+): Promise<BookingDetails | null> {
+  if (!z.uuid().safeParse(bookingId).success) return null;
+  const [row] = await selectDetails(db).where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
+  return row ?? null;
+}
+
+/**
+ * Day 24: the host moves one of their bookings (today only through an
+ * assistant, over MCP). The same core as the guest's reschedule, so the same
+ * rules: the new time must be one a guest could pick, the booking must still
+ * be confirmed and not started. Found by id AND host in the WHERE clause.
+ */
+export async function rescheduleBookingAsHost(
+  db: Database,
+  hostId: string,
+  bookingId: string,
+  newStart: Date,
+  now: Date,
+  options: MoveOptions & { byAssistant?: { clientId: string } } = {},
+): Promise<RescheduleResult> {
+  if (!z.uuid().safeParse(bookingId).success) return { ok: false, error: "not_found" };
+  return moveBooking(
+    db,
+    (d) => getHostBookingDetails(d, hostId, bookingId),
+    newStart,
+    now,
+    options,
+    () => ({
+      rescheduledBy: "host",
+      changedByClient: options.byAssistant?.clientId ?? null,
+    }),
+  );
 }
 
 /**

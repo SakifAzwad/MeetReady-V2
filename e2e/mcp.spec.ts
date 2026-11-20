@@ -16,6 +16,8 @@ import { expect, randomIp, test, waitForEmails, type Host } from "./fixtures";
  * Document instead: Better Auth fetches it from the assistant's HTTPS
  * address, which a local test can't serve. That step is checked by hand on
  * production (docs/deploy.md step 17).
+ *
+ * Day 24: moving and then cancelling a guest's booking, with confirm forms.
  */
 
 const RESOURCE = `${BASE_URL}/api/mcp`;
@@ -135,7 +137,10 @@ async function mcpClient(accessToken: string, answerForms?: (message: string) =>
   if (answerForms) {
     client.setRequestHandler("elicitation/create", async (request) => {
       const action = answerForms(request.params.message);
-      return action === "accept" ? { action, content: { book: true } } : { action };
+      // Tick the one box the form shows ("book", "cancel" or "move"), as a person would.
+      const params = request.params as { requestedSchema?: { properties?: Record<string, unknown> } };
+      const box = Object.keys(params.requestedSchema?.properties ?? {})[0] ?? "none";
+      return action === "accept" ? { action, content: { [box]: true } } : { action };
     });
   }
   await client.connect(
@@ -214,7 +219,7 @@ test("a host connects an assistant: consent page, tokens, the four tools, refres
   await expect(hostPage.getByText(`Signed in as ${host.email}`, { exact: false })).toBeVisible();
   await expect(hostPage.getByRole("listitem")).toHaveText([
     /^See your meeting types, your free times and your bookings/,
-    /^Book meetings with guests for you/,
+    /^Book, move and cancel meetings with guests for you/,
     /^Stay connected until you disconnect it/,
   ]);
   await hostPage.getByRole("button", { name: "Allow E2E Assistant" }).click();
@@ -255,10 +260,12 @@ test("a host connects an assistant: consent page, tokens, the four tools, refres
   const { tools } = await client.listTools();
   expect(tools.map((t) => t.name).sort()).toEqual([
     "book_meeting",
+    "cancel_booking",
     "find_free_times",
     "get_booking",
     "list_bookings",
     "list_event_types",
+    "reschedule_booking",
   ]);
   // Four read; book_meeting writes and emails someone, so assistants ask before using it.
   expect(tools.filter((t) => t.annotations?.readOnlyHint === true)).toHaveLength(4);
@@ -266,6 +273,13 @@ test("a host connects an assistant: consent page, tokens, the four tools, refres
     readOnlyHint: false,
     openWorldHint: true,
   });
+  // Day 24: cancelling and moving overwrite what the guest planned around.
+  expect(
+    tools
+      .filter((t) => t.annotations?.destructiveHint === true)
+      .map((t) => t.name)
+      .sort(),
+  ).toEqual(["cancel_booking", "reschedule_booking"]);
 
   const types = await client.callTool({ name: "list_event_types", arguments: {} });
   expect(types.structuredContent).toMatchObject({
@@ -351,7 +365,7 @@ test("a host connects an assistant: consent page, tokens, the four tools, refres
   const connected = hostPage.getByRole("list", { name: "Connected assistants" });
   await expect(connected.getByRole("listitem")).toHaveCount(1);
   await expect(connected).toContainText("E2E Assistant");
-  await expect(connected).toContainText("Can read and book");
+  await expect(connected).toContainText("Can read, book and change bookings");
   await connected.getByRole("button", { name: "Disconnect" }).click();
   await connected.getByRole("button", { name: "Disconnect" }).click(); // confirm
   await expect(hostPage.getByText("No assistant connected yet.")).toBeVisible();
@@ -464,6 +478,76 @@ test("with a confirm form (like Claude Code): declined books nothing, accepted b
   expect(asked).toHaveLength(2);
   expect(accepted.structuredContent).toMatchObject({ booked: true, start: `${day} 15:00` });
   expect(await count()).toBe(1);
+  await client.close();
+});
+
+test("Day 24: move a guest's booking, then cancel it, each confirmed in a form", async ({
+  host,
+  hostPage,
+  db,
+  newGuest,
+}) => {
+  await bookWithNotes(await newGuest(), host); // a booking a GUEST made on the page
+  const token = await connectAssistant(hostPage, db, "Form Assistant");
+  const asked: string[] = [];
+  const client = await mcpClient(token, (message) => {
+    asked.push(message);
+    return "accept";
+  });
+  const list = await client.callTool({ name: "list_bookings", arguments: { view: "upcoming", limit: null } });
+  const [ada] = (list.structuredContent as { bookings: { id: string; guestEmail: string; start: string }[] })
+    .bookings;
+  expect(ada).toBeDefined();
+  await waitForEmails(ada!.guestEmail, 1); // the confirmation
+
+  // ── Move: search with the bookingId, then move to the first free time ──────
+  const day = weekdayAhead();
+  const free = await client.callTool({
+    name: "find_free_times",
+    arguments: {
+      eventType: "intro",
+      from: day,
+      to: day,
+      earliest: "09:00",
+      latest: "12:00",
+      timeZone: null,
+      bookingId: ada!.id,
+    },
+  });
+  const time = (free.structuredContent as { days: { times: string[] }[] }).days[0]!.times[0]!;
+  const move = { bookingId: ada!.id, date: day, time, timeZone: null };
+  const moved = await client.callTool({ name: "reschedule_booking", arguments: move });
+  expect(asked.at(-1)).toMatch(
+    new RegExp(`^Move "Intro call" with Ada Lovelace .* to ${day} ${time} \\(Asia/Dhaka\\)\\?`),
+  );
+  expect(moved.structuredContent).toMatchObject({ moved: true, from: ada!.start, start: `${day} ${time}` });
+  // A retry finds it already there: no second email.
+  const again = await client.callTool({ name: "reschedule_booking", arguments: move });
+  expect(again.structuredContent).toMatchObject({ alreadyThere: true });
+  const [, movedEmail] = await waitForEmails(ada!.guestEmail, 2);
+  expect(movedEmail!.html).toContain("Sakif moved your meeting");
+  expect(movedEmail!.html).toContain(`${BASE_URL}/booking/`);
+  const hostMail = await waitForEmails(host.email, 2); // the booking, then the receipt
+  expect(hostMail.at(-1)!.html).toContain("You moved your meeting with Ada Lovelace through Form Assistant");
+
+  // ── Cancel, with a reason the model wrote: the link is removed before the guest sees it ──
+  const cancelled = await client.callTool({
+    name: "cancel_booking",
+    arguments: { bookingId: ada!.id, reason: "Clash with a flight, rebook at https://evil.example" },
+  });
+  expect(asked.at(-1)).toMatch(/^Cancel "Intro call" with Ada Lovelace/);
+  expect(cancelled.structuredContent).toMatchObject({ cancelled: true });
+  const [, , cancelEmail] = await waitForEmails(ada!.guestEmail, 3);
+  expect(cancelEmail!.html).toContain("Sakif cancelled your meeting");
+  expect(cancelEmail!.html).toContain("Clash with a flight");
+  expect(cancelEmail!.html).not.toContain("evil.example");
+  expect(asked).toHaveLength(2); // the move and the cancel; the retry changed nothing, so asked nothing
+
+  await hostPage.goto("/dashboard/bookings?view=cancelled");
+  await expect(
+    hostPage.getByText(/^Cancelled by you through Form Assistant: Clash with a flight/),
+  ).toBeVisible();
+  await expect(hostPage.getByText("Moved by you", { exact: true })).toBeVisible();
   await client.close();
 });
 

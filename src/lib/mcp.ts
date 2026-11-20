@@ -23,7 +23,8 @@ export const OAUTH_SCOPES = [MCP_SCOPES.read, MCP_SCOPES.write, REFRESH_SCOPE] a
 export const SCOPE_DESCRIPTIONS: Record<string, string> = {
   [MCP_SCOPES.read]:
     "See your meeting types, your free times and your bookings, including guests' names, emails and notes",
-  [MCP_SCOPES.write]: "Book meetings with guests for you, from your free times",
+  // Day 24: the same permission now also moves and cancels; the page says so.
+  [MCP_SCOPES.write]: "Book, move and cancel meetings with guests for you, within your free times",
   [REFRESH_SCOPE]: "Stay connected until you disconnect it, without asking you to sign in again",
 };
 

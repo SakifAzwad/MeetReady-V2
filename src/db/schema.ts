@@ -486,6 +486,17 @@ export const bookings = pgTable(
      * stays when the host disconnects that assistant and its client row goes.
      */
     createdByClient: text(),
+    /**
+     * Day 24: who moved the meeting last (null = never moved, or moved before Day 24, when only guests
+     * could). Reuses the `cancelled_by` enum: the same two people.
+     */
+    rescheduledBy: cancelledBy("rescheduled_by"),
+    /**
+     * Day 24: the assistant (OAuth client id) behind the LATEST cancel or move, null when the host or guest
+     * did it themselves. Emails for a change are built from the row at that change's sequence, so the
+     * latest is all they need. No foreign key, like createdByClient.
+     */
+    changedByClient: text(),
     ...timestamps,
   },
   (t) => [

@@ -5,6 +5,7 @@ import { BookingAnswers } from "@/components/booking-answers";
 import { MeetingBriefCard } from "@/components/meeting-brief";
 import { Badge, Card } from "@/components/ui/card";
 import { db } from "@/db";
+import { cancelledLabel, movedLabel } from "@/lib/booking-labels";
 import { cityName } from "@/lib/scheduling/daylight";
 import { formatDateKey, formatTime, formatTimeRange } from "@/lib/scheduling/calendar";
 import { dateKeyInZone } from "@/lib/scheduling/time";
@@ -152,7 +153,8 @@ function BookingRow({
           <BookingAnswers answers={b.answers} className="mt-3" />
           <div className="mt-2 flex flex-wrap gap-2">
             {inProgress && <Badge className="border-primary/40 text-primary">Happening now</Badge>}
-            {b.rescheduledAt && <Badge>Rescheduled</Badge>}
+            {/* Day 24: who moved or cancelled it, and through which assistant (lib/booking-labels.ts). */}
+            {movedLabel(b) && <Badge>{movedLabel(b)}</Badge>}
             {/* Day 22: the host booked it through an AI assistant, so the guest's email said so too. */}
             {b.source === "assistant" && (
               <Badge>Booked by you through {b.assistantName ?? "an AI assistant"}</Badge>
@@ -165,12 +167,7 @@ function BookingRow({
                 <RetryCalendarButton bookingId={b.id} />
               </>
             )}
-            {b.status === "cancelled" && (
-              <Badge>
-                Cancelled by {b.cancelledBy === "host" ? "you" : "guest"}
-                {b.cancellationReason && `: ${b.cancellationReason}`}
-              </Badge>
-            )}
+            {cancelledLabel(b) && <Badge>{cancelledLabel(b)}</Badge>}
           </div>
         </div>
         {view === "upcoming" && !inProgress && (

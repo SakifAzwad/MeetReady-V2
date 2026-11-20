@@ -6,7 +6,12 @@ import { createTestDb } from "@/test/db";
 import { saveWeeklySchedule } from "../availability";
 import { createBooking } from "../booking";
 import { createEventType } from "../event-types";
-import { cancelBookingAsHost, cancelBookingByToken, rescheduleBookingByToken } from "../manage-booking";
+import {
+  cancelBookingAsHost,
+  cancelBookingByToken,
+  rescheduleBookingAsHost,
+  rescheduleBookingByToken,
+} from "../manage-booking";
 import { notifyBookingCancelled, notifyBookingConfirmed, notifyBookingRescheduled } from "./notifications";
 import { createMemorySender, type EmailMessage, type EmailSender } from "./sender";
 
@@ -201,6 +206,75 @@ describe("booking emails", () => {
 
     expect(sender.sent.map((m) => m.to)).toEqual(["ada@example.com"]);
     expect(sender.sent[0]!.html).toContain("Sakif cancelled your meeting");
+  });
+
+  describe("Day 24: changes the host made through an assistant", () => {
+    const CLAUDE = "https://claude.ai/oauth/client";
+    beforeEach(async () => {
+      await db
+        .insert(oauthClient)
+        .values({ id: "c1", clientId: CLAUDE, name: "Claude", redirectUris: ["x"] });
+    });
+
+    it("cancel: the guest is told the host cancelled, and the host gets a receipt", async () => {
+      await cancelBookingAsHost(db, "host", bookingId, "Clash", NOW, { byAssistant: { clientId: CLAUDE } });
+      const sender = createMemorySender();
+      await notifyBookingCancelled({ db, sender, appUrl: APP, now: NOW }, bookingId);
+
+      expect(sender.sent.map((m) => m.to).sort()).toEqual(["ada@example.com", "sakif@example.com"]);
+      expect(to(sender.sent, "ada@example.com").html).toContain("Sakif cancelled your meeting");
+      const host = to(sender.sent, "sakif@example.com");
+      expect(host.subject).toBe("Cancelled through Claude: Intro call with Ada – Mon 9 Nov");
+      expect(host.html).toContain("You cancelled your meeting with Ada through Claude");
+      expect(host.text).toContain("Clash");
+    });
+
+    it("move: the guest is told the host moved it (with the way out), and the host gets a receipt", async () => {
+      const moved = await rescheduleBookingAsHost(
+        db,
+        "host",
+        bookingId,
+        new Date("2026-11-09T06:00:00Z"),
+        NOW,
+        {
+          byAssistant: { clientId: CLAUDE },
+        },
+      );
+      if (!moved.ok) throw new Error(`move failed: ${moved.error}`);
+      const sender = createMemorySender();
+      await notifyBookingRescheduled(
+        { db, sender, appUrl: APP, now: NOW },
+        bookingId,
+        moved.previousStartsAt,
+        token,
+      );
+
+      const guest = to(sender.sent, "ada@example.com");
+      expect(guest.subject).toMatch(/^Rescheduled:/);
+      expect(guest.html).toContain("Sakif moved your meeting");
+      expect(guest.text).toContain("Sakif Azwad moved this meeting using MeetReady");
+      expect(guest.html).toContain(`${APP}/booking/${token}`);
+      const host = to(sender.sent, "sakif@example.com");
+      expect(host.subject).toBe("Moved through Claude: Intro call with Ada – Mon 9 Nov");
+      expect(host.html).toContain("You moved your meeting with Ada through Claude");
+    });
+
+    it("the guest's own move afterwards reads as theirs again", async () => {
+      await rescheduleBookingAsHost(db, "host", bookingId, new Date("2026-11-09T06:00:00Z"), NOW, {
+        byAssistant: { clientId: CLAUDE },
+      });
+      const moved = await rescheduleBookingByToken(db, token, new Date("2026-11-09T07:00:00Z"), NOW);
+      if (!moved.ok) throw new Error("move failed");
+      const sender = createMemorySender();
+      await notifyBookingRescheduled(
+        { db, sender, appUrl: APP, now: NOW },
+        bookingId,
+        moved.previousStartsAt,
+        token,
+      );
+      expect(to(sender.sent, "ada@example.com").html).toContain("Your meeting has moved");
+      expect(to(sender.sent, "sakif@example.com").html).toContain("Ada moved their meeting");
+    });
   });
 
   it("one failed send doesn't stop the other, and doesn't throw", async () => {

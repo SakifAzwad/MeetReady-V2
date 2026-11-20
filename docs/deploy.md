@@ -414,7 +414,18 @@ a Client ID Metadata Document, so there's no client to create by hand. Without t
      with Sakif Azwad" (the guest's, "Sakif scheduled a meeting with you", with Reschedule or cancel) and "Booked
      through Claude: …" (yours). **Dashboard → Bookings** shows "Booked by you through Claude". Cancel it there
      afterwards.
-6. **Dashboard → AI assistants:** Claude is listed, "Can read and book". **Disconnect** → confirm. Ask Claude
+   - **Moving and cancelling (since Day 24; migration 0011 runs in the build).** First **refresh the connector**
+     (see "Claude says MeetReady has no tool for…" below), then a **new chat**: Claude should list 7 tools. Book a test
+     meeting with yourself as the guest (as above), then:
+     1. "Move my intro call with Test Guest to <another free time>." Claude should search with the booking's id,
+        tell you the old and new times, and ask before `reschedule_booking`. Two emails: the guest's
+        "Rescheduled: …" ("Sakif moved your meeting", with Reschedule or cancel) and yours, "Moved through Claude:
+        …". Your Google Calendar event moves too. **Bookings** shows "Moved by you through Claude".
+     2. "Cancel it, the reason is a clash." Claude asks first. Two emails: "Cancelled: …" to the guest ("Sakif
+        cancelled your meeting", reason "a clash") and "Cancelled through Claude: …" to you. The Google event is
+        removed. **Bookings → Cancelled** shows "Cancelled by you through Claude: …".
+     3. Ask Claude to cancel it again: it says it's already cancelled, and no new email arrives.
+6. **Dashboard → AI assistants:** Claude is listed, "Can read, book and change bookings". **Disconnect** → confirm. Ask Claude
    something again: it fails or asks you to reconnect. Reconnect it (step 4.1 → Connect).
 7. **Neon → SQL Editor (`production`):**
    ```sql
@@ -429,7 +440,8 @@ a Client ID Metadata Document, so there's no client to create by hand. Without t
      Such a connection is read-only (self-registered clients get the read scope only). Tell me: we'd rather fix it.
    - Sentry, tag `mcp`, for errors inside a tool.
    - **"Too many bookings for now":** 20 bookings a day per host through assistants, and 3 an hour per guest inbox
-     (`LIMITS` in `src/server/rate-limit/limits.ts`).
+     (`LIMITS` in `src/server/rate-limit/limits.ts`). **"Too many changes for now":** 20 cancels and moves a day per
+     host, plus the same 3 emails an hour per guest inbox.
 9. **ChatGPT (optional, if your plan has developer mode):** Settings → Apps → Advanced settings → **Developer
    mode** on → **Create** → URL `https://meetreadyv2.vercel.app/api/mcp`, authentication **OAuth** → the same
    consent page. OpenAI's docs disagree on which plans can use it; skip this if you don't see the option.
@@ -475,7 +487,8 @@ the new column and write to both; later, drop the old one.
 - **Claude says MeetReady has no tool for something a new deploy added** (e.g. "there's no tool for creating a
   booking" after Day 22): Claude keeps the tool list from when the connector was connected; only the instructions
   are re-read. Connectors → MeetReady → refresh its tools, or Disconnect and Connect; check the new tool is enabled;
-  then start a new chat. The server can't announce new tools: it's stateless and never pushes.
+  then start a new chat. The server can't announce new tools: it's stateless and never pushes. Day 24 also added a
+  field to `find_free_times` (`bookingId`); it's optional, so a stale tool list still works until you refresh.
 - **An AI assistant can't connect, or stops working:** step 17.8. A host who disconnected it on the dashboard
   has to connect it again.
 - **No "Tell us when suits you" box on the booking page:** `GROQ_API_KEY` isn't set for this environment (previews

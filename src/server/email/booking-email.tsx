@@ -49,6 +49,13 @@ export type BookingEmailProps = {
    * book it, so their confirmation says who did; the host's says which assistant.
    */
   scheduledBy?: string;
+  /** Day 24: who moved the meeting (the host only through an assistant, for now). */
+  rescheduledBy?: "host" | "guest" | null;
+  /**
+   * Day 24: the host cancelled or moved it through an AI assistant (its name). The host gets a receipt,
+   * since the assistant may have acted while they weren't looking.
+   */
+  changedThrough?: string;
 };
 
 export function bookingEmailHeading(p: BookingEmailProps): string {
@@ -60,9 +67,19 @@ export function bookingEmailHeading(p: BookingEmailProps): string {
       : `You booked ${p.guestName} through ${p.scheduledBy}`;
   if (p.kind === "confirmed")
     return p.audience === "guest" ? `You're booked with ${host}` : `New booking: ${p.guestName}`;
-  if (p.kind === "rescheduled")
-    return p.audience === "guest" ? "Your meeting has moved" : `${p.guestName} moved their meeting`;
-  if (p.audience === "host") return `${p.guestName} cancelled`;
+  if (p.kind === "rescheduled") {
+    if (p.audience === "guest")
+      return p.rescheduledBy === "host" ? `${host} moved your meeting` : "Your meeting has moved";
+    if (p.changedThrough) return `You moved your meeting with ${p.guestName} through ${p.changedThrough}`;
+    return p.rescheduledBy === "host"
+      ? `You moved your meeting with ${p.guestName}`
+      : `${p.guestName} moved their meeting`;
+  }
+  if (p.audience === "host") {
+    return p.changedThrough
+      ? `You cancelled your meeting with ${p.guestName} through ${p.changedThrough}`
+      : `${p.guestName} cancelled`;
+  }
   return p.cancelledBy === "host" ? `${host} cancelled your meeting` : "Your meeting is cancelled";
 }
 
@@ -133,6 +150,12 @@ export function BookingEmail(p: BookingEmailProps) {
             <Text style={styles.value}>
               {p.hostName} booked this time with you using MeetReady. If it doesn&apos;t suit you, reschedule
               or cancel with the button below.
+            </Text>
+          )}
+          {p.kind === "rescheduled" && p.rescheduledBy === "host" && p.audience === "guest" && (
+            <Text style={styles.value}>
+              {p.hostName} moved this meeting using MeetReady. If the new time doesn&apos;t suit you,
+              reschedule or cancel with the button below.
             </Text>
           )}
 

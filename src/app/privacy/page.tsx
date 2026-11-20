@@ -49,10 +49,12 @@ export default function PrivacyPage() {
             meeting types, free times and bookings, including guests&apos; names, email addresses, notes and
             answers, when you ask it something that needs them. If you let it, it can also book meetings for
             you at your free times; the guest then gets an email from MeetReady saying you scheduled it, with
-            a link to reschedule or cancel. What it reads goes to that assistant&apos;s provider, under their
-            terms and your settings there. MeetReady stores which assistant you allowed, what it may do, and
-            its sign-in tokens (the long-lived ones only in a scrambled, hashed form). Disconnect it on your
-            dashboard at any time: it stops working at once.
+            a link to reschedule or cancel. It can move or cancel your upcoming bookings too, including ones
+            guests made: the guest is emailed that you moved or cancelled it (with the reason it passes on,
+            stripped of links and contact details), and you get a copy. What it reads goes to that
+            assistant&apos;s provider, under their terms and your settings there. MeetReady stores which
+            assistant you allowed, what it may do, and its sign-in tokens (the long-lived ones only in a
+            scrambled, hashed form). Disconnect it on your dashboard at any time: it stops working at once.
           </li>
         </ul>
       </LegalSection>
@@ -94,8 +96,9 @@ export default function PrivacyPage() {
           <li>
             <strong>If the host uses an AI assistant:</strong> a host can connect one to their MeetReady
             account (see above). It can then read your booking, including your notes and answers, when the
-            host asks it about your meeting. A host can also book a meeting with you through it: you&apos;ll
-            get an email from MeetReady saying who scheduled it, and you can reschedule or cancel from there.
+            host asks it about your meeting. A host can also book, move or cancel a meeting with you through
+            it: you&apos;ll get an email from MeetReady saying the host did it, and for a booked or moved
+            meeting you can reschedule or cancel from there.
           </li>
           <li>You don&apos;t need an account, and no cookies are set when you book.</li>
         </ul>

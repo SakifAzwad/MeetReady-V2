@@ -39,6 +39,7 @@ describe("the agreed limits", () => {
       ai_assistant_all: { tokens: 100, windowMs: 24 * 60 * MIN },
       mcp_host: { tokens: 120, windowMs: 10 * MIN },
       mcp_book_host: { tokens: 20, windowMs: 24 * 60 * MIN },
+      mcp_change_host: { tokens: 20, windowMs: 24 * 60 * MIN },
       mcp_register_ip: { tokens: 10, windowMs: 60 * MIN },
     });
   });

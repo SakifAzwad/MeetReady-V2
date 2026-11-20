@@ -15,7 +15,8 @@ import { createMcpEndpoint } from "./server";
  * Google busy times the booking page uses, the per-host limit and Sentry.
  * Day 22 adds what booking needs: the LIVE Google check, the booking limits,
  * the sealed manage link, and the background job that writes to Google
- * Calendar and sends the emails. Tests build the same server with their own deps.
+ * Calendar and sends the emails. Day 24 adds the limits for cancels and moves,
+ * and the same background job for them. Tests build the same server with their own deps.
  */
 export const mcpEndpoint = createMcpEndpoint({
   db,
@@ -32,6 +33,13 @@ export const mcpEndpoint = createMcpEndpoint({
   sealToken,
   // Same as the booking page: Google and the emails run after the response, as a background job.
   onBooked: (bookingId) => after(() => jobs.bookingChanged({ bookingId, change: "created", sequence: 0 })),
+  changeLimit: (hostId, guestEmail) =>
+    rateLimit([
+      ["mcp_change_host", hostId],
+      ["book_email", emailBucket(guestEmail)],
+    ]),
+  // Same as the dashboard's cancel and the guest's reschedule: Google first, then the emails.
+  onChanged: (change) => after(() => jobs.bookingChanged(change)),
   // MCP SDK errors can carry the request, which may hold a booking's details: scrubbed, like the AI's.
   report: (error) => Sentry.captureException(scrubError(error), { tags: { area: "mcp" } }),
 });

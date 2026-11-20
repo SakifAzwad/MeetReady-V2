@@ -184,6 +184,19 @@ e2e/mcp.spec.ts                     # move a guest's booking, then cancel it, ea
 - **Lesson:** when one column stands for "the latest X", every reader must ask which X was the latest. Putting the
   rule in one tested function stops each page answering differently.
 
+### Follow-up: a meeting after sunset was invisible on the dashboard
+
+- **What happened:** after booking through Claude, Tuesday's row said "1 h booked, 7.5 h free" but showed one block.
+  The numbers were right: a 1 PM meeting inside working hours and a 6 PM one outside them (booked by a guest, most
+  likely before the hours were changed), so only the 1 PM one took free time. But the booked blocks were filled
+  `rgb(24 33 58)`, and the band after sunset is `#1d2540`: the 6 PM block was dark on dark.
+- **What I did:** checked the real bookings through the MCP read tools before touching code, then gave every booked
+  block a thin light ring (`ring-1 ring-white/75`). It shows on any part of the sky, in both themes, and adds no
+  colour meaning (colour still means time of day only). Checked with a night booking in light and dark, and retook
+  the README screenshots.
+- **Lesson:** a colour that reads on one background can vanish on another the same component also draws. Test a
+  marker against every background it can land on, here the night ends of the band and not only the day.
+
 ## Next
 
 - **You:** commit and push (migration 0011 runs in the build). Then runbook **step 17.5**, "Moving and cancelling":

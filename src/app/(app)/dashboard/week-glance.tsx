@@ -180,10 +180,12 @@ function DayRow({
         gradient={skyGradient(tz, dayBounds(day, tz))}
         className="h-8 rounded-lg"
       >
+        {/* The fill is near the night colour, so a meeting after sunset vanished into the band: the light
+            ring keeps it visible on every part of the sky (and adds no colour meaning). */}
         {booked.map((m) => (
           <span
             key={m.left}
-            className="absolute inset-y-2 rounded-[3px] bg-[rgb(24_33_58)]"
+            className="absolute inset-y-2 rounded-[3px] bg-[rgb(24_33_58)] ring-1 ring-white/75"
             style={{ left: `calc(${m.left}% + 1px)`, width: `max(calc(${m.width}% - 2px), 4px)` }}
           />
         ))}

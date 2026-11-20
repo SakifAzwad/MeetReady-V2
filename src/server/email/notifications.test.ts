@@ -259,6 +259,26 @@ describe("booking emails", () => {
       expect(host.html).toContain("You moved your meeting with Ada through Claude");
     });
 
+    it("a move the host made by hand (the Move button): only the guest is emailed", async () => {
+      const moved = await rescheduleBookingAsHost(
+        db,
+        "host",
+        bookingId,
+        new Date("2026-11-09T06:00:00Z"),
+        NOW,
+      );
+      if (!moved.ok) throw new Error(`move failed: ${moved.error}`);
+      const sender = createMemorySender();
+      await notifyBookingRescheduled(
+        { db, sender, appUrl: APP, now: NOW },
+        bookingId,
+        moved.previousStartsAt,
+        token,
+      );
+      expect(sender.sent.map((m) => m.to)).toEqual(["ada@example.com"]);
+      expect(sender.sent[0]!.html).toContain("Sakif moved your meeting");
+    });
+
     it("the guest's own move afterwards reads as theirs again", async () => {
       await rescheduleBookingAsHost(db, "host", bookingId, new Date("2026-11-09T06:00:00Z"), NOW, {
         byAssistant: { clientId: CLAUDE },

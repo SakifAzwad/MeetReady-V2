@@ -27,7 +27,7 @@ their own words, and the host can book or check meetings from Claude.
 - **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
   and evals against the real model. ([Day 18](docs/day-18.md))
 - **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
-  limits, and Sentry with a privacy scrubber. About 737 unit tests and 37 browser tests run in CI.
+  limits, and Sentry with a privacy scrubber. About 738 unit tests and 39 browser tests run in CI.
   ([Days 11–17](#design-notes))
 
 ## Screenshots
@@ -235,9 +235,10 @@ Each day of the build has its own write-up with the decisions, the reasons and t
 - [Day 24: Cancel and reschedule over MCP](docs/day-24.md): two destructive, idempotent tools for any of the host's
   upcoming bookings, one move core shared with the guest's reschedule, a free-time search that ignores the booking
   being moved, cleaned cancel reasons, and emails and labels that say the host did it, through which assistant.
-- [Day 25: Insights and no-shows](docs/day-25.md): rates, meetings per week, popular times and meetings per type,
-  grouped in the host's timezone by Postgres; no-shows as a column with a check constraint; hand-built charts with
-  validated colours, tooltips and table views.
+- [Day 25: Insights, no-shows and the Move button](docs/day-25.md): rates, meetings per week, popular times and
+  meetings per type, grouped in the host's timezone by Postgres; no-shows as a column with a check constraint;
+  hand-built charts with validated colours, tooltips and table views; a Move button that reuses the booking widget
+  in a host mode, with the slots API freeing a booking's own time only for its host.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

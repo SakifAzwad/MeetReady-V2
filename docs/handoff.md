@@ -1,4 +1,4 @@
-# Handoff: starting a new chat (after Day 25, Part A)
+# Handoff: starting a new chat (after Day 25)
 
 Read this first in a new chat. It replaces the long Days 1–25 conversations. Details live in `docs/day-01.md` …
 `docs/day-25.md`; the plan lives in `docs/backlog.md`.
@@ -144,7 +144,7 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
     `changed_by_client` (assistant behind the LATEST cancel/move; null when a person did it). Emails: guest "Sakif
     moved your meeting"; host receipt "Moved/Cancelled through Claude: …" only when an assistant did it
     (`audiencesFor`). Bookings labels in `src/lib/booking-labels.ts`. Consent: "Book, move and cancel meetings…";
-    dashboard: "Can read, book and change bookings". No dashboard Move button yet (Day 25 Part B).
+    dashboard: "Can read, book and change bookings". (The dashboard's Move button came in Day 25 Part B.)
     Follow-up: booked blocks on the week view have a light ring (`ring-1 ring-white/75`), or a meeting after sunset
     is navy on navy.
   - Insights and no-shows (Day 25, Part A): `bookings.no_show_at` (migration 0012) + a check that only a
@@ -158,7 +158,16 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
     `--chart-1..3` = one navy, validated as an ordinal ramp in both themes; a table view per chart; today's sky
     strip over the hour grid. README screenshot `insights.png` from seeded history (`history()` in the shots
     script).
-- **Numbers:** 737 unit tests + 37 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  - Move button (Day 25, Part B): "Move" on upcoming bookings → `/dashboard/bookings/[id]/move` (lookup by id AND
+    host via `getHostBookingDetails`; notFound otherwise; a reason card when cancelled/started/switched off). The
+    booking widget's `reschedule` prop is now a `Mover` (the guest's `{ token }`, or `{ host }` with bookingId,
+    guestName and `move`) plus the times; the page's client `MoveWidget` passes `moveBookingAsHostAction` (session,
+    Zod, `rescheduleBookingAsHost` with live Google, then `jobs.bookingChanged` rescheduled).
+    `/api/slots?move=<uuid>` reads the session only then and frees the booking's own time (and Google event) only
+    for its host; anyone else's `move` is ignored. Guest
+    email "Sakif moved your meeting", no host receipt (by hand). No rate limit on the action (session-only, like
+    Cancel).
+- **Numbers:** 738 unit tests + 39 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
   18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 13 migrations (0000–0012).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -168,15 +177,11 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 25 Part A (migration 0012 runs in the build).
-2. **Day 25 Part B: the Move button** (agreed plan): "Move" on each upcoming booking opens
-   `/dashboard/bookings/[id]/move` with the booking widget in a host mode; `/api/slots?move=<bookingId>` ignores the
-   booking's own time ONLY when the signed-in user is its host; the confirm step calls a new
-   `rescheduleBookingAsHostAction` (Zod, session user); same rules as a guest; emails already exist (guest "Sakif
-   moved your meeting", no host receipt for a move by hand).
-3. Then the backlog: Claude Connectors Directory (after a domain + Google verification), signed webhooks, an
-   embeddable widget. No domain yet (Sakif, Nov 2026).
-4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. **Sakif:** push Day 25 Part B (no migration). Try Move on the live site with his own address as the guest.
+2. **Next day: Sakif picks from `docs/backlog.md`:** the theme switcher (System / Light / Dark; before sharing with
+   reviewers), the Claude Connectors Directory (after a domain + Google verification; no domain yet, Nov 2026),
+   signed webhooks, or an embeddable widget. Opinions first, as always.
+3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -331,4 +336,6 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
 - **Charts** (Day 25): colour means time of day, so data marks are steps of one navy (`--chart-1..3`), checked with
   the dataviz validator in `--ordinal` mode, both themes. A legend, a table view and tooltips on focus too; no
   chart library.
+- **Shared components with a second caller** (Day 25 story): pass the difference in (the widget's `Mover`), don't
+  import the caller's code into the shared component.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

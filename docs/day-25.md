@@ -1,4 +1,4 @@
-# Day 25 (Part A): Insights and no-shows
+# Day 25: Insights, no-shows and the Move button
 
 **Result:**
 
@@ -138,8 +138,66 @@ e2e/insights.spec.ts, e2e/shots/        # the browser test; history seeded for t
 - **Lesson:** a grid track sized by its content lets one wide child push the whole page. Look at every new page
   at phone width, and measure (`scrollWidth`) rather than trusting the screenshot alone.
 
+## Part B: the Move button
+
+**Result:**
+
+- **"Move" on every upcoming booking** opens `/dashboard/bookings/[id]/move`: the booking page's own widget (the
+  calendar, the daylight band, the timezone search) in a host mode. "Moving your meeting with Ada from …", then
+  "Move your meeting with Ada?", then "Meeting moved: Ada gets an email from MeetReady with the new time."
+- **The same rules as a guest's reschedule:** working hours, notice, buffers, the daily limit and Google Calendar,
+  read live; the per-host lock and the no-overlap constraint (Day 24's `rescheduleBookingAsHost`).
+- **The guest gets "Sakif moved your meeting"** with the link to change it again. There's no receipt for the host:
+  they did it themselves (receipts are only for changes an assistant made). The Google event moves too.
+- **Tests:** 738 unit tests (1 new: a move made by hand emails only the guest) and 39 E2E tests (2 new: the host
+  moves a guest's booking end to end; only the booking's own host can free its time or open its page). Both
+  passed 3 times in a row.
+- **Setup:** none. No migration.
+
+```
+src/app/(app)/dashboard/bookings/[id]/move/  # the page (scoped lookup, a reason when it can't move) + MoveWidget
+src/app/(app)/dashboard/bookings/actions.ts  # moveBookingAsHostAction: session, Zod, rescheduleBookingAsHost, job
+src/app/(app)/dashboard/bookings/page.tsx    # "Move" next to Cancel on upcoming bookings
+src/app/api/slots/route.ts                   # ?move=<bookingId>: frees its own time only for its signed-in host
+src/lib/validation/booking.ts                # slotsQuerySchema.move (a UUID)
+src/app/[username]/[slug]/                   # the widget's host mode: Mover = { token } | { host }; wording
+e2e/move.spec.ts                             # the move end to end; the host check on the slots API and the page
+```
+
+### Decisions
+
+- **Its own page, not a modal.** The widget is big (calendar, band, times grid) and lays itself out by its own
+  width. A page gives it room on a phone too, and a URL the browser's back button understands.
+- **The widget doesn't know about the dashboard.** Its `reschedule` prop says who is moving: `{ token }` (the guest's
+  manage link) or `{ host: { bookingId, guestName, move } }`. The Move page hands it the move action, so the public
+  booking page's bundle never imports dashboard code. One widget, two kinds of proof.
+- **The slots API checks the session only for `move`.** With `?move=<id>`, it reads the session and looks the
+  booking up by id AND the signed-in host, then frees its own time (and its own Google event) like a guest's token
+  does. Anyone else sending the same id is ignored, not refused, like a wrong token: no error that confirms the id
+  exists. The public path (no `move`) stays session-free.
+- **The action re-checks everything.** `moveBookingAsHostAction` takes the user from the session, validates the id
+  and the time with Zod, and calls the same core as every other move, which checks hours, the lock and the
+  constraint again. The page's own checks (cancelled, started, switched off) are only for a friendly message.
+- **No rate limit on the action**, like the dashboard's Cancel: it needs a signed-in host, and each move is one
+  email to a guest the host already has. The slots API keeps its per-IP limit.
+
+### Story: keeping the dashboard out of the public widget
+
+- **What happened:** the shortest route to a host mode was to import the dashboard's move action straight into
+  the widget's confirm step and branch on a flag. I weighed it before writing any code: the public booking page,
+  which every guest loads, would carry a reference to a dashboard action, and the widget would have to know which
+  page it was on.
+- **What I did:** the widget takes a `Mover`: the guest's token, or a host object that carries its own `move`
+  function. The guest path is unchanged; the Move page builds the host object around the server action. The types
+  make the two cases explicit, and the confirm step calls whichever it was given.
+- **Lesson:** when a shared component gets a second caller, pass the difference in rather than teaching the
+  component about its callers.
+
 ## Next
 
-- **You:** unzip, commit and push Part A (migration 0012 runs in the build). On the live site: mark a past meeting
-  as a no-show on Bookings → Past, then check the tile on Insights.
-- **Then Part B: the Move button** on upcoming bookings, reusing the booking widget in a host mode.
+- **You:** unzip, commit and push Part B (no migration). On the live site: Bookings → Move on a test booking with
+  your own address as the guest; check the "Sakif moved your meeting" email and that your Google Calendar event
+  moved.
+- **Then, from the backlog (your pick):** the theme switcher (System / Light / Dark) before sharing with
+  reviewers, the Claude Connectors Directory (after a domain), or the rest of Phase 2 (signed webhooks, an
+  embeddable widget).

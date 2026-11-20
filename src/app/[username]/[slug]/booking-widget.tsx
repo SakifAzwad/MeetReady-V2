@@ -46,8 +46,28 @@ import { TimeList } from "./time-list";
 
 export type { EventInfo } from "./facts-panel";
 
-type Reschedule = {
-  token: string;
+/**
+ * Day 25: the host's Move page uses the same widget. Instead of the guest's
+ * token it passes the booking id (the slots API checks the session for it),
+ * the guest's name for the wording, and the move action itself, so this public
+ * widget never imports dashboard code.
+ */
+export type HostMove = {
+  bookingId: string;
+  guestName: string;
+  move: (startsAt: string) => Promise<
+    | { ok: true }
+    | {
+        ok: false;
+        error: "invalid" | "not_found" | "not_changeable" | "slot_unavailable" | "calendar_unavailable";
+      }
+  >;
+};
+
+/** Who is moving it: the guest (their manage token) or the host (Day 25). */
+export type Mover = { token: string } | { host: HostMove };
+
+type Reschedule = Mover & {
   currentStartsAt: string;
   currentEndsAt: string;
   /** "Keep the current time": leave reschedule mode. */
@@ -150,31 +170,31 @@ class RateLimitedError extends Error {
   }
 }
 
-/** One cache entry per month (as the guest sees it), timezone and reschedule token. */
-const calendarKey = (event: EventInfo, from: Date, to: Date, rescheduleToken?: string) => [
+/** The slots API's proof that the booking being moved may free its own time: its token, or the host's id. */
+const moverParam = (r?: Mover): [string, string] | null =>
+  !r ? null : "token" in r ? ["reschedule", r.token] : ["move", r.host.bookingId];
+
+/** One cache entry per month (as the guest sees it), timezone and booking being moved. */
+const calendarKey = (event: EventInfo, from: Date, to: Date, mover?: Mover) => [
   "calendar",
   event.username,
   event.slug,
   from.toISOString(),
   to.toISOString(),
-  rescheduleToken ?? null,
+  moverParam(mover)?.join("=") ?? null,
 ];
 
 const TAKEN = "Someone just booked that time. Pick another one.";
 
-async function fetchCalendar(
-  event: EventInfo,
-  from: Date,
-  to: Date,
-  rescheduleToken?: string,
-): Promise<CalendarData> {
+async function fetchCalendar(event: EventInfo, from: Date, to: Date, mover?: Mover): Promise<CalendarData> {
   const params = new URLSearchParams({
     username: event.username,
     slug: event.slug,
     from: from.toISOString(),
     to: to.toISOString(),
   });
-  if (rescheduleToken) params.set("reschedule", rescheduleToken);
+  const proof = moverParam(mover);
+  if (proof) params.set(...proof);
   const res = await fetch(`/api/slots?${params}`);
   if (res.status === 429) throw new RateLimitedError(Number(res.headers.get("Retry-After")) || 60);
   if (!res.ok) throw new Error(`Slots request failed: ${res.status}`);
@@ -229,8 +249,8 @@ function Scheduler({
   // The month as the GUEST sees it, turned into UTC instants for the API.
   const { from, to } = monthRangeInZone(visible, timeZone);
   const calendar = useQuery({
-    queryKey: calendarKey(event, from, to, reschedule?.token),
-    queryFn: () => fetchCalendar(event, from, to, reschedule?.token),
+    queryKey: calendarKey(event, from, to, reschedule),
+    queryFn: () => fetchCalendar(event, from, to, reschedule),
     // TanStack retries 3 times by default; on a 429 that only spends more of the limit.
     retry: (failures, error) => !(error instanceof RateLimitedError) && failures < 3,
   });
@@ -277,8 +297,8 @@ function Scheduler({
     const range = monthRangeInZone(place.month, inZone);
     void queryClient
       .fetchQuery({
-        queryKey: calendarKey(event, range.from, range.to, reschedule?.token),
-        queryFn: () => fetchCalendar(event, range.from, range.to, reschedule?.token),
+        queryKey: calendarKey(event, range.from, range.to, reschedule),
+        queryFn: () => fetchCalendar(event, range.from, range.to, reschedule),
         staleTime: 0,
       })
       .then((fresh) => {
@@ -319,7 +339,16 @@ function Scheduler({
         main={
           <Confirmation
             heading={
-              reschedule ? "Your meeting has moved" : `You're booked with ${event.hostName.split(" ")[0]}`
+              reschedule && "host" in reschedule
+                ? "Meeting moved"
+                : reschedule
+                  ? "Your meeting has moved"
+                  : `You're booked with ${event.hostName.split(" ")[0]}`
+            }
+            note={
+              reschedule && "host" in reschedule
+                ? `${reschedule.host.guestName} gets an email from MeetReady with the new time.`
+                : undefined
             }
             booked={booked}
             timeZone={timeZone}
@@ -351,7 +380,7 @@ function Scheduler({
           {reschedule && (
             <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-3 text-sm">
               <p>
-                Moving your meeting from{" "}
+                Moving your meeting{"host" in reschedule ? ` with ${reschedule.host.guestName}` : ""} from{" "}
                 {formatDateKey(dateKeyInZone(new Date(reschedule.currentStartsAt), timeZone))},{" "}
                 {formatTime(new Date(reschedule.currentStartsAt), timeZone, hour12)}.
               </p>
@@ -453,7 +482,7 @@ function Scheduler({
                       slot={inDetails}
                       timeZone={timeZone}
                       hour12={hour12}
-                      token={reschedule.token}
+                      mover={reschedule}
                       currentStartsAt={reschedule.currentStartsAt}
                       currentEndsAt={reschedule.currentEndsAt}
                       onBack={backToTimes}

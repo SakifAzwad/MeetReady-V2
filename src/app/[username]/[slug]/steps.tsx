@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarCheck } from "lucide-react";
 import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useForm, type Path, type Resolver } from "react-hook-form";
 import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
+import type { Mover } from "./booking-widget";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
@@ -212,7 +213,7 @@ export function RescheduleConfirm({
   slot,
   timeZone,
   hour12,
-  token,
+  mover,
   currentStartsAt,
   currentEndsAt,
   onBack,
@@ -223,7 +224,8 @@ export function RescheduleConfirm({
   slot: Slot;
   timeZone: string;
   hour12: boolean;
-  token: string;
+  /** The guest (token) or, on the host's Move page, the host (Day 25). */
+  mover: Mover;
   currentStartsAt: string;
   currentEndsAt: string;
   onBack: () => void;
@@ -240,7 +242,11 @@ export function RescheduleConfirm({
   async function confirm() {
     setPending(true);
     setError(null);
-    const result = await rescheduleByTokenAction({ token, startsAt: slot.start.toISOString() });
+    const startsAt = slot.start.toISOString();
+    const result =
+      "token" in mover
+        ? await rescheduleByTokenAction({ token: mover.token, startsAt })
+        : await mover.host.move(startsAt);
     if (!result.ok && (result.error === "rate_limited" || result.error === "calendar_unavailable")) {
       setPending(false);
       setError(
@@ -261,7 +267,7 @@ export function RescheduleConfirm({
         <ArrowLeft /> Other times
       </Button>
       <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold outline-none">
-        Move your meeting?
+        {"host" in mover ? `Move your meeting with ${mover.host.guestName}?` : "Move your meeting?"}
       </h2>
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
         <dt className="text-muted-foreground">From</dt>
@@ -287,6 +293,7 @@ export function RescheduleConfirm({
 
 export function Confirmation({
   heading,
+  note,
   booked,
   timeZone,
   hour12,
@@ -295,6 +302,8 @@ export function Confirmation({
   locationLabel,
 }: {
   heading: string;
+  /** Day 25: one line under the heading (the host's Move page says who gets emailed). */
+  note?: string;
   booked: Booked;
   timeZone: string;
   hour12: boolean;
@@ -307,6 +316,7 @@ export function Confirmation({
     <div role="status" className="flex flex-col items-start gap-4 py-6">
       <CalendarCheck className="text-primary size-10" />
       <h2 className="text-3xl font-bold">{heading}</h2>
+      {note && <p className="text-muted-foreground">{note}</p>}
       <p className="text-lg">
         <When slot={booked} timeZone={timeZone} hour12={hour12} />
         <span className="text-muted-foreground"> ({cityName(timeZone)})</span>

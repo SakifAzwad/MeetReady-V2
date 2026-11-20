@@ -7,9 +7,9 @@ import { z } from "zod";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
 import { requireOnboardedUser } from "@/server/auth/session";
-import { calendarSync } from "@/server/calendar";
+import { calendarBusy, calendarSync } from "@/server/calendar";
 import { jobs } from "@/server/jobs";
-import { cancelBookingAsHost, setNoShow } from "@/server/manage-booking";
+import { cancelBookingAsHost, rescheduleBookingAsHost, setNoShow } from "@/server/manage-booking";
 
 const schema = z.object({
   bookingId: z.string().max(64),
@@ -97,5 +97,46 @@ export async function setNoShowAction(input: unknown): Promise<{ ok: boolean; er
     };
   }
   refresh();
+  return { ok: true };
+}
+
+const moveSchema = z.object({
+  bookingId: z.uuid(),
+  startsAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
+});
+
+export type MoveResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error: "invalid" | "not_found" | "not_changeable" | "slot_unavailable" | "calendar_unavailable";
+    };
+
+/**
+ * Day 25, the Move button: the host moves one of their bookings. Session user
+ * -> validate -> rescheduleBookingAsHost (the same core, rules and race
+ * protection as a guest's reschedule, Day 24) -> background job. The job
+ * moves the Google event and emails only the guest ("Sakif moved your
+ * meeting"): the host did it themselves, so there's no receipt.
+ */
+export async function moveBookingAsHostAction(input: unknown): Promise<MoveResult> {
+  const user = await requireOnboardedUser();
+  const parsed = moveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { bookingId, startsAt } = parsed.data;
+  const result = await rescheduleBookingAsHost(db, user.id, bookingId, startsAt, new Date(), {
+    calendar: calendarBusy, // Google read live, fail closed, like every other move
+  });
+  if (!result.ok) {
+    return { ok: false, error: result.error === "slot_taken" ? "slot_unavailable" : result.error };
+  }
+  after(() =>
+    jobs.bookingChanged({
+      bookingId,
+      change: "rescheduled",
+      sequence: result.sequence,
+      previousStartsAt: result.previousStartsAt,
+    }),
+  );
   return { ok: true };
 }

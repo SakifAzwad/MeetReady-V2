@@ -173,7 +173,17 @@ function BookingRow({
           </div>
         </div>
         {view === "upcoming" && !inProgress && (
-          <CancelBookingButton bookingId={b.id} guestName={b.guestName} />
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            {/* Day 25: the booking widget in a host mode, on its own page. */}
+            <Link
+              href={`/dashboard/bookings/${b.id}/move`}
+              aria-label={`Move the meeting with ${b.guestName}`}
+              className="hover:bg-accent rounded-md px-3 py-1.5 text-sm font-medium"
+            >
+              Move
+            </Link>
+            <CancelBookingButton bookingId={b.id} guestName={b.guestName} />
+          </div>
         )}
         {/* Day 25: the Past view lists only confirmed meetings that have ended: exactly the ones that can be marked. */}
         {view === "past" && <NoShowButton bookingId={b.id} guestName={b.guestName} noShow={!!b.noShowAt} />}

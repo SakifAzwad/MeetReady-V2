@@ -75,6 +75,11 @@ export const slotsQuerySchema = z
     to: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
     /** Guest's manage token when rescheduling: their own booking shouldn't block the new time. */
     reschedule: z.string().max(64).optional(),
+    /**
+     * Day 25: the HOST moving one of their bookings (by id). Honoured only when the signed-in user is that
+     * booking's host; for anyone else it's ignored, like a wrong reschedule token.
+     */
+    move: z.uuid().optional(),
   })
   // `when`: only compare the dates once both parsed. Zod 4 runs an object's
   // refinements even after a field failed its format check, and hands them

@@ -5,7 +5,8 @@ import { subtractInterval } from "@/lib/scheduling/intervals";
 import { slotsQuerySchema } from "@/lib/validation/booking";
 import { busyLoadRange, getBookingCalendar, getPublicEventType } from "@/server/booking";
 import { CalendarUnavailableError, calendarBusy } from "@/server/calendar";
-import { getBookingByToken } from "@/server/manage-booking";
+import { getSession } from "@/server/auth/session";
+import { getBookingByToken, getHostBookingDetails } from "@/server/manage-booking";
 import { ipOf, rateLimit, tooManyRequests } from "@/server/rate-limit";
 
 /**
@@ -15,7 +16,8 @@ import { ipOf, rateLimit, tooManyRequests } from "@/server/rate-limit";
  * A route handler, not a server action: reads should be GET (cacheable,
  * can run in parallel, safe to retry). Server actions are POST and queue
  * one after another. Public: no session; only active event types of
- * onboarded hosts are visible.
+ * onboarded hosts are visible. (One exception, Day 25: `move=<bookingId>` reads
+ * the session, to let a host's own booking free its time on the Move page.)
  *
  * Rate limit (Day 14): 60 per minute per IP, checked first. Each call
  * computes a month of availability; a page load makes one or two.
@@ -28,7 +30,7 @@ export async function GET(request: NextRequest) {
   if (!parsed.success) {
     return Response.json({ error: z.flattenError(parsed.error).fieldErrors }, { status: 400 });
   }
-  const { username, slug, from, to, reschedule } = parsed.data;
+  const { username, slug, from, to, reschedule, move } = parsed.data;
 
   const eventType = await getPublicEventType(db, username, slug);
   if (!eventType) return Response.json({ error: "Not found" }, { status: 404 });
@@ -37,8 +39,15 @@ export async function GET(request: NextRequest) {
   // belongs to this event type) mustn't block the times around it.
   let excludeBookingId: string | undefined;
   let ownTime: { start: Date; end: Date } | undefined;
-  if (reschedule) {
-    const own = await getBookingByToken(db, reschedule);
+  // Day 25, the host's Move page: the same, but proved by the session. The lookup is scoped to the signed-in
+  // user (id AND host), so another host's booking id frees nothing. The session is read only for `move`.
+  if (reschedule || move) {
+    const session = move ? await getSession() : null;
+    const own = reschedule
+      ? await getBookingByToken(db, reschedule)
+      : session
+        ? await getHostBookingDetails(db, session.user.id, move!)
+        : null;
     if (own && own.eventTypeId === eventType.id && own.status === "confirmed") {
       excludeBookingId = own.id;
       ownTime = { start: own.startsAt, end: own.endsAt };

@@ -9,7 +9,7 @@ import { bookings } from "@/db/schema";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { calendarSync } from "@/server/calendar";
 import { jobs } from "@/server/jobs";
-import { cancelBookingAsHost } from "@/server/manage-booking";
+import { cancelBookingAsHost, setNoShow } from "@/server/manage-booking";
 
 const schema = z.object({
   bookingId: z.string().max(64),
@@ -73,4 +73,29 @@ export async function retryCalendarSyncAction(bookingId: unknown): Promise<{ ok:
         ? "Google Calendar isn't connected. Connect it on the Availability page."
         : "Google Calendar didn't accept it. Try again in a minute, or check the connection on the Availability page.",
   };
+}
+
+const noShowSchema = z.object({ bookingId: z.uuid(), noShow: z.boolean() });
+
+/**
+ * Day 25: "Didn't show up" on a past meeting, or Undo. Session user -> validate
+ * -> scoped write. No email and no background job: it changes nothing outside
+ * MeetReady, only the host's records (and Insights' no-show rate).
+ */
+export async function setNoShowAction(input: unknown): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireOnboardedUser();
+  const parsed = noShowSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Booking not found" };
+  const result = await setNoShow(db, user.id, parsed.data.bookingId, parsed.data.noShow, new Date());
+  if (!result.ok) {
+    return {
+      ok: false,
+      error:
+        result.error === "not_changeable"
+          ? "Only a meeting that has ended can be marked"
+          : "Booking not found",
+    };
+  }
+  refresh();
+  return { ok: true };
 }

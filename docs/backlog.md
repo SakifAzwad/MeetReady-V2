@@ -1,14 +1,14 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 24).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 25, Part A).
 
 ## Next, in order
 
-1. **Push Day 24**, then runbook step 17.5 "Moving and cancelling" (refresh the connector first).
-2. **Next day: pick from the list below.** Candidates: list MeetReady in Claude's Connectors Directory (it can
-   book, move and cancel now), the dashboard's Move button, or the Phase 2 items (analytics now has a `source`
-   column to count).
+1. **Push Day 25 Part A** (Insights and no-shows; migration 0012 runs in the build).
+2. **Day 25 Part B: the Move button** on upcoming bookings (the booking widget in a host mode).
+3. **Then pick from the list below.** Candidates: the Claude Connectors Directory listing (best after a domain and
+   Google app verification), or the rest of Phase 2 (signed webhooks, an embeddable widget).
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
@@ -19,7 +19,8 @@ booking assistant on the server, suggest-only (Day 19); its box on the booking p
 (Day 20); an MCP server with OAuth (CIMD), a consent page and four read tools for AI assistants (Day 21);
 `book_meeting` over MCP, with a confirm form where the client supports one (Day 22); the README for reviewers,
 with an architecture diagram and screenshots retaken by a script (Day 23); `cancel_booking` and
-`reschedule_booking` over MCP, any of the host's upcoming bookings, with confirm forms (Day 24).
+`reschedule_booking` over MCP, any of the host's upcoming bookings, with confirm forms (Day 24); Insights (rates,
+meetings per week, popular times, per type, grouped in the host's timezone) and no-show marking (Day 25, Part A).
 
 ## Ideas from reviews, deferred
 
@@ -45,6 +46,10 @@ with an architecture diagram and screenshots retaken by a script (Day 23); `canc
 | **A Move button on the dashboard** (host reschedules by hand)                      | Day 24 | `rescheduleBookingAsHost` exists since Day 24 (assistants use it), so it's a picker on the Bookings page reusing the booking widget in "reschedule" mode, plus "Sakif moved your meeting" emails without the receipt. UI work, so its own day.                                                                                                                                                       | When a host asks, or with the activity log         |
 | **Bulk changes over MCP** ("cancel everything on Friday")                          | Day 24 | Each cancel or move is one confirmed call today, so a bulk request means several confirmations. A bulk tool needs one form listing every booking it touches, and a bigger blast radius if the model is wrong.                                                                                                                                                                                        | If hosts ask                                       |
 | **A separate scope for moving and cancelling** (`bookings:manage`)                 | Day 24 | `bookings:write` gained cancel and move without re-consent; the consent page's wording changed with it. With one host that's fine. With real users, a new scope would make each host approve the new power.                                                                                                                                                                                          | Before real users, with the directory listing      |
+| **Insights: compare with the previous period** ("12 more than last month")         | Day 25 | A delta per tile needs the same queries over the period before, and a rule for what "better" means per figure (more meetings is good, more cancellations isn't). Useful once there's real history.                                                                                                                                                                                                   | With real traffic                                  |
+| **Insights: export as CSV**                                                        | Day 25 | The table views already hold every number. A download route is small, but nobody has asked.                                                                                                                                                                                                                                                                                                          | When a host asks                                   |
+| **Insights by booking date** (when bookings are made, lead time)                   | Day 25 | Counted by meeting date today (decision in day-25.md). "How far ahead do guests book?" is a different question with a different chart, from `created_at`.                                                                                                                                                                                                                                            | With smart slot ranking                            |
+| **A no-show tool over MCP**                                                        | Day 25 | Claude can read `noShow` but not set it. Marking is one click on the Bookings page; a tool would be another write for little gain.                                                                                                                                                                                                                                                                   | If hosts ask                                       |
 | **Show the MCP tool calls to the host** (an activity log per assistant)            | Day 21 | Today the dashboard shows which assistants are connected, not what they read. A log is a table and a page; useful once assistants can write.                                                                                                                                                                                                                                                         | With `book_meeting`, if hosts ask                  |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                    | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                                                                                                                                            | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)         | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                                                                                                                                    | As polish, after the AI features                   |
@@ -95,8 +100,8 @@ with an architecture diagram and screenshots retaken by a script (Day 23); `canc
 ## Remaining roadmap (from the v1 context doc)
 
 - **Phase 2:**
-  - real analytics (bookings over time, cancellation and no-show rate, popular times);
-  - marking no-shows;
+  - real analytics (done: Insights, Day 25);
+  - marking no-shows (done, Day 25);
   - signed webhooks (`booking.created`, `booking.cancelled`);
   - an embeddable booking widget (inline and popup).
 - **Phase 3 (pick 2–3):**

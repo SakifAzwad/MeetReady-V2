@@ -497,6 +497,12 @@ export const bookings = pgTable(
      * latest is all they need. No foreign key, like createdByClient.
      */
     changedByClient: text(),
+    /**
+     * Day 25: the host marked that the guest didn't show up, and when. A separate column, not a status: the
+     * booking is still a confirmed booking (every `status = 'confirmed'` rule, the no-overlap constraint and
+     * the reminders stay as they are); this records what happened at the meeting. Null = attended or unknown.
+     */
+    noShowAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [
@@ -511,6 +517,8 @@ export const bookings = pgTable(
     // A cancelled booking always says when; a confirmed one never does.
     check("bookings_cancellation_check", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`),
     check("bookings_answers_check", sql`jsonb_typeof(${t.answers}) = 'array'`),
+    // Day 25: only a confirmed meeting can be a no-show (a cancelled one never took place).
+    check("bookings_no_show_check", sql`${t.noShowAt} is null or ${t.status} = 'confirmed'`),
     // The no-double-booking EXCLUDE constraint is in a custom migration
     // (drizzle/0001_bookings_no_overlap.sql): Drizzle can't express EXCLUDE yet.
   ],

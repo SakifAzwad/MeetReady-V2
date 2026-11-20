@@ -1,0 +1,2 @@
+ALTER TABLE "bookings" ADD COLUMN "no_show_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_no_show_check" CHECK ("bookings"."no_show_at" is null or "bookings"."status" = 'confirmed');

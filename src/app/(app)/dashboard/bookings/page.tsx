@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { listHostBookings, type BookingsView, type HostBookingRow } from "@/server/manage-booking";
 import { CancelBookingButton } from "./cancel-booking-button";
+import { NoShowButton } from "./no-show-button";
 import { RetryCalendarButton } from "./retry-calendar-button";
 import { PageTransition } from "@/components/motion";
 
@@ -168,11 +169,14 @@ function BookingRow({
               </>
             )}
             {cancelledLabel(b) && <Badge>{cancelledLabel(b)}</Badge>}
+            {b.noShowAt && <Badge>Didn&apos;t show up</Badge>}
           </div>
         </div>
         {view === "upcoming" && !inProgress && (
           <CancelBookingButton bookingId={b.id} guestName={b.guestName} />
         )}
+        {/* Day 25: the Past view lists only confirmed meetings that have ended: exactly the ones that can be marked. */}
+        {view === "past" && <NoShowButton bookingId={b.id} guestName={b.guestName} noShow={!!b.noShowAt} />}
       </Card>
     </li>
   );

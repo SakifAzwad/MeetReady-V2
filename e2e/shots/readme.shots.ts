@@ -136,6 +136,47 @@ async function seed(db: pg.Pool, host: Host) {
     tz: "Asia/Singapore",
     meet: true,
   });
+  await history(db, host, review);
+}
+
+/**
+ * Day 25: three months of past meetings for the Insights screenshot. Made by a
+ * fixed pattern, not at random, so every run gives the same picture: 1 to 4
+ * meetings a weekday, two hours apart (never overlapping), more in the
+ * mornings, a few cancelled or missed, some booked through Claude.
+ */
+async function history(db: pg.Pool, host: Host, review: string) {
+  for (let back = 1; back <= 91; back++) {
+    const at = new Date(Date.now() - back * 86_400_000);
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Dhaka", weekday: "short" }).format(at);
+    if (wd === "Sat" || wd === "Sun") continue;
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(at);
+    const count = 1 + ((back * 7) % 4);
+    for (let k = 0; k < count; k++) {
+      const n = back * 4 + k;
+      const start = dhaka(day, `${String(10 + k * 2).padStart(2, "0")}:00`);
+      const cancelled = n % 9 === 0;
+      const deep = n % 3 === 0;
+      await db.query(
+        `insert into bookings (event_type_id, host_id, guest_name, guest_email, guest_time_zone, starts_at, ends_at,
+                               manage_token_hash, status, cancelled_at, cancelled_by, no_show_at, source, created_by_client)
+         values ($1, $2, 'Past guest', 'past@example.com', 'Europe/London', $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          deep ? review : host.eventTypeId,
+          host.id,
+          start,
+          new Date(start.getTime() + (deep ? 60 : 30) * 60_000),
+          randomBytes(16).toString("hex"),
+          cancelled ? "cancelled" : "confirmed",
+          cancelled ? start : null,
+          cancelled ? (n % 2 ? "guest" : "host") : null,
+          !cancelled && n % 13 === 0 ? start : null,
+          n % 5 === 0 ? "assistant" : "booking_page",
+          n % 5 === 0 ? CLAUDE : null,
+        ],
+      );
+    }
+  }
 }
 
 /** The address bar isn't in the shots, but the dashboard prints the site's address: show the live one. */
@@ -320,6 +361,12 @@ test("README screenshots", async ({ host, db, browser }) => {
   await expect(hostPage.getByRole("region", { name: "Meeting brief" })).toBeVisible();
   await hostPage.waitForTimeout(400);
   await hostPage.screenshot({ path: path.join(OUT, "bookings.png") });
+
+  // Day 25: Insights over the seeded history.
+  await hostPage.goto("/dashboard/insights");
+  await expect(hostPage.getByRole("heading", { name: "Popular times" })).toBeVisible();
+  await hostPage.waitForTimeout(400);
+  await hostPage.screenshot({ path: path.join(OUT, "insights.png"), fullPage: true });
 
   // ── An assistant asking to connect ──
   const verifier = randomBytes(32).toString("base64url");

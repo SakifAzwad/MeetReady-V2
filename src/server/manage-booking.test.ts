@@ -16,6 +16,7 @@ import {
   listHostBookingsBetween,
   rescheduleBookingAsHost,
   rescheduleBookingByToken,
+  setNoShow,
 } from "./manage-booking";
 import { hashManageToken } from "./manage-token";
 
@@ -307,6 +308,61 @@ describe("managing bookings", () => {
           ok: false,
           error: "not_changeable",
         });
+      });
+    });
+
+    describe("no-shows (Day 25)", () => {
+      const ENDED = at("10:31"); // the 10:00 meeting ended at 10:30
+      const noShowAt = async (token: string) =>
+        (
+          await db
+            .select()
+            .from(bookings)
+            .where(eq(bookings.manageTokenHash, hashManageToken(token)))
+        )[0]!.noShowAt;
+
+      it("marks a meeting that has ended, keeps the first time on a repeat, and undoes", async () => {
+        const { booking, manageToken } = await book("intro", "10:00");
+        expect(await setNoShow(db, "alice", booking.id, true, ENDED)).toEqual({ ok: true });
+        expect(await noShowAt(manageToken)).toEqual(ENDED);
+        await setNoShow(db, "alice", booking.id, true, at("12:00"));
+        expect(await noShowAt(manageToken)).toEqual(ENDED);
+        expect(await setNoShow(db, "alice", booking.id, false, at("12:00"))).toEqual({ ok: true });
+        expect(await noShowAt(manageToken)).toBeNull();
+        // It stays a confirmed booking: still listed as past, nothing else changed.
+        expect((await listHostBookings(db, "alice", "past", ENDED)).map((b) => b.noShowAt)).toEqual([null]);
+      });
+
+      it("not before the meeting has ended, and never a cancelled one", async () => {
+        const { booking } = await book("intro", "10:00");
+        expect(await setNoShow(db, "alice", booking.id, true, at("10:15"))).toEqual({
+          ok: false,
+          error: "not_changeable",
+        });
+        const c = await book("intro", "11:00", "c");
+        await cancelBookingByToken(db, c.manageToken, null, NOW);
+        expect(await setNoShow(db, "alice", c.booking.id, true, at("12:00"))).toEqual({
+          ok: false,
+          error: "not_changeable",
+        });
+      });
+
+      it("the database refuses a cancelled no-show even if code tried", async () => {
+        const { booking } = await book("intro", "10:00");
+        await cancelBookingAsHost(db, "alice", booking.id, null, NOW);
+        await expect(
+          db.update(bookings).set({ noShowAt: ENDED }).where(eq(bookings.id, booking.id)),
+        ).rejects.toThrow();
+      });
+
+      it("only the host's own bookings: another host's id looks missing", async () => {
+        const { booking, manageToken } = await book("intro", "10:00");
+        expect(await setNoShow(db, "bob", booking.id, true, ENDED)).toEqual({
+          ok: false,
+          error: "not_found",
+        });
+        expect(await setNoShow(db, "alice", "nope", true, ENDED)).toEqual({ ok: false, error: "not_found" });
+        expect(await noShowAt(manageToken)).toBeNull();
       });
     });
 

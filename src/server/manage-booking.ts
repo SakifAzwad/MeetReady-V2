@@ -343,6 +343,8 @@ export type HostBookingRow = {
   rescheduledBy: "host" | "guest" | null;
   changedByClient: string | null;
   changeAssistantName: string | null;
+  /** Day 25: when the host marked that the guest didn't show up (null: attended, or not marked). */
+  noShowAt: Date | null;
 };
 
 /** The Bookings page's columns, joined to the event type and the brief. Unscoped: callers add the host. */
@@ -372,6 +374,7 @@ const hostBookingQuery = (db: Database) =>
       rescheduledBy: bookings.rescheduledBy,
       changedByClient: bookings.changedByClient,
       changeAssistantName: changeClient.name,
+      noShowAt: bookings.noShowAt,
     })
     .from(bookings)
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
@@ -491,6 +494,42 @@ export async function rescheduleBookingAsHost(
       changedByClient: options.byAssistant?.clientId ?? null,
     }),
   );
+}
+
+/**
+ * Day 25: the host marks that the guest didn't show up, or takes it back.
+ * Only a confirmed meeting that has ENDED can be marked: before then nobody
+ * knows. One UPDATE with every condition in the WHERE, like cancelling: no
+ * "read, check, then write" gap. No email: it's the host's own note.
+ */
+export async function setNoShow(
+  db: Database,
+  hostId: string,
+  bookingId: string,
+  noShow: boolean,
+  now: Date,
+): Promise<{ ok: true } | { ok: false; error: ManageError }> {
+  if (!z.uuid().safeParse(bookingId).success) return { ok: false, error: "not_found" };
+  const [row] = await db
+    .update(bookings)
+    // Marking again keeps the first time it was marked.
+    .set({ noShowAt: noShow ? sql`coalesce(${bookings.noShowAt}, ${now.toISOString()}::timestamptz)` : null })
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        eq(bookings.hostId, hostId),
+        eq(bookings.status, "confirmed"),
+        lte(bookings.endsAt, now),
+      ),
+    )
+    .returning({ id: bookings.id });
+  if (row) return { ok: true };
+  const [exists] = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
+  // Another host's booking looks exactly like a missing one.
+  return { ok: false, error: exists ? "not_changeable" : "not_found" };
 }
 
 /**

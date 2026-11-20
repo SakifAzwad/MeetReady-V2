@@ -9,8 +9,10 @@ const LINKS = [
   // On phones the logo already goes home, so "Home" gives its room to the others.
   { href: "/dashboard", label: "Home", exact: true, wide: true },
   { href: "/dashboard/bookings", label: "Bookings" },
-  { href: "/dashboard/event-types", label: "Event types" },
-  { href: "/dashboard/availability", label: "Availability" },
+  // Day 25: a fifth link (Insights) didn't fit a 390px phone, so the two longest get short labels there.
+  { href: "/dashboard/event-types", label: "Event types", short: "Types" },
+  { href: "/dashboard/availability", label: "Availability", short: "Hours" },
+  { href: "/dashboard/insights", label: "Insights" },
 ] as const;
 
 /**
@@ -35,6 +37,8 @@ export function NavLinks({ pathname }: { pathname: string | null }) {
             key={link.href}
             href={link.href}
             aria-current={active ? "page" : undefined}
+            // The full name for screen readers and tests, whichever label is showing.
+            aria-label={link.label}
             className={cn(
               "relative isolate rounded-md px-2 py-1.5 whitespace-nowrap transition-colors sm:px-3",
               "wide" in link && "max-sm:hidden",
@@ -51,7 +55,14 @@ export function NavLinks({ pathname }: { pathname: string | null }) {
                 <span aria-hidden className="bg-accent absolute inset-0 -z-10 rounded-md" />
               </ViewTransition>
             )}
-            {link.label}
+            {"short" in link ? (
+              <>
+                <span className="sm:hidden">{link.short}</span>
+                <span className="max-sm:hidden">{link.label}</span>
+              </>
+            ) : (
+              link.label
+            )}
           </Link>
         );
       })}

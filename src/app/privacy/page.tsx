@@ -100,6 +100,11 @@ export default function PrivacyPage() {
             it: you&apos;ll get an email from MeetReady saying the host did it, and for a booked or moved
             meeting you can reschedule or cancel from there.
           </li>
+          <li>
+            <strong>After the meeting:</strong> the host can mark that you didn&apos;t show up. It&apos;s a
+            note in their own records and counts in their statistics; you aren&apos;t emailed about it, and
+            they can undo it.
+          </li>
           <li>You don&apos;t need an account, and no cookies are set when you book.</li>
         </ul>
       </LegalSection>

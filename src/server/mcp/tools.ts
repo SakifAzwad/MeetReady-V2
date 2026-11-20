@@ -272,6 +272,8 @@ export async function listBookingsTool(
         ...(b.cancelledBy ? { cancelledBy: b.cancelledBy } : {}),
         hasNotes: !!b.guestNotes || b.answers.length > 0,
         hasBrief: b.brief !== null,
+        /** Day 25: the user marked that the guest didn't show up (read-only here). */
+        noShow: b.noShowAt !== null,
         bookedBy: b.source === "assistant" ? "the user, through an assistant" : "the guest",
       })),
     },
@@ -306,6 +308,7 @@ function bookingDetails(b: HostBookingRow, tz: string) {
       ? { cancelledBy: b.cancelledBy, cancellationReason: b.cancellationReason }
       : {}),
     rescheduled: b.rescheduledAt !== null,
+    noShow: b.noShowAt !== null,
     ...(b.rescheduledBy ? { rescheduledBy: b.rescheduledBy === "host" ? "the user" : "the guest" } : {}),
     bookedBy: b.source === "assistant" ? "the user, through an assistant" : "the guest",
     guestName: b.guestName,

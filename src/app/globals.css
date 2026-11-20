@@ -44,6 +44,16 @@
   --border: #e2e6ef;
   --input: #cfd5e2;
   --ring: #8b6cc2;
+
+  /*
+   * Charts (Day 25, Insights). Colour means time of day in this design, so data marks are steps of ONE
+   * navy, told apart by lightness (plus a legend, the order, tooltips and a table). Checked with the
+   * dataviz validator as an ordinal ramp: monotone lightness, visible gaps, the lightest step >= 3:1
+   * against the card, in both themes. chart-1 is the darkest ink on a light card.
+   */
+  --chart-1: #1d2a52;
+  --chart-2: #4d5b8a;
+  --chart-3: #8590b0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +82,10 @@
     --border: #262e47;
     --input: #333c58;
     --ring: #b89ae0;
+    /* Selected for the dark card, not flipped: the strongest step is the lightest here. */
+    --chart-1: #e3e9f7;
+    --chart-2: #9aa6c8;
+    --chart-3: #5d6994;
   }
 }
 
@@ -88,6 +102,9 @@
   --color-afternoon: var(--afternoon);
   --color-dusk: var(--dusk);
   --color-highlight: var(--highlight);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

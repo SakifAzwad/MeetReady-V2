@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 24)
+# Handoff: starting a new chat (after Day 25, Part A)
 
-Read this first in a new chat. It replaces the long Days 1–24 conversations. Details live in `docs/day-01.md` …
-`docs/day-24.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–25 conversations. Details live in `docs/day-01.md` …
+`docs/day-25.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -144,9 +144,22 @@ Read this first in a new chat. It replaces the long Days 1–24 conversations. D
     `changed_by_client` (assistant behind the LATEST cancel/move; null when a person did it). Emails: guest "Sakif
     moved your meeting"; host receipt "Moved/Cancelled through Claude: …" only when an assistant did it
     (`audiencesFor`). Bookings labels in `src/lib/booking-labels.ts`. Consent: "Book, move and cancel meetings…";
-    dashboard: "Can read, book and change bookings". No dashboard Move button yet (backlog).
-- **Numbers:** 720 unit tests + 35 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
-  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 12 migrations (0000–0011).
+    dashboard: "Can read, book and change bookings". No dashboard Move button yet (Day 25 Part B).
+    Follow-up: booked blocks on the week view have a light ring (`ring-1 ring-white/75`), or a meeting after sunset
+    is navy on navy.
+  - Insights and no-shows (Day 25, Part A): `bookings.no_show_at` (migration 0012) + a check that only a
+    confirmed booking can have one; `setNoShow` (host-scoped one UPDATE, only `ends_at <= now`, coalesce keeps the
+    first time); "Didn't show up" / "Undo no-show" on Bookings → Past (`setNoShowAction`), no email; `noShow` read-only in
+    `list_bookings` / `get_booking`. `/dashboard/insights` (nav item; phones show "Types"/"Hours" short labels,
+    full `aria-label`): `src/server/insights.ts` = `insightsPeriod` (pure: Monday weeks / months on the host's
+    clock) + `getInsights` (4 grouped queries, `starts_at at time zone $tz`, GROUP BY position because the zone is a
+    bound parameter; by MEETING date, up to now; rates: cancelled / all, no-shows / not cancelled, null when 0).
+    Charts hand-built in `insights/charts.tsx` (server) + `chart-tooltips.tsx` (client, `data-tip` on marks):
+    `--chart-1..3` = one navy, validated as an ordinal ramp in both themes; a table view per chart; today's sky
+    strip over the hour grid. README screenshot `insights.png` from seeded history (`history()` in the shots
+    script).
+- **Numbers:** 737 unit tests + 37 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 13 migrations (0000–0012).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -155,10 +168,15 @@ Read this first in a new chat. It replaces the long Days 1–24 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 24, then runbook step 17.5 "Moving and cancelling" (refresh the Claude connector first).
-2. **Next day: Sakif picks from `docs/backlog.md`:** Claude Connectors Directory listing, the dashboard's Move
-   button, or Phase 2 (analytics can count bookings by `source`). Opinions first, as always.
-3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. **Sakif:** push Day 25 Part A (migration 0012 runs in the build).
+2. **Day 25 Part B: the Move button** (agreed plan): "Move" on each upcoming booking opens
+   `/dashboard/bookings/[id]/move` with the booking widget in a host mode; `/api/slots?move=<bookingId>` ignores the
+   booking's own time ONLY when the signed-in user is its host; the confirm step calls a new
+   `rescheduleBookingAsHostAction` (Zod, session user); same rules as a guest; emails already exist (guest "Sakif
+   moved your meeting", no host receipt for a move by hand).
+3. Then the backlog: Claude Connectors Directory (after a domain + Google verification), signed webhooks, an
+   embeddable widget. No domain yet (Sakif, Nov 2026).
+4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
 
 ## How Sakif works
 
@@ -308,4 +326,9 @@ Read this first in a new chat. It replaces the long Days 1–24 conversations. D
   (`booking-labels.ts`).
 - **"X doesn't block Y" tests need X to OVERLAP Y** (Day 24 story): adjacent isn't overlapping, and a start that
   isn't on the slot interval fails for the wrong reason. Remove the code under test once and watch the test fail.
+- **GROUP BY with bound parameters** (Day 25 story): the same expression in SELECT and GROUP BY becomes two
+  parameters, and Postgres refuses it ("must appear in the GROUP BY clause"). Group by position.
+- **Charts** (Day 25): colour means time of day, so data marks are steps of one navy (`--chart-1..3`), checked with
+  the dataviz validator in `--ordinal` mode, both themes. A legend, a table view and tooltips on focus too; no
+  chart library.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

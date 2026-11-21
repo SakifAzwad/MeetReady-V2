@@ -306,8 +306,8 @@ warning that says so.
      protected. Opening `/api/inngest` in a browser answers `{"message":"Unauthorized"}`: expected, SDK v4 only
      answers requests Inngest has signed.
 3. **Deploy** (push Day 17). Migration 0007 runs first in the build.
-4. **Inngest dashboard → Apps:** `meetready` with 5 functions (7 since Day 26, step 18) (`booking-changed`, `calendar-sync`,
-   `calendar-backfill`, `reminder-sweep`, `reminder-send`), each with its failure handler. `reminder-sweep` shows a
+4. **Inngest dashboard → Apps:** `meetready` with 5 functions (`booking-changed`, `calendar-sync`, `calendar-backfill`,
+   `reminder-sweep`, `reminder-send`), each with its failure handler (7 since Day 26: step 18.2). `reminder-sweep` shows a
    run every 15 minutes, normally with nothing to do.
 5. **Check it works** (with your own email: Resend's test sender only reaches you):
    1. **Emails through the queue:** book yourself about 2 hours ahead. The emails arrive as before. Inngest →
@@ -448,28 +448,187 @@ a Client ID Metadata Document, so there's no client to create by hand. Without t
 
 ## 18. Webhooks, added on Day 26
 
-Nothing to set in Vercel. `WEBHOOK_ALLOW_PRIVATE` is for E2E only: **never set it on Vercel** (it turns off the
-SSRF protection).
+Nothing to set in Vercel. About 20 minutes. You need: the live site signed in as yourself, a second browser tab for
+webhook.site, Node on your laptop (for 18.5), and your own email as the guest (Resend's test sender only reaches
+you).
 
-1. **Deploy** (push Day 26). Migration 0013 runs first in the build: two new tables (`webhook_endpoints`,
-   `webhook_deliveries`), nothing changed in existing ones.
-2. **Inngest dashboard → Apps:** `meetready` now has 7 functions: the 5 from step 15.4 plus `webhook-deliver`
-   and `webhook-cleanup` (daily at 03:23 UTC). If they're missing, **Apps → Sync app** (step 15).
-3. **Try it with a free test receiver:** open <https://webhook.site> and copy "Your unique URL" (https).
-   1. Dashboard → account menu → **Webhooks** → paste the URL → **Add endpoint**. Copy the `whsec_…` secret it
-      shows once.
-   2. **Send test:** within a few seconds webhook.site shows a POST with `{"type":"ping",…}` and the three
-      headers `webhook-id`, `webhook-timestamp`, `webhook-signature`. The delivery shows **Delivered (200)**.
-   3. Book yourself on your booking page: a `booking.created` arrives with the time, the meeting type and the
-      guest's name and email (no notes).
-   4. **Check a signature** (optional): `docs/webhooks.md` has a 10-line Node script; paste the secret, the
-      three headers and the body.
-   5. **Rotate secret**: the next test carries two signatures (`v1,… v1,…`) for 24 hours.
-   6. **Delete** the endpoint when done (webhook.site URLs are public).
-4. **If a delivery fails:** the page shows the status code or reason ("No answer within 10 seconds",
-   "Redirects aren't followed"). Inngest retries 5xx, 408, 429 and timeouts with growing gaps (8 retries), then
-   marks it failed: **Retry** sends the same message again. Inngest → Runs → `webhook-deliver` shows each try.
-   Sentry (tag `webhooks`) only gets unexpected errors, not a receiver's 500.
+**Never set `WEBHOOK_ALLOW_PRIVATE` on Vercel.** It exists only so the E2E tests can reach a fake receiver on
+127.0.0.1; set in Production, it would turn off the SSRF protection.
+
+### 18.1 Deploy
+
+1. Push Day 26 (`npm install` first locally: new dependency `undici`).
+2. Vercel → **Deployments** → the new production build → **Building** log. Look for the migration line:
+
+   ```
+   [migrate] up to date (ep-....us-east-1.aws.neon.tech)
+   ```
+
+   Migration 0013 ran just before it: two new tables, `webhook_endpoints` and `webhook_deliveries`. Nothing in
+   existing tables changed.
+
+3. Wait until the deployment says **Ready**.
+
+### 18.2 Check Inngest picked up the two new functions
+
+1. Inngest → **Functions** (Production). **Scroll to the bottom**: the list is sorted by name.
+2. Expect **14 rows**: 7 functions, each listed with its own `(failure)` handler. The four new rows:
+
+   | Function name               | Trigger                   |
+   | --------------------------- | ------------------------- |
+   | `webhook-cleanup`           | `23 3 * * *` (cron)       |
+   | `webhook-cleanup (failure)` | `inngest/function.failed` |
+   | `webhook-deliver`           | `webhook/deliver`         |
+   | `webhook-deliver (failure)` | `inngest/function.failed` |
+
+3. **If they're missing:** Inngest → **Apps** → `meetready` → **Sync app** (URL, if asked:
+   `https://meetreadyv2.vercel.app/api/inngest`), then reload Functions. "We could not reach your URL" → step 15.2.
+
+### 18.3 Get a test receiver
+
+1. Open <https://webhook.site> in a new tab. It creates a receiver for you.
+2. Copy **Your unique URL**, e.g. `https://webhook.site/1b2c3d4e-…`. Keep this tab open: every request MeetReady
+   sends appears in its left column.
+3. It answers **200** by default. Leave it that way for now (18.8 changes it on purpose).
+
+### 18.4 Add the endpoint
+
+1. <https://meetreadyv2.vercel.app/dashboard> → click your name/avatar at the top right (the **account menu**) →
+   **Webhooks**.
+2. **Add an endpoint** card:
+   - **Endpoint URL:** paste the webhook.site URL.
+   - **Events:** leave **Booked**, **Moved** and **Cancelled** ticked.
+   - Click **Add endpoint**. The button says **Checking…** for a moment (the server looks the name up in DNS and
+     checks every address is public).
+3. A box appears: **"Signing secret: copy it now, it won't be shown again."** Click **Copy secret** and paste it
+   somewhere safe for 18.5 (a text file outside the repo). It looks like `whsec_` + 44 characters.
+   **Don't commit it.** Then click **Done**.
+4. Under **Endpoints** you now see the URL and "Sends: Booked, Moved, Cancelled. Added <date, time>."
+
+### 18.5 Send a test and check its signature
+
+1. On the endpoint, click **Send test**. The text under the buttons says "Test event sent. Its result appears
+   below in a moment."
+2. **webhook.site tab:** a new **POST** appears. Check:
+   - **Headers:** `webhook-id` (`msg_…`), `webhook-timestamp` (a 10-digit number), `webhook-signature`
+     (`v1,…`), `content-type: application/json`, `user-agent: MeetReady-Webhooks/1.0`.
+   - **Raw Content:** `{"type":"ping","timestamp":"…","data":{"message":"…"}}`.
+3. **MeetReady tab:** reload the page. Under **Recent deliveries**: **Test** to webhook.site, badge
+   **Delivered (200)**. The endpoint's badge says **Last: Delivered**. (While Inngest is still sending, the badge
+   says **Sending**; reload again.)
+4. **Inngest → Runs:** a `webhook-deliver` run, **Completed**, one step `deliver`. (Bookings also show a
+   `webhooks` step inside their `booking-changed` run: that's where the deliveries are queued.)
+5. **Check the signature yourself** (this is what a receiver does). Create `check-webhook.mjs` on your Desktop,
+   **not in the repo**:
+
+   ```js
+   import { createHmac } from "node:crypto";
+
+   // Paste from webhook.site (Headers and Raw Content) and from 18.4.
+   const secret = "whsec_PASTE";
+   const id = "PASTE webhook-id";
+   const timestamp = "PASTE webhook-timestamp";
+   const signatureHeader = "PASTE the whole webhook-signature value";
+   const body = String.raw`PASTE the Raw Content exactly`;
+
+   const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+   const expected = "v1," + createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest("base64");
+   const valid = signatureHeader.split(" ").includes(expected);
+   const age = Math.round(Date.now() / 1000 - Number(timestamp));
+   console.log({ valid, ageSeconds: age });
+   ```
+
+   Run `node check-webhook.mjs` from the Desktop. Expect **`valid: true`**. `ageSeconds` is how old the request
+   is: a real receiver also rejects anything over 300 (a replay), which is why this script only prints it.
+
+6. **Tamper with it:** change one character inside `body` (e.g. `ping` to `pinG`) and run it again. It prints
+   **`valid: false`**. Change it back.
+
+### 18.6 Real booking events
+
+1. **Booked:** open your booking page in a private window (`/sakifazwad18/intro`), book a time, with your own
+   email as the guest, and type in **Notes**: `This note must not be in the webhook.`
+   - webhook.site: a POST with `"type":"booking.created"`. In `data`: `startsAt`/`endsAt` (UTC),
+     `"timeZone":"Asia/Dhaka"`, `meetingType` (`intro`), `guest` with your name, email and timezone,
+     `"changedBy":"guest"`, `"throughAssistant":false`, and `meetUrl` if the type uses Google Meet.
+   - **Search the body for your note: it must not be there** (nor any answers). That's the privacy rule.
+   - MeetReady → Webhooks → reload: **Booked**, **Delivered (200)**. Open **What was sent**: the same JSON and
+     its `webhook-id`.
+2. **Moved:** Dashboard → **Bookings** → **Upcoming** → that booking → **Move** → pick another day and time →
+   **Continue** → **Confirm new time**. webhook.site:
+   `"type":"booking.rescheduled"`, the new `startsAt`, **`previousStartsAt`** = the old one, `"changedBy":"host"`.
+3. **Cancelled:** **Bookings** → that booking → **Cancel** → **Cancel meeting**. webhook.site:
+   `"type":"booking.cancelled"`, `"status":"cancelled"`, `"changedBy":"host"`, and no cancellation reason.
+4. The three requests have **different** `webhook-id`s (one per event).
+
+### 18.7 Rotate the secret
+
+1. On the endpoint: **Rotate secret** → "Make a new secret?" → **Rotate secret**.
+2. A new secret is shown once with "The old secret keeps signing too for 24 hours…". Copy it, then **Done**.
+3. The endpoint now says "The old secret also signs until <tomorrow's date, time>."
+4. **Send test**. webhook.site: `webhook-signature` now holds **two** values separated by a space
+   (`v1,… v1,…`).
+5. Run `check-webhook.mjs` with the new request's values, once with the **old** secret and once with the **new**
+   one: both print `valid: true`. That's the zero-downtime part: a receiver can switch secrets any time in those 24
+   hours.
+
+### 18.8 A failing receiver, retries and Retry (optional, about 5 minutes)
+
+1. webhook.site → **Edit** (top right) → **Default status code** `500` → **Save**.
+2. MeetReady → **Send test**. Reload after a few seconds: the delivery shows **Sending (500)** with "N tries"
+   and the endpoint shows **Last: Sending**. Inngest → Runs → `webhook-deliver` is **Running**: a failed try,
+   then a wait before the next one (the gaps grow: seconds, then minutes).
+3. webhook.site → **Edit** → back to `200` → **Save**. At the next try (within a few minutes) the delivery
+   becomes **Delivered (200)** by itself, "2 tries" or more. In webhook.site every try has the **same**
+   `webhook-id` and body, and a new timestamp and signature.
+4. **Retry button:** it only appears on a **Failed** delivery, which needs all 8 retries to fail (hours) or a
+   reply that isn't retried. Quick way: **Edit** → status `400` → **Send test** → reload: **Failed (400)**, 1 try,
+   with a **Retry** button (4xx means "your request is wrong", so it isn't retried). Set the status back to
+   `200`, click **Retry**, reload: **Delivered (200)**, same `webhook-id` as the failed one.
+
+### 18.9 The URL checks (SSRF protection)
+
+On **Add an endpoint**, try each URL; nothing is saved and the form shows the message:
+
+| URL                                 | Message                                      |
+| ----------------------------------- | -------------------------------------------- |
+| `http://webhook.site/x`             | Use an https:// URL.                         |
+| `https://localhost/x`               | Use a public address, not a local name.      |
+| `https://169.254.169.254/latest/`   | That address is on a private network.        |
+| `https://192.168.0.1/x`             | That address is on a private network.        |
+| `https://user:pass@webhook.site/x`  | Don't put a username or password in the URL. |
+| `https://webhook.site:8443/x`       | Use the standard https port (443).           |
+| `https://no-such-host-mr.example/x` | "no-such-host-mr.example" couldn't be found. |
+
+`169.254.169.254` is the cloud metadata address: the classic SSRF target. The same address check also runs on
+every delivery, at connect time, so a name that later points at a private address is refused then too.
+
+### 18.10 Clean up
+
+1. On the endpoint: **Delete** → **Delete endpoint**. Its deliveries go with it. (webhook.site URLs are public:
+   anyone with the link sees what arrived.)
+2. Delete `check-webhook.mjs` and the saved secrets.
+3. **Optional, Neon → SQL Editor (`production`):**
+
+   ```sql
+   select count(*) from webhook_endpoints;
+   select count(*) from webhook_deliveries;
+   ```
+
+   Both 0 after the delete. In future, `webhook-cleanup` (daily, 03:23 UTC) deletes deliveries older than 30 days.
+
+### 18.11 If something goes wrong
+
+- **"Add endpoint" refuses webhook.site:** the message says why (table in 18.9). "couldn't be found" for a real
+  site usually means a typo in the URL.
+- **Deliveries stay "Sending" for more than a minute, and Inngest shows no `webhook-deliver` run:** the functions
+  aren't synced (18.2.3).
+- **"Too many sends for now":** Send test and Retry share a limit of 20 per 10 minutes. Wait.
+- **"The signing secret can't be read. Rotate it on the Webhooks page."** `BETTER_AUTH_SECRET` changed since the
+  endpoint was added (the secret is encrypted with a key derived from it). Rotate, or delete and add again.
+- **`valid: false` in 18.5 with the right secret:** the body wasn't copied exactly. Use webhook.site's **Raw
+  Content** (not the formatted view), and copy the headers without extra spaces.
+- **Sentry, tag `webhooks`:** only unexpected errors. A receiver answering 500 is normal and isn't reported.
 
 ## Afterwards: how a change ships
 

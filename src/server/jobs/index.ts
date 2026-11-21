@@ -7,7 +7,14 @@ import { briefDeps } from "@/server/ai";
 import { prepareBrief } from "@/server/ai/briefs";
 import { calendarSync } from "@/server/calendar";
 import { emailSender } from "@/server/email";
-import { BOOKING_CHANGED, CALENDAR_CONNECTED, type BookingChangedData, type JobEvent } from "./events";
+import { attemptDelivery, deleteOldDeliveries, queueBookingDeliveries } from "@/server/webhooks/deliveries";
+import {
+  BOOKING_CHANGED,
+  CALENDAR_CONNECTED,
+  WEBHOOK_DELIVER,
+  type BookingChangedData,
+  type JobEvent,
+} from "./events";
 import { createJobFunctions } from "./functions";
 import type { JobDeps } from "./handlers";
 import { runInline } from "./inline";
@@ -31,6 +38,21 @@ const deps: JobDeps = {
     Sentry.captureException(error, { tags: { area }, extra: bookingId ? { bookingId } : undefined }),
   now: () => new Date(),
   briefs: { prepare: (bookingId) => prepareBrief(briefDeps, bookingId) },
+  webhooks: {
+    queue: (change) => queueBookingDeliveries(db, change, new Date()),
+    attempt: (deliveryId, options) =>
+      attemptDelivery(
+        {
+          db,
+          secret: env.BETTER_AUTH_SECRET,
+          now: () => new Date(),
+          allowPrivate: Boolean(env.WEBHOOK_ALLOW_PRIVATE),
+        },
+        deliveryId,
+        options,
+      ),
+    cleanup: () => deleteOldDeliveries(db, new Date()),
+  },
 };
 
 export const inngest = new Inngest({
@@ -82,6 +104,15 @@ export const jobs = {
         at: new Date().toISOString(),
       },
     });
+  },
+  /** Day 26: send stored webhook deliveries (a test ping, or the host's Retry). */
+  webhookDeliver(deliveryIds: string[]) {
+    return Promise.all(
+      // A Retry reuses the delivery id, so the event id gets the time too: Inngest would drop a repeat id.
+      deliveryIds.map((deliveryId) =>
+        dispatch({ name: WEBHOOK_DELIVER, data: { deliveryId }, id: `webhook-${deliveryId}-${Date.now()}` }),
+      ),
+    );
   },
   /** After a host connects Google Calendar: copy their upcoming bookings into it. */
   calendarConnected(userId: string) {

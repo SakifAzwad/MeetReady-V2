@@ -73,6 +73,11 @@ export function parseEnv(source: Record<string, string | undefined>) {
        * AI (Day 18): Groq's API key. Unset = AI features are off: no brief is written and
        * nothing calls a model (local dev, CI, E2E). AI_MODEL picks the Groq model.
        */
+      /**
+       * Day 26, E2E ONLY: lets webhooks reach private networks (the local fake receiver on
+       * 127.0.0.1, over http). Production never sets it: that would undo the SSRF protection.
+       */
+      WEBHOOK_ALLOW_PRIVATE: emptyAsUnset(z.string().min(1).optional()),
       GROQ_API_KEY: emptyAsUnset(z.string().min(1).optional()),
       AI_MODEL: emptyAsUnset(z.string().min(1).default("openai/gpt-oss-120b")),
       /**

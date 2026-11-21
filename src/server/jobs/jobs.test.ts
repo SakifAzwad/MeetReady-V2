@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Inngest } from "inngest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bookingBriefs, bookings } from "@/db/schema";
+import { bookingBriefs, bookings, webhookDeliveries, webhookEndpoints } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { APP, book, connectCalendar, SECRET, setupHost } from "@/test/booking-fixture";
 import { createTestDb } from "@/test/db";
@@ -12,9 +12,18 @@ import { createMemorySender, type EmailMessage, type EmailSender } from "../emai
 import { cancelBookingAsHost, rescheduleBookingByToken } from "../manage-booking";
 import { reminderEventId } from "../reminders";
 import {
+  attemptDelivery,
+  deleteOldDeliveries,
+  queueBookingDeliveries,
+  sealSecret,
+} from "../webhooks/deliveries";
+import { newWebhookSecret } from "../webhooks/signing";
+import type { postWebhook } from "../webhooks/transport";
+import {
   BOOKING_CHANGED,
   CALENDAR_SYNC,
   REMINDER_DUE,
+  WEBHOOK_DELIVER,
   type BookingChangedData,
   type JobEvent,
 } from "./events";
@@ -51,7 +60,14 @@ beforeEach(async () => {
   await setupHost(db);
 }, 30_000);
 
-function makeDeps(opts: { attempt?: (id: string) => Promise<SyncAttempt>; sender?: EmailSender } = {}) {
+function makeDeps(
+  opts: {
+    attempt?: (id: string) => Promise<SyncAttempt>;
+    sender?: EmailSender;
+    /** Day 26: the webhook receiver's answer (default: 200). */
+    post?: typeof postWebhook;
+  } = {},
+) {
   const sender = opts.sender ?? createMemorySender();
   const report = vi.fn();
   const attemptSync = vi.fn(opts.attempt ?? (async () => ({ outcome: "synced" }) as SyncAttempt));
@@ -65,6 +81,22 @@ function makeDeps(opts: { attempt?: (id: string) => Promise<SyncAttempt>; sender
     report,
     now: () => NOW,
     briefs: { prepare: prepareBrief },
+    webhooks: {
+      queue: (change) => queueBookingDeliveries(db, change, NOW),
+      attempt: (id, options) =>
+        attemptDelivery(
+          {
+            db,
+            secret: SECRET,
+            now: () => NOW,
+            allowPrivate: false,
+            post: opts.post ?? (async () => ({ status: 200, body: "", ms: 5 })),
+          },
+          id,
+          options,
+        ),
+      cleanup: () => deleteOldDeliveries(db, NOW),
+    },
   };
   return { deps, sender, report, attemptSync, prepareBrief };
 }
@@ -114,7 +146,14 @@ describe("booking-changed", () => {
 
     const result = await onBookingChanged(changed(r.booking.id), run.steps, deps);
 
-    expect(result).toEqual({ calendar: "synced", brief: "no_content", guest: "sent", host: "sent" });
+    // No webhook endpoints: nothing queued (Day 26).
+    expect(result).toEqual({
+      calendar: "synced",
+      brief: "no_content",
+      guest: "sent",
+      host: "sent",
+      webhooks: 0,
+    });
     expect(attemptSync).toHaveBeenCalledWith(r.booking.id);
     const mail = sender as ReturnType<typeof createMemorySender>;
     expect(recipients(mail.sent)).toEqual(["ada@example.com", "sakif@example.com"]);
@@ -427,7 +466,7 @@ describe("inline fallback", () => {
 });
 
 describe("Inngest functions", () => {
-  it("registers five functions; the two that touch Google share one queue per booking", () => {
+  it("registers seven functions; the two that touch Google share one queue per booking", () => {
     const { deps } = makeDeps();
     const fns = createJobFunctions(new Inngest({ id: "test", isDev: true }), deps);
     const byId = Object.fromEntries(fns.map((f) => [f.opts.id, f.opts]));
@@ -437,9 +476,58 @@ describe("Inngest functions", () => {
       "calendar-sync",
       "reminder-send",
       "reminder-sweep",
+      "webhook-cleanup",
+      "webhook-deliver",
     ]);
     expect(byId["booking-changed"]!.concurrency).toEqual(byId["calendar-sync"]!.concurrency);
+    expect(byId["webhook-deliver"]!.retries).toBe(8);
+    expect(byId["webhook-cleanup"]!.triggers).toEqual([{ cron: "23 3 * * *" }]);
     expect(byId["booking-changed"]!.concurrency).toMatchObject({ limit: 1, scope: "env" });
     expect(byId["reminder-sweep"]!.triggers).toEqual([{ cron: "*/15 * * * *" }]);
+  });
+});
+
+describe("webhooks in the jobs (Day 26)", () => {
+  async function subscribe() {
+    const [e] = await db
+      .insert(webhookEndpoints)
+      .values({
+        userId: "host",
+        url: "https://hooks.example.com/x",
+        events: ["booking.created"],
+        secretEncrypted: "pending",
+      })
+      .returning({ id: webhookEndpoints.id });
+    await db
+      .update(webhookEndpoints)
+      .set({ secretEncrypted: sealSecret(newWebhookSecret(), e!.id, SECRET) })
+      .where(eq(webhookEndpoints.id, e!.id));
+  }
+
+  it("booking-changed queues one delivery job per endpoint; Inngest sees ids, never the guest", async () => {
+    await subscribe();
+    const r = await book(db, START, LONG_AGO);
+    const { deps } = makeDeps();
+    const run = durable();
+    const result = await onBookingChanged(changed(r.booking.id), run.steps, deps);
+    expect(result.webhooks).toBe(1);
+    const deliver = run.sent.filter((e) => e.name === WEBHOOK_DELIVER);
+    expect(deliver).toHaveLength(1);
+    expect(deliver[0]!.data).toEqual({ deliveryId: expect.stringMatching(/^msg_/) });
+    // What Inngest stores (step results and events): no names, no addresses.
+    expect(JSON.stringify([...run.memo.values(), ...run.sent])).not.toMatch(/Ada|@example/);
+    // A retry of the whole run queues nothing new.
+    await onBookingChanged(changed(r.booking.id), durable().steps, deps);
+    expect(await db.select().from(webhookDeliveries)).toHaveLength(1);
+  });
+
+  it("inline (no Inngest): one try, and a failure is recorded as failed for the host's Retry", async () => {
+    await subscribe();
+    const r = await book(db, START, LONG_AGO);
+    const { deps, report } = makeDeps({ post: async () => ({ status: 503, body: "", ms: 1 }) });
+    await runInline({ name: BOOKING_CHANGED, data: changed(r.booking.id) }, deps);
+    const [d] = await db.select().from(webhookDeliveries);
+    expect(d).toMatchObject({ status: "failed", attempts: 1, lastStatusCode: 503 });
+    expect(report).not.toHaveBeenCalled(); // a receiver's 503 isn't our error
   });
 });

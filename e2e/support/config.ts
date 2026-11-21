@@ -18,6 +18,10 @@ export const FAKE_GOOGLE_URL = `http://localhost:${FAKE_GOOGLE_PORT}`;
 export const FAKE_GROQ_PORT = 3102;
 export const FAKE_GROQ_URL = `http://localhost:${FAKE_GROQ_PORT}`;
 
+/** A fake webhook receiver (e2e/support/fake-webhooks.mjs, Day 26). 127.0.0.1: a private address on purpose. */
+export const FAKE_WEBHOOKS_PORT = 3103;
+export const FAKE_WEBHOOKS_URL = `http://127.0.0.1:${FAKE_WEBHOOKS_PORT}`;
+
 /** Wiped and re-migrated on every run (e2e/support/prepare-db.mts refuses names without "e2e"). */
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/meetready_e2e";

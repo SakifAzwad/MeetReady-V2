@@ -8,6 +8,8 @@ import {
   FAKE_GOOGLE_URL,
   FAKE_GROQ_PORT,
   FAKE_GROQ_URL,
+  FAKE_WEBHOOKS_PORT,
+  FAKE_WEBHOOKS_URL,
 } from "./e2e/support/config";
 
 /*
@@ -65,6 +67,13 @@ export default defineConfig({
       reuseExistingServer: false,
       env: { FAKE_GROQ_PORT: String(FAKE_GROQ_PORT) },
     },
+    // A fake webhook receiver (Day 26): records what MeetReady POSTs, answers what a test asks.
+    {
+      command: "node e2e/support/fake-webhooks.mjs",
+      url: `${FAKE_WEBHOOKS_URL}/__fake/health`,
+      reuseExistingServer: false,
+      env: { FAKE_WEBHOOKS_PORT: String(FAKE_WEBHOOKS_PORT) },
+    },
     {
       command: [
         "node e2e/support/prepare-db.mts",
@@ -102,6 +111,8 @@ export default defineConfig({
         GROQ_API_KEY: "e2e-fake-key",
         GROQ_BASE_URL: `${FAKE_GROQ_URL}/openai/v1`,
         AI_MODEL: "",
+        // Day 26: the fake receiver is on 127.0.0.1 over http, which production refuses (SSRF).
+        WEBHOOK_ALLOW_PRIVATE: "1",
       },
     },
   ],

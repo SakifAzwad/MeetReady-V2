@@ -16,6 +16,7 @@ export const BOOKING_CHANGED = "booking/changed";
 export const CALENDAR_SYNC = "booking/calendar.sync";
 export const CALENDAR_CONNECTED = "calendar/connected";
 export const REMINDER_DUE = "booking/reminder.due";
+export const WEBHOOK_DELIVER = "webhook/deliver";
 
 /** A booking was made, moved or cancelled. */
 export const bookingChangedData = z.object({
@@ -43,7 +44,11 @@ export const reminderDueData = z.object({
   remindAt: instant,
 });
 
+/** Day 26: send one stored webhook delivery (its payload is in our database, not here). */
+export const webhookDeliverData = z.object({ deliveryId: z.string().regex(/^msg_[A-Za-z0-9_-]+$/) });
+
 export type BookingChangedData = z.infer<typeof bookingChangedData>;
+export type WebhookDeliverData = z.infer<typeof webhookDeliverData>;
 export type CalendarSyncData = z.infer<typeof calendarSyncData>;
 export type CalendarConnectedData = z.infer<typeof calendarConnectedData>;
 export type ReminderDueData = z.infer<typeof reminderDueData>;
@@ -52,4 +57,5 @@ export type JobEvent =
   | { name: typeof BOOKING_CHANGED; data: BookingChangedData; id?: string }
   | { name: typeof CALENDAR_SYNC; data: CalendarSyncData; id?: string }
   | { name: typeof CALENDAR_CONNECTED; data: CalendarConnectedData; id?: string }
-  | { name: typeof REMINDER_DUE; data: ReminderDueData; id?: string };
+  | { name: typeof REMINDER_DUE; data: ReminderDueData; id?: string }
+  | { name: typeof WEBHOOK_DELIVER; data: WebhookDeliverData; id?: string };

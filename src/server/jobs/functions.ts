@@ -9,6 +9,8 @@ import {
   calendarSyncData,
   REMINDER_DUE,
   reminderDueData,
+  WEBHOOK_DELIVER,
+  webhookDeliverData,
 } from "./events";
 import {
   onBookingChanged,
@@ -16,6 +18,8 @@ import {
   onCalendarSync,
   onReminderDue,
   onReminderSweep,
+  onWebhookCleanup,
+  onWebhookDeliver,
   type JobDeps,
   type Steps,
 } from "./handlers";
@@ -31,6 +35,14 @@ const bookingChanged = eventType(BOOKING_CHANGED, { schema: bookingChangedData }
 const calendarSync = eventType(CALENDAR_SYNC, { schema: calendarSyncData });
 const calendarConnected = eventType(CALENDAR_CONNECTED, { schema: calendarConnectedData });
 const reminderDue = eventType(REMINDER_DUE, { schema: reminderDueData });
+const webhookDeliver = eventType(WEBHOOK_DELIVER, { schema: webhookDeliverData });
+
+/**
+ * Day 26: tries per webhook delivery. Inngest's gaps between tries grow, so
+ * 8 retries cover a receiver that's down for a few hours; after that the
+ * delivery is marked failed and the host can press Retry.
+ */
+export const WEBHOOK_RETRIES = 8;
 
 /**
  * One booking's jobs take turns, across both functions that touch Google
@@ -122,6 +134,26 @@ export function createJobFunctions(inngest: Inngest, deps: JobDeps) {
         onFailure: reportFinal("reminders"),
       },
       ({ event, step }) => onReminderDue(event.data, steps(step), deps),
+    ),
+    inngest.createFunction(
+      {
+        id: "webhook-deliver",
+        triggers: [webhookDeliver],
+        retries: WEBHOOK_RETRIES,
+        onFailure: reportFinal("webhooks"),
+      },
+      ({ event, step, attempt }) =>
+        onWebhookDeliver(event.data, steps(step), deps, { finalAttempt: attempt >= WEBHOOK_RETRIES }),
+    ),
+    inngest.createFunction(
+      {
+        id: "webhook-cleanup",
+        // Daily, at an odd minute (not on the hour, when every cron in the world wakes up).
+        triggers: [cron("23 3 * * *")],
+        retries: 2,
+        onFailure: reportFinal("webhooks"),
+      },
+      ({ step }) => onWebhookCleanup(steps(step), deps),
     ),
   ];
 }

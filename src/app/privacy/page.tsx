@@ -56,6 +56,13 @@ export default function PrivacyPage() {
             assistant you allowed, what it may do, and its sign-in tokens (the long-lived ones only in a
             scrambled, hashed form). Disconnect it on your dashboard at any time: it stops working at once.
           </li>
+          <li id="webhooks">
+            <strong>If you add a webhook:</strong> when a booking is made, moved or cancelled, MeetReady sends
+            its details to the address you chose: the time, the meeting type, and the guest&apos;s name, email
+            and timezone (never their notes, answers or a cancellation reason). What happens there is up to
+            you and that service. Each delivery is kept for 30 days so you can see what was sent, then
+            deleted. The signing secret is stored encrypted.
+          </li>
         </ul>
       </LegalSection>
 
@@ -99,6 +106,11 @@ export default function PrivacyPage() {
             host asks it about your meeting. A host can also book, move or cancel a meeting with you through
             it: you&apos;ll get an email from MeetReady saying the host did it, and for a booked or moved
             meeting you can reschedule or cancel from there.
+          </li>
+          <li>
+            <strong>If the host uses webhooks:</strong> your booking&apos;s time, your name, email and
+            timezone can be sent to a service the host connected (such as their calendar tool or CRM), when
+            you book, move or cancel. Your notes and answers aren&apos;t sent that way.
           </li>
           <li>
             <strong>After the meeting:</strong> the host can mark that you didn&apos;t show up. It&apos;s a

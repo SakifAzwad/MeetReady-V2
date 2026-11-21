@@ -76,6 +76,11 @@ export const LIMITS = {
    * with "moved" emails.
    */
   mcp_change_host: { tokens: 20, windowMs: 24 * 60 * MINUTE },
+  /**
+   * Day 26: "Send test" and "Retry" on the Webhooks page, per host, together. Each one makes our
+   * server POST to a URL the host chose: generous for a person, a wall for a script.
+   */
+  webhook_send_host: { tokens: 20, windowMs: 10 * MINUTE },
   /** Self-registered MCP clients per IP, only when MCP_ALLOW_DCR is on (each one is a database row). */
   mcp_register_ip: { tokens: 10, windowMs: 60 * MINUTE },
 } as const satisfies Record<string, Policy>;

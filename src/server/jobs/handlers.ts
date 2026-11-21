@@ -5,14 +5,17 @@ import { audiencesFor, composeChangeEmail, type Audience, type BookingChange } f
 import type { EmailSender } from "../email/sender";
 import { getBookingDetails, readManageToken } from "../manage-booking";
 import { findDueReminders, reminderEventId, sendReminder } from "../reminders";
+import type { AttemptOutcome, Change } from "../webhooks/deliveries";
 import {
   CALENDAR_SYNC,
   REMINDER_DUE,
+  WEBHOOK_DELIVER,
   type BookingChangedData,
   type CalendarConnectedData,
   type CalendarSyncData,
   type JobEvent,
   type ReminderDueData,
+  type WebhookDeliverData,
 } from "./events";
 
 /*
@@ -53,6 +56,13 @@ export type JobDeps = {
   now: () => Date;
   /** Day 18: writes the AI meeting brief for a new booking (never throws; see ai/briefs.ts). */
   briefs: { prepare: (bookingId: string) => Promise<BriefOutcome> };
+  /** Day 26: signed webhooks (src/server/webhooks/deliveries.ts). */
+  webhooks: {
+    /** Writes one delivery per subscribed endpoint (safe to repeat); returns their ids. */
+    queue: (change: Change) => Promise<string[]>;
+    attempt: (deliveryId: string, options: { finalAttempt: boolean }) => Promise<AttemptOutcome>;
+    cleanup: () => Promise<number>;
+  };
 };
 
 /** Thrown inside a step to make Inngest try again later. */
@@ -99,13 +109,38 @@ export async function onBookingChanged(data: BookingChangedData, steps: Steps, d
     const host = await steps.run("email-host", () => sendChangeEmail(deps, data, "host"));
     return { brief, host };
   };
-  const [guest, hostResult] = await Promise.allSettled([
+  // Day 26: webhooks, side by side with the emails (a slow receiver never holds up an email, and a
+  // failing email never holds up a webhook). This step only WRITES the deliveries and queues one
+  // job each; sending, with its own retries, happens in webhook-deliver.
+  const webhooks = async () => {
+    const ids = await steps.run("webhooks", () => deps.webhooks.queue(data));
+    if (ids && ids.length > 0) {
+      await steps.sendEvent(
+        "webhooks-deliver",
+        ids.map((deliveryId) => ({
+          name: WEBHOOK_DELIVER,
+          data: { deliveryId },
+          id: `webhook-${deliveryId}`,
+        })),
+      );
+    }
+    return ids?.length ?? 0;
+  };
+  const [guest, hostResult, hooks] = await Promise.allSettled([
     steps.run("email-guest", () => sendChangeEmail(deps, data, "guest")),
     hostSide(),
+    webhooks(),
   ]);
   if (guest.status === "rejected") throw guest.reason;
   if (hostResult.status === "rejected") throw hostResult.reason;
-  return { calendar, brief: hostResult.value.brief, guest: guest.value, host: hostResult.value.host };
+  if (hooks.status === "rejected") throw hooks.reason;
+  return {
+    calendar,
+    brief: hostResult.value.brief,
+    guest: guest.value,
+    host: hostResult.value.host,
+    webhooks: hooks.value,
+  };
 }
 
 export type ChangeEmailOutcome = "sent" | "superseded" | "not_needed" | "missing";
@@ -221,4 +256,30 @@ export async function onReminderDue(data: ReminderDueData, steps: Steps, deps: J
       deps.now(),
     ),
   );
+}
+
+// ─── Webhooks (Day 26) ──────────────────────────────────────────────────────────
+
+/**
+ * One try at one stored delivery. A failure that can pass (a 5xx, a timeout)
+ * throws inside the step, so Inngest tries again later with growing gaps; on
+ * the last allowed try it's recorded as failed instead, and the host's Retry
+ * button is left. Inline (no Inngest) every try is the last one.
+ */
+export async function onWebhookDeliver(
+  data: WebhookDeliverData,
+  steps: Steps,
+  deps: JobDeps,
+  { finalAttempt }: { finalAttempt: boolean },
+) {
+  return steps.run("deliver", async () => {
+    const outcome = await deps.webhooks.attempt(data.deliveryId, { finalAttempt });
+    if (outcome === "retry") throw new RetryLaterError("Webhook receiver failed; will retry");
+    return outcome;
+  });
+}
+
+/** Daily: delivery rows hold guests' names and emails, so they're deleted after 30 days. */
+export async function onWebhookCleanup(steps: Steps, deps: JobDeps) {
+  return steps.run("delete-old", () => deps.webhooks.cleanup());
 }

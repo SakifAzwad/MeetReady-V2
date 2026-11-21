@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 25)
+# Handoff: starting a new chat (after Day 26, Part A)
 
-Read this first in a new chat. It replaces the long Days 1–25 conversations. Details live in `docs/day-01.md` …
-`docs/day-25.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–26 conversations. Details live in `docs/day-01.md` …
+`docs/day-26.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -167,8 +167,24 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
     for its host; anyone else's `move` is ignored. Guest
     email "Sakif moved your meeting", no host receipt (by hand). No rate limit on the action (session-only, like
     Cancel).
-- **Numbers:** 738 unit tests + 39 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
-  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 13 migrations (0000–0012).
+  - Signed webhooks (Day 26, Part A): `src/server/webhooks/`. Standard Webhooks headers (`webhook-id` = `msg_…`,
+    `webhook-timestamp`, `webhook-signature: v1,<base64 HMAC-SHA256(key, id.ts.body)>`, several when rotating);
+    `whsec_` secrets sealed with `src/server/seal.ts` (label `meetready/webhook-secret/v1`, endpoint id as AAD; the
+    manage token uses the same helper). Tables `webhook_endpoints` (events = enum array, previous secret + expiry
+    for a 24 h rotation overlap) and `webhook_deliveries` (payload jsonb, `dedupe_key` endpoint:booking:sequence,
+    status pending/delivered/failed, attempts, last code/error). booking-changed runs a `webhooks` step beside the
+    emails: `queueBookingDeliveries` (idempotent) → `webhook/deliver { deliveryId }` per row. `webhook-deliver`
+    (8 retries; `attempt >= WEBHOOK_RETRIES` = final): 2xx delivered; 5xx/408/429/timeout retry (throws in the
+    step); other 4xx, 3xx, blocked address = failed. Inline = one try, failure recorded. `webhook-cleanup` cron
+    `23 3 * * *` deletes rows older than 30 days. SSRF: `checkWebhookUrl` (https, 443, no creds, no local names,
+    IP literals public) + `resolvesPublicly` on save; `publicOnlyLookup` in an undici Agent on every connection
+    (`transport.ts`: no redirects, 10 s, 1 KB kept). `WEBHOOK_ALLOW_PRIVATE` = E2E only (fake receiver
+    `e2e/support/fake-webhooks.mjs` on 127.0.0.1:3103). Page `/dashboard/webhooks` (account menu): add (≤ 5),
+    secret once, Send test / Retry (`webhook_send_host` 20/10 min), Rotate, Delete, last 20 deliveries with
+    payload. Payload: times, type, location, meetUrl, guest name/email/tz, changedBy, throughAssistant; never
+    notes, answers or a cancel reason. Receiver guide: `docs/webhooks.md`; runbook step 18.
+- **Numbers:** 767 unit tests + 41 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 14 migrations (0000–0013).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -177,11 +193,15 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 25 Part B (no migration). Try Move on the live site with his own address as the guest.
-2. **Next day: Sakif picks from `docs/backlog.md`:** the theme switcher (System / Light / Dark; before sharing with
-   reviewers), the Claude Connectors Directory (after a domain + Google verification; no domain yet, Nov 2026),
-   signed webhooks, or an embeddable widget. Opinions first, as always.
-3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (accepted for now).
+1. **Sakif:** push Day 26 Part A (migration 0013), then runbook step 18 (webhook.site).
+2. **Day 26 Part B: the theme switcher** (agreed plan): System / Light / Dark, System by default, saved in
+   `localStorage`; a tiny inline script in `<head>` sets `data-theme` on `<html>` before first paint (no flash,
+   static pages stay static); the dark variables, Tailwind's `dark:` variant, `color-scheme` and `theme-color`
+   follow it. Placed in the dashboard account menu, the landing page footer and a small icon button on the
+   booking page (reviewers see those without signing in).
+3. Then: the embeddable booking widget, or the domain day once Sakif buys one (setup, emails to every guest,
+   Google verification).
+4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
 
@@ -338,4 +358,8 @@ Read this first in a new chat. It replaces the long Days 1–25 conversations. D
   chart library.
 - **Shared components with a second caller** (Day 25 story): pass the difference in (the widget's `Mover`), don't
   import the caller's code into the shared component.
+- **Validate where the action happens** (Day 26): SSRF checks at save time AND inside the HTTP client's DNS lookup
+  (rebinding). Never follow redirects from a URL a user typed.
+- **"After reload, count = 0" can pass on a page that hasn't rendered yet** (Day 26 story): wait for the element
+  (`toBeVisible` in a `toPass` loop), and check "gone" with something positive that should be there instead.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

@@ -634,6 +634,83 @@ export const calendarConnections = pgTable(
   ],
 );
 
+// ─── Webhooks (Day 26) ──────────────────────────────────────────────────────────
+
+/** The booking events a host can subscribe an endpoint to. ("ping" is only ever a test, never a subscription.) */
+export const webhookEvent = pgEnum("webhook_event", [
+  "booking.created",
+  "booking.rescheduled",
+  "booking.cancelled",
+]);
+export const webhookDeliveryStatus = pgEnum("webhook_delivery_status", ["pending", "delivered", "failed"]);
+
+/**
+ * A host's webhook endpoint: where MeetReady POSTs signed booking events.
+ * The signing secret must be read back to sign each delivery, so it's
+ * encrypted (seal.ts, label "meetready/webhook-secret/v1", the endpoint id as
+ * associated data), never hashed. During a rotation the previous secret keeps
+ * signing too until `previousSecretExpiresAt` (Standard Webhooks allows
+ * several signatures), so receivers can switch without downtime.
+ */
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    url: text().notNull(),
+    events: webhookEvent().array().notNull(),
+    secretEncrypted: text().notNull(),
+    previousSecretEncrypted: text(),
+    previousSecretExpiresAt: timestamp({ withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index().on(t.userId),
+    check("webhook_endpoints_events_check", sql`cardinality(${t.events}) > 0`),
+    // A previous secret always says until when; none, no date.
+    check(
+      "webhook_endpoints_previous_secret_check",
+      sql`(${t.previousSecretEncrypted} is null) = (${t.previousSecretExpiresAt} is null)`,
+    ),
+  ],
+);
+
+/**
+ * One event for one endpoint, and how sending it went. The payload is stored
+ * HERE, not in the job: Inngest only gets this row's id, so a retry resends
+ * exactly the same bytes (and the same webhook-id), and no guest details are
+ * copied into Inngest (the Day 17 rule). Deleted after 30 days by a daily job.
+ */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    /** "msg_…": also the `webhook-id` header, which receivers use to drop duplicates. */
+    id: text().primaryKey(),
+    endpointId: uuid()
+      .notNull()
+      .references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+    /** "booking.created" … or "ping" (Send test). */
+    event: text().notNull(),
+    /** One delivery per endpoint per booking change: a retried job step can't queue it twice. Null for pings. */
+    dedupeKey: text().unique("webhook_deliveries_dedupe_key_unique"),
+    payload: jsonb().notNull(),
+    status: webhookDeliveryStatus().notNull().default("pending"),
+    attempts: integer().notNull().default(0),
+    lastStatusCode: integer(),
+    /** What went wrong on the last try, for the host (a status line or a short reason, never a stack). */
+    lastError: text(),
+    lastAttemptAt: timestamp({ withTimezone: true }),
+    deliveredAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.endpointId, t.createdAt), index().on(t.createdAt)],
+);
+
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+
 export type User = typeof user.$inferSelect;
 export type EventType = typeof eventTypes.$inferSelect;
 export type NewEventType = typeof eventTypes.$inferInsert;

@@ -1,9 +1,17 @@
-import { BOOKING_CHANGED, CALENDAR_CONNECTED, CALENDAR_SYNC, REMINDER_DUE, type JobEvent } from "./events";
+import {
+  BOOKING_CHANGED,
+  CALENDAR_CONNECTED,
+  CALENDAR_SYNC,
+  REMINDER_DUE,
+  WEBHOOK_DELIVER,
+  type JobEvent,
+} from "./events";
 import {
   onBookingChanged,
   onCalendarConnected,
   onCalendarSync,
   onReminderDue,
+  onWebhookDeliver,
   type JobDeps,
   type Steps,
 } from "./handlers";
@@ -23,6 +31,7 @@ import {
  *    once. So a failed Google write gets one immediate second try.
  *  - Sleeps don't wait. Only reminders sleep, and reminders come from the cron
  *    sweep, which only Inngest runs: without Inngest there are no reminders.
+ *  - Webhooks (Day 26) get one try each, and no 30-day clean-up (a cron too).
  */
 
 export function areaFor(name: JobEvent["name"]): string {
@@ -35,6 +44,8 @@ export function areaFor(name: JobEvent["name"]): string {
       return "calendar-backfill";
     case REMINDER_DUE:
       return "reminders";
+    case WEBHOOK_DELIVER:
+      return "webhooks";
   }
 }
 
@@ -72,6 +83,10 @@ export async function runInline(event: JobEvent, deps: JobDeps): Promise<void> {
         break;
       case REMINDER_DUE:
         await onReminderDue(event.data, steps, deps);
+        break;
+      case WEBHOOK_DELIVER:
+        // One try only: a failure is recorded as failed, and the host can press Retry.
+        await onWebhookDeliver(event.data, steps, deps, { finalAttempt: true });
         break;
     }
   } catch (error) {

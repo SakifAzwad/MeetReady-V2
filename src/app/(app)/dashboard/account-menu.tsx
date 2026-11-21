@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, LogOut, Settings2 } from "lucide-react";
+import { ExternalLink, LogOut, Settings2, Webhook } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DropdownMenu } from "radix-ui";
@@ -69,6 +69,13 @@ export function AccountMenu({
             <Link href="/dashboard/availability">
               <Settings2 className="size-4" />
               Hours and timezone
+            </Link>
+          </DropdownMenu.Item>
+          {/* Day 26: a developer setting, so here rather than in the main nav. */}
+          <DropdownMenu.Item asChild className={item}>
+            <Link href="/dashboard/webhooks">
+              <Webhook className="size-4" />
+              Webhooks
             </Link>
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="bg-border my-1 h-px" />

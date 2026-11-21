@@ -306,7 +306,7 @@ warning that says so.
      protected. Opening `/api/inngest` in a browser answers `{"message":"Unauthorized"}`: expected, SDK v4 only
      answers requests Inngest has signed.
 3. **Deploy** (push Day 17). Migration 0007 runs first in the build.
-4. **Inngest dashboard → Apps:** `meetready` with 5 functions (`booking-changed`, `calendar-sync`,
+4. **Inngest dashboard → Apps:** `meetready` with 5 functions (7 since Day 26, step 18) (`booking-changed`, `calendar-sync`,
    `calendar-backfill`, `reminder-sweep`, `reminder-send`), each with its failure handler. `reminder-sweep` shows a
    run every 15 minutes, normally with nothing to do.
 5. **Check it works** (with your own email: Resend's test sender only reaches you):
@@ -445,6 +445,31 @@ a Client ID Metadata Document, so there's no client to create by hand. Without t
 9. **ChatGPT (optional, if your plan has developer mode):** Settings → Apps → Advanced settings → **Developer
    mode** on → **Create** → URL `https://meetreadyv2.vercel.app/api/mcp`, authentication **OAuth** → the same
    consent page. OpenAI's docs disagree on which plans can use it; skip this if you don't see the option.
+
+## 18. Webhooks, added on Day 26
+
+Nothing to set in Vercel. `WEBHOOK_ALLOW_PRIVATE` is for E2E only: **never set it on Vercel** (it turns off the
+SSRF protection).
+
+1. **Deploy** (push Day 26). Migration 0013 runs first in the build: two new tables (`webhook_endpoints`,
+   `webhook_deliveries`), nothing changed in existing ones.
+2. **Inngest dashboard → Apps:** `meetready` now has 7 functions: the 5 from step 15.4 plus `webhook-deliver`
+   and `webhook-cleanup` (daily at 03:23 UTC). If they're missing, **Apps → Sync app** (step 15).
+3. **Try it with a free test receiver:** open <https://webhook.site> and copy "Your unique URL" (https).
+   1. Dashboard → account menu → **Webhooks** → paste the URL → **Add endpoint**. Copy the `whsec_…` secret it
+      shows once.
+   2. **Send test:** within a few seconds webhook.site shows a POST with `{"type":"ping",…}` and the three
+      headers `webhook-id`, `webhook-timestamp`, `webhook-signature`. The delivery shows **Delivered (200)**.
+   3. Book yourself on your booking page: a `booking.created` arrives with the time, the meeting type and the
+      guest's name and email (no notes).
+   4. **Check a signature** (optional): `docs/webhooks.md` has a 10-line Node script; paste the secret, the
+      three headers and the body.
+   5. **Rotate secret**: the next test carries two signatures (`v1,… v1,…`) for 24 hours.
+   6. **Delete** the endpoint when done (webhook.site URLs are public).
+4. **If a delivery fails:** the page shows the status code or reason ("No answer within 10 seconds",
+   "Redirects aren't followed"). Inngest retries 5xx, 408, 429 and timeouts with growing gaps (8 retries), then
+   marks it failed: **Retry** sends the same message again. Inngest → Runs → `webhook-deliver` shows each try.
+   Sentry (tag `webhooks`) only gets unexpected errors, not a receiver's 500.
 
 ## Afterwards: how a change ships
 

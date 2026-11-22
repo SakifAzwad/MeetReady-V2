@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DropdownMenu } from "radix-ui";
 import { useState } from "react";
+import { ThemeMenuItems } from "@/components/theme/theme-controls";
 import { UserAvatar } from "@/components/user-avatar";
 import { authClient } from "@/lib/auth-client";
 
@@ -78,6 +79,8 @@ export function AccountMenu({
               Webhooks
             </Link>
           </DropdownMenu.Item>
+          <DropdownMenu.Separator className="bg-border my-1 h-px" />
+          <ThemeMenuItems itemClassName={item} />
           <DropdownMenu.Separator className="bg-border my-1 h-px" />
           <DropdownMenu.Item
             className={item}

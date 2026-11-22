@@ -1,4 +1,4 @@
-# Handoff: starting a new chat (after Day 26, Part A)
+# Handoff: starting a new chat (after Day 26)
 
 Read this first in a new chat. It replaces the long Days 1–26 conversations. Details live in `docs/day-01.md` …
 `docs/day-26.md`; the plan lives in `docs/backlog.md`.
@@ -183,7 +183,16 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
     secret once, Send test / Retry (`webhook_send_host` 20/10 min), Rotate, Delete, last 20 deliveries with
     payload. Payload: times, type, location, meetUrl, guest name/email/tz, changedBy, throughAssistant; never
     notes, answers or a cancel reason. Receiver guide: `docs/webhooks.md`; runbook step 18.
-- **Numbers:** 767 unit tests + 41 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  - Theme switcher (Day 26, Part B): System / Light / Dark. `src/lib/theme.ts` = choices, `THEME_COLORS`, and
+    `THEME_SCRIPT` (inline in `<head>` from `layout.tsx`, `suppressHydrationWarning` on `<html>`): a saved
+    `"light"`/`"dark"` in localStorage key `theme` → `data-theme` on `<html>` before first paint, theme-color
+    metas updated on DOMContentLoaded. System = no attribute, nothing saved; CSS follows the device.
+    `globals.css`: `@custom-variant dark` (`[data-theme=dark]` or, with no attribute, the media query); dark
+    variables written once in `:root { @variant dark { … } }`; `color-scheme` per theme. Controls in
+    `src/components/theme/theme-controls.tsx` (store = `useSyncExternalStore`, server snapshot "system", `storage`
+    event for other tabs): `ThemeMenuItems` (account menu, stays open), `ThemeButtons` (landing footer,
+    `aria-pressed`), `ThemeMenuButton` (beside `PoweredBy` on public pages, non-modal menu).
+- **Numbers:** 771 unit tests + 44 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
   18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 14 migrations (0000–0013).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -193,15 +202,11 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 26 Part A (migration 0013), then runbook step 18 (webhook.site).
-2. **Day 26 Part B: the theme switcher** (agreed plan): System / Light / Dark, System by default, saved in
-   `localStorage`; a tiny inline script in `<head>` sets `data-theme` on `<html>` before first paint (no flash,
-   static pages stay static); the dark variables, Tailwind's `dark:` variant, `color-scheme` and `theme-color`
-   follow it. Placed in the dashboard account menu, the landing page footer and a small icon button on the
-   booking page (reviewers see those without signing in).
-3. Then: the embeddable booking widget, or the domain day once Sakif buys one (setup, emails to every guest,
-   Google verification).
-4. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
+1. **Sakif:** push Day 26 Part B (no migration), then runbook step 19 (two minutes in a browser).
+2. **Next day: Sakif picks from `docs/backlog.md`.** Candidates: the embeddable booking widget (inline and popup,
+   the last Phase 2 item), or the domain day once he buys one (setup, emails to every guest, Google
+   verification, then the Claude Connectors Directory). Opinions first, as always.
+3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
 
@@ -362,4 +367,9 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
   (rebinding). Never follow redirects from a URL a user typed.
 - **"After reload, count = 0" can pass on a page that hasn't rendered yet** (Day 26 story): wait for the element
   (`toBeVisible` in a `toPass` loop), and check "gone" with something positive that should be there instead.
+- **Theme (Day 26):** never read the theme on the server (it's in localStorage). Dark styles use the `dark:`
+  variant or the variables, never `@media (prefers-color-scheme)` directly, or an explicit Light/Dark choice won't
+  apply. A test that opens a menu on a streaming page waits for the content above it first (Day 26 story).
+- **Secret scanning (Day 26 story):** `whsec_…` in `signing.test.ts` is the spec's public test vector. GitHub flags
+  it as a Stripe secret; close such alerts as "Used in tests". Never commit a real one.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

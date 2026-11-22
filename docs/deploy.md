@@ -630,6 +630,26 @@ every delivery, at connect time, so a name that later points at a private addres
   Content** (not the formatted view), and copy the headers without extra spaces.
 - **Sentry, tag `webhooks`:** only unexpected errors. A receiver answering 500 is normal and isn't reported.
 
+## 19. Theme switcher, added on Day 26 (Part B)
+
+Nothing to set up: no migration, no variable. About 2 minutes after the deploy is **Ready**.
+
+1. **Landing page footer:** open <https://meetreadyv2.vercel.app> and scroll to the bottom. Under the columns, on
+   the right: three buttons, **System**, **Light** and **Dark**, with **System** marked. Click **Dark**: the whole page turns dark at once.
+2. **No flash:** reload the page (Ctrl+Shift+R). It comes up dark from the first frame, with no white blink first.
+   (That's the script in `<head>`: the choice lives in the browser, so the server can't render it.)
+3. **Beats the device:** with **Dark** chosen, switch Windows to light mode (Settings → Personalization →
+   Colors → **Light**): the site stays dark. Click **System**: it follows Windows again, and changes by itself
+   when you switch Windows back.
+4. **Dashboard:** click your avatar (account menu): a **Theme** group with the same three options, the current
+   one marked with a dot. Pick one: the page changes and the menu stays open.
+5. **Booking page:** open `/sakifazwad18/intro` in the same browser: it uses the same choice. At the bottom, next to
+   "Scheduling by MeetReady", a small sun-and-moon button opens the same three options.
+6. **Phone (optional):** in Chrome on Android, choose **Dark**: the browser's toolbar turns dark navy too.
+
+**If a page shows the wrong theme:** the choice is per browser (and per site address: a preview URL has its
+own). Clear it with **System**, or DevTools → Application → Local Storage → delete `theme`.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

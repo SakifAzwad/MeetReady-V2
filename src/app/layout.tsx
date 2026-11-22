@@ -4,6 +4,7 @@ import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import "@fontsource-variable/figtree";
 import "./globals.css";
 import { env } from "@/lib/env";
+import { THEME_COLORS, THEME_SCRIPT } from "@/lib/theme";
 
 /*
  * Icons and the link preview come from files next to this layout, by Next.js
@@ -23,14 +24,21 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f7fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1424" },
+    // The device's choice; a saved theme overrides both tags (src/lib/theme.ts).
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
   ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="h-full antialiased">
+    // suppressHydrationWarning: the head script may add data-theme before React hydrates.
+    // It applies to this element's own attributes only, not to anything inside it.
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        {/* Before the body is parsed, so a saved theme is there for the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );

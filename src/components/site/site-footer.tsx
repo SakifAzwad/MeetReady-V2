@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { ThemeButtons } from "@/components/theme/theme-controls";
 import { REPO_URL, V1_URL } from "@/lib/site";
 
 const COLUMNS = [
@@ -68,8 +69,11 @@ export function SiteFooter() {
           </nav>
         ))}
       </div>
-      <div className="text-muted-foreground mx-auto max-w-6xl border-t px-5 py-5 text-xs sm:px-8">
-        Made by Sakif Azwad in Chattogram. Times on this site are shown in your browser&apos;s timezone.
+      <div className="text-muted-foreground mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t px-5 py-5 text-xs sm:px-8">
+        <p>
+          Made by Sakif Azwad in Chattogram. Times on this site are shown in your browser&apos;s timezone.
+        </p>
+        <ThemeButtons />
       </div>
     </footer>
   );

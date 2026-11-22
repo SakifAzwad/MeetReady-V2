@@ -1,13 +1,12 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 26, Part A).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 26, Part B).
 
 ## Next, in order
 
-1. **Push Day 26 Part A** (signed webhooks; migration 0013 runs in the build), then runbook step 18.
-2. **Day 26 Part B: the theme switcher** (agreed plan in the handoff).
-3. **Then pick from the list below.** Candidates: the embeddable booking widget (the last Phase 2 item), or the
+1. **Push Day 26 Part B** (the theme switcher; no migration), then runbook step 19.
+2. **Then pick from the list below.** Candidates: the embeddable booking widget (the last Phase 2 item), or the
    domain day (setup, emails to every guest, Google verification) once a domain is bought.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
@@ -22,7 +21,8 @@ with an architecture diagram and screenshots retaken by a script (Day 23); `canc
 `reschedule_booking` over MCP, any of the host's upcoming bookings, with confirm forms (Day 24); Insights (rates,
 meetings per week, popular times, per type, grouped in the host's timezone) and no-show marking (Day 25, Part A);
 a Move button for the host, reusing the booking widget (Day 25, Part B); signed webhooks (Standard Webhooks
-format, retries through Inngest, SSRF protection at save and connect time, secret rotation) (Day 26, Part A).
+format, retries through Inngest, SSRF protection at save and connect time, secret rotation) (Day 26, Part A); a
+System / Light / Dark theme switcher with no flash (Day 26, Part B).
 
 ## Ideas from reviews, deferred
 
@@ -51,7 +51,6 @@ format, retries through Inngest, SSRF protection at save and connect time, secre
 | **Insights: export as CSV**                                                         | Day 25 | The table views already hold every number. A download route is small, but nobody has asked.                                                                                                                                                                                                                                                                                                          | When a host asks                                   |
 | **Insights by booking date** (when bookings are made, lead time)                    | Day 25 | Counted by meeting date today (decision in day-25.md). "How far ahead do guests book?" is a different question with a different chart, from `created_at`.                                                                                                                                                                                                                                            | With smart slot ranking                            |
 | **A no-show tool over MCP**                                                         | Day 25 | Claude can read `noShow` but not set it. Marking is one click on the Bookings page; a tool would be another write for little gain.                                                                                                                                                                                                                                                                   | If hosts ask                                       |
-| **A theme switcher** (System / Light / Dark, in the account menu)                   | Day 25 | The site follows the device's setting, which suits guests. But a reviewer on a light-mode laptop never sees the dark theme. Needs the choice saved in the browser, a tiny script in the page head that applies it before the first paint (no flash, static pages stay static), and the dark variables applied by it as well as by the media query. About half a day.                                 | Before sharing with reviewers                      |
 | **Move outside your own rules** (as the host)                                       | Day 25 | The Move button follows the same rules as a guest (hours, notice, buffers). A host moving a meeting to 7 PM must widen their hours first. An override needs its own confirm step and a decision on Google conflicts.                                                                                                                                                                                 | When a host asks                                   |
 | **Auto-disable a failing webhook endpoint** (as Stripe does after days of failures) | Day 26 | Today a failing endpoint keeps getting tries (8 per event, then failed) and the page says "Last delivery failed". Disabling needs a rule (how long, how many), an email to the host and a Re-enable button.                                                                                                                                                                                          | If an endpoint fails for days in production        |
 | **Edit an endpoint's events or URL**                                                | Day 26 | Delete and add again works (a new secret too). Editing the URL must re-run the SSRF checks; editing events is a small form.                                                                                                                                                                                                                                                                          | When a host asks                                   |

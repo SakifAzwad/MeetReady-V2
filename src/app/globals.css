@@ -1,6 +1,24 @@
 @import "tailwindcss";
 
 /*
+ * Dark mode (Day 26, Part B): an explicit choice wins, otherwise the device decides.
+ * The theme switcher puts data-theme="light" or "dark" on <html> only for an explicit
+ * choice (src/lib/theme.ts); with no attribute, prefers-color-scheme rules, so "System"
+ * needs no JavaScript and follows the device live. Both the dark variables below and
+ * Tailwind's dark: utilities use this one variant, so they can't disagree.
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+/*
  * MeetReady design tokens: "Daylight".
  *
  * Colour means time of day, nothing else: night, dawn, day, dusk. They draw
@@ -56,8 +74,19 @@
   --chart-3: #8590b0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Native parts (scrollbars, form controls, the page behind everything) follow the theme too. */
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root {
+  @variant dark {
     --band-day: #a9bfe0;
     --band-noon: #93acd4;
     --day: #26304d;

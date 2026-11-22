@@ -27,7 +27,7 @@ their own words, and the host can book or check meetings from Claude.
 - **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
   and evals against the real model. ([Day 18](docs/day-18.md))
 - **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
-  limits, and Sentry with a privacy scrubber. About 767 unit tests and 41 browser tests run in CI.
+  limits, and Sentry with a privacy scrubber. About 771 unit tests and 44 browser tests run in CI.
   ([Days 11–17](#design-notes))
 
 ## Screenshots
@@ -239,9 +239,10 @@ Each day of the build has its own write-up with the decisions, the reasons and t
   meetings per type, grouped in the host's timezone by Postgres; no-shows as a column with a check constraint;
   hand-built charts with validated colours, tooltips and table views; a Move button that reuses the booking widget
   in a host mode, with the slots API freeing a booking's own time only for its host.
-- [Day 26: Signed webhooks](docs/day-26.md): booking events POSTed in the Standard Webhooks format (HMAC
+- [Day 26: Signed webhooks and a theme switcher](docs/day-26.md): booking events POSTed in the Standard Webhooks format (HMAC
   signatures, timestamps, ids), retries through Inngest, SSRF protection when saved and at connect time (DNS
   rebinding), secrets encrypted with a 24-hour rotation overlap. For receivers: [docs/webhooks.md](docs/webhooks.md).
+  Then System / Light / Dark, applied before the first paint with no flash, on static pages too.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

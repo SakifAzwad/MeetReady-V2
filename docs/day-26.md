@@ -155,9 +155,126 @@ e2e/webhooks.spec.ts, e2e/support/fake-webhooks.mjs
 - **Lesson:** a comment that describes intent has to match what the code does. A concurrency key limits runs
   that share its value; ask what that value is.
 
+#### A secret scanner that found our test vector
+
+- **What happened:** after pushing Part A, GitHub emailed "Secrets detected: Stripe Webhook Signing Secret" in
+  `signing.test.ts`, line 9.
+- **What I did:** read it before acting. It was `whsec_MfKQ…`, the example secret printed in the Standard
+  Webhooks spec, used by the unit test that pins our signatures to the spec's published result. It was never
+  anyone's secret: real ones are random per endpoint, shown once and stored encrypted. Searched the repo for
+  other `whsec_` values (none). The right close is "Used in tests", with a note saying it's the spec's
+  public example. Not splitting the string to slip past the scanner: that would teach the repo to dodge its own
+  alarm.
+- **Lesson:** a scanner matches shapes (`whsec_` + base64 is also Stripe's format). Check what the value is and
+  where it came from, then close the alert with the reason, so the next person reads why.
+
+## Part B: a theme switcher
+
+**Result:**
+
+- **System, Light or Dark**, chosen in three places: the dashboard's account menu (a **Theme** group), the
+  landing page footer (three buttons), and a small icon button beside "Scheduling by MeetReady" on every public
+  page (booking page, host profile, a guest's booking). **System** is the default and follows the device, live.
+- **No flash of the wrong theme:** a saved choice is on the first paint, even on static pages, because a few
+  lines in `<head>` apply it before the body is parsed. A browser test proves it with every Next.js script file
+  blocked: the page still comes up dark.
+- **One rule for every dark style:** the dark variables and Tailwind's `dark:` utilities use one custom variant,
+  so they can't disagree. Native parts (scrollbars, form controls) follow too (`color-scheme`), and so does the
+  phone's toolbar colour (`theme-color`).
+- **Tests:** 771 unit tests (4 new: the head script run against a fake page) and 44 E2E tests (3 new). The new
+  spec passed 3 times in a row.
+- **Setup:** none. No migration, no new dependency, nothing in Vercel.
+
+```
+src/lib/theme.ts                        # the choices, colours, and the head script (a string)
+src/components/theme/theme-controls.tsx # the store (useSyncExternalStore) and the three controls
+src/app/globals.css                     # @custom-variant dark; dark variables via @variant dark; color-scheme
+src/app/layout.tsx                      # the head script; suppressHydrationWarning on <html>
+src/app/(app)/dashboard/account-menu.tsx, src/components/site/{site-footer,powered-by}.tsx
+e2e/theme.spec.ts
+```
+
+### 1. Decisions
+
+#### Where the choice lives: the browser
+
+- **localStorage, not the database:** the booking page has no login, and a guest's theme belongs to their
+  screen, not to an account. A host on two devices may well want two themes.
+- **Not a cookie:** the server would have to read it to render the right colours, and reading a cookie makes a
+  page dynamic. The landing page and every static shell would lose their prerendering for a colour preference.
+- **The cost of the browser:** the server can't know the choice, so something must apply it before the first
+  paint. That's the head script.
+
+#### Only an explicit choice touches the page
+
+- **System = no attribute and nothing saved.** Then the CSS follows `prefers-color-scheme` by itself: it works
+  with JavaScript off, and the page changes live when the device switches at sunset, with no listener.
+- **Light or Dark = `data-theme` on `<html>`**, and that beats the device. The alternative (the script always
+  writes the resolved theme) needs a `matchMedia` listener to stay live, and a page without JavaScript would
+  have no dark mode at all.
+
+#### The head script
+
+- **Inline in `<head>`, before the body:** an external file would be fetched after the first paint could
+  start. It's under 400 bytes of ES5 (no imports, nothing to bundle), wrapped in `try`: localStorage throws in
+  some private modes and sandboxed frames, and then the page follows the device.
+- **It only accepts `"light"` or `"dark"`.** Anything else in storage (hand-edited, or junk) is ignored, never
+  written into the page. Unit tests run the string against a fake page: valid, junk, blocked storage.
+- **`suppressHydrationWarning` on `<html>`:** the script may add `data-theme` before React hydrates, and React
+  would otherwise warn that the server's HTML differs. It covers that element's own attributes only.
+- **`useSyncExternalStore` for the controls:** the server renders "System" (it can't know), hydration matches,
+  and React re-renders with the saved value right after. Only which option is marked changes; the colours were
+  already right. The same store hears other tabs (`storage` event), so two tabs don't drift apart.
+
+#### One dark rule
+
+- **`@custom-variant dark`** in `globals.css`: `[data-theme=dark]` and its children, or, when there's no
+  attribute, `prefers-color-scheme: dark`. The dark variables are written once inside `@variant dark { … }`, so
+  the explicit and system cases can't drift apart (no copy of the block).
+- **Charts and the daylight band** need nothing new: they read the same variables (Day 25's `--chart-*` were
+  already chosen for each theme).
+
+#### Placement
+
+- **Account menu, not the main nav:** a setting, and the nav is full on phones. The menu stays open after a
+  choice, so a host can try each one.
+- **Footer of the landing page:** where people look for it on a marketing page, three labelled buttons.
+- **Public pages:** one quiet icon beside the MeetReady credit, so it's on every page a guest (or a reviewer)
+  sees, without competing with the booking card. Its menu isn't modal: three options shouldn't lock scrolling.
+
+#### Not now
+
+- Per-page or per-host defaults ("my booking page is always dark"): a host setting on the public page would
+  override the guest's own preference, which is backwards for an accessibility setting.
+
+### 2. Likely interview questions
+
+- **"How do you avoid the flash of the wrong theme?"** The choice is in localStorage, which the server can't
+  read, so a small blocking script in `<head>` sets `data-theme` before the body is parsed. It's the one place an
+  inline blocking script is worth it.
+- **"Why not a cookie, so the server renders it?"** Then every page that shows colours would read a cookie and
+  stop being static. Trading prerendering for a colour preference is a bad deal.
+- **"What does `suppressHydrationWarning` hide?"** Only differences in that one element's attributes, which the
+  head script changes on purpose. Mismatches anywhere inside still warn (and fail the E2E console check).
+- **"How do System and an explicit choice coexist in CSS?"** One custom variant: the attribute wins; without
+  it, the media query applies. System needs no JavaScript.
+
+### 3. Stories
+
+#### A menu that opened before the page finished arriving
+
+- **What happened:** the new browser test went to the booking page and clicked the theme button at its foot.
+  The menu opened, but clicking "Light" timed out: "element is outside of the viewport", retried for 30
+  seconds.
+- **What I did:** measured where the menu opened in a scratch test (it fit on screen when the page was loaded),
+  then looked at timing. The booking card streams in above the button: the click landed while the card was
+  still a skeleton, then the card arrived and pushed the button, and its open menu, off screen. The test now
+  waits for the card's heading first. I also made that menu non-modal, so it never locks scrolling, then removed
+  the wait once to check: still failed 1 time in 3, so the wait is the fix and non-modal is a nicety.
+- **Lesson:** on a streaming page, "visible" isn't "settled". Wait for the content that moves things, and
+  check which of two changes actually fixed it by taking one away.
+
 ## Next
 
-- **You:** unzip, commit and push Part A (migration 0013 runs in the build). Then runbook **step 18**: add a
-  webhook.site URL, Send test, book yourself, rotate, delete.
-- **Then Part B: the theme switcher** (System / Light / Dark) in the account menu, the landing page footer and the
-  booking page.
+- **You:** unzip, commit and push Part B (no migration). Then runbook **step 19**: two minutes in a browser.
+- **Then:** the embeddable booking widget (the last Phase 2 item), or the domain day once you buy one.

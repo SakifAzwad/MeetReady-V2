@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 26)
+# Handoff: starting a new chat (after Day 27)
 
-Read this first in a new chat. It replaces the long Days 1–26 conversations. Details live in `docs/day-01.md` …
-`docs/day-26.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–27 conversations. Details live in `docs/day-01.md` …
+`docs/day-27.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -192,7 +192,21 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
     `src/components/theme/theme-controls.tsx` (store = `useSyncExternalStore`, server snapshot "system", `storage`
     event for other tabs): `ThemeMenuItems` (account menu, stays open), `ThemeButtons` (landing footer,
     `aria-pressed`), `ThemeMenuButton` (beside `PoweredBy` on public pages, non-modal menu).
-- **Numbers:** 771 unit tests + 44 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  - Booking widget for other websites (Day 27): `public/embed.js` (plain JS, no deps; guide `docs/embed.md`) mounts
+    `[data-meetready-inline="user/slug"]` (also added later: `MutationObserver`) and turns clicks on
+    `[data-meetready-popup]` links into a native `<dialog>`; both iframe `/embed/{username}/{slug}`
+    (`src/app/embed/…`: same `BookingWidget`, `EmbedRoot` + `EmbedWidget` in `embed-client.tsx`). MeetReady's origin =
+    the script's own `src`. Headers in `src/lib/security-headers.ts`: two non-overlapping rules, `/embed/*` =
+    `frame-ancestors *` and no XFO, everything else deny (test via Next's `getPathMatch`). Messages
+    (`src/lib/embed.ts`, `{ source: "meetready", version: 1, type }`): `resize` (height of `[data-embed-root]`,
+    clamped 120–4000), `booked` (username, slug, start, end: never guest details; DOM event `meetready:booked`),
+    `escape` (unused Escape inside the frame closes the popup). embed.js checks origin AND that `event.source` is
+    one of its frames. Theme: `?theme=dark|system`, light default, read by `THEME_SCRIPT` on `/embed/` paths, never
+    storage; embed.js sets the iframe's `color-scheme` to match (else an opaque box). Popup keeps its frame after
+    a close, fresh after a booking; link fallback without JS. Dashboard: `EmbedDialog` (Radix Dialog + Tabs) on
+    each event type card. `embed` reserved + in `APP_ROUTES`; `proxy.ts` gives `/embed/u/s` the same real 404.
+    E2E: `e2e/support/fake-site.mjs` on 127.0.0.1:3104 (a different site from localhost).
+- **Numbers:** 793 unit tests + 50 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
   18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 14 migrations (0000–0013).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -202,10 +216,11 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 26 Part B (no migration), then runbook step 19 (two minutes in a browser).
-2. **Next day: Sakif picks from `docs/backlog.md`.** Candidates: the embeddable booking widget (inline and popup,
-   the last Phase 2 item), or the domain day once he buys one (setup, emails to every guest, Google
-   verification, then the Claude Connectors Directory). Opinions first, as always.
+1. **Sakif:** push Day 27 (no migration), then runbook step 20 (CodePen, then the portfolio); send the
+   portfolio URL for the README.
+2. **Next day: Sakif picks from `docs/backlog.md`.** Phase 2 is complete. Candidates: the 5-minute slot hold, round-robin
+   team scheduling (Phase 3, several days), or the domain day once he buys one (setup, emails to every guest,
+   Google verification, then the Claude Connectors Directory). Opinions first, as always.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
@@ -223,7 +238,8 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
 - **Repo access from a chat:** the repo is public, so `git clone` works, but Claude can't push (his GitHub isn't
   linked). That's fine: delivery is a zip. In the cloud workspace, E2E runs with the installed Chrome
   (`E2E_BROWSER_CHANNEL=chrome`; Playwright's download is blocked) and the local Postgres 16
-  (`service postgresql start`, password `postgres`).
+  (`service postgresql start`; if E2E says "password authentication failed", set it once:
+  `su postgres -c "psql -c \"alter user postgres password 'postgres';\""`).
 
 ## Stack and commands
 
@@ -372,4 +388,8 @@ Read this first in a new chat. It replaces the long Days 1–26 conversations. D
   apply. A test that opens a menu on a streaming page waits for the content above it first (Day 26 story).
 - **Secret scanning (Day 26 story):** `whsec_…` in `signing.test.ts` is the spec's public test vector. GitHub flags
   it as a Stripe secret; close such alerts as "Used in tests". Never commit a real one.
+- **Embeds (Day 27):** a new page that other sites may frame needs its own header rule (rules add headers, never
+  remove them). Never put private data in a `postMessage` from a frame (any site can embed). Inside a frame,
+  measure your own box, not the document (body's min-height = the iframe), keys never reach the parent, and
+  links must open in a new tab (our other pages refuse framing). Test from another SITE (127.0.0.1 vs localhost).
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

@@ -24,10 +24,13 @@ their own words, and the host can book or check meetings from Claude.
   Client ID Metadata Documents, PKCE, tokens bound to the server and rotating refresh tokens. Where the client
   supports it, every change needs a confirm form that the model can't fill in.
   ([Day 21](docs/day-21.md), [Day 22](docs/day-22.md), [Day 24](docs/day-24.md))
+- **A booking widget for any website, inline or as a popup.** A small script with no dependencies frames one page
+  that only that route allows to be framed. Messages are checked by origin and by source, and never carry the
+  guest's details. The frame resizes itself, and Escape works from inside it. ([Day 27](docs/day-27.md))
 - **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
   and evals against the real model. ([Day 18](docs/day-18.md))
 - **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
-  limits, and Sentry with a privacy scrubber. About 771 unit tests and 44 browser tests run in CI.
+  limits, and Sentry with a privacy scrubber. About 790 unit tests and 50 browser tests run in CI.
   ([Days 11–17](#design-notes))
 
 ## Screenshots
@@ -50,6 +53,11 @@ missed and cancelled per week, the rates, popular times under the day's own sky,
 
 ![Insights: stat tiles, meetings per week, popular times by weekday and hour, and meetings per type](docs/images/insights.png)
 
+**On someone else's website.** The same booking page as a popup over a host's own site (here a test page on
+another origin). Guides for site owners: [docs/embed.md](docs/embed.md).
+
+![The booking calendar open as a popup over another website, with a close button](docs/images/embed.png)
+
 **Connecting Claude.** The host pastes one address into Claude and approves it on MeetReady's own consent page.
 They can disconnect from the dashboard at any time.
 
@@ -64,6 +72,7 @@ Claude booking through MeetReady (add your own screenshot from claude.ai):
 ```mermaid
 flowchart LR
   guest["Guest's browser"] --> pages
+  site["A host's own website<br/>(embed.js)"] -->|"iframe of /embed"| pages
   host["Host's browser"] --> pages
   claude["Claude or another<br/>MCP client"] -->|"MCP + OAuth 2.1"| mcp
 
@@ -243,6 +252,11 @@ Each day of the build has its own write-up with the decisions, the reasons and t
   signatures, timestamps, ids), retries through Inngest, SSRF protection when saved and at connect time (DNS
   rebinding), secrets encrypted with a 24-hour rotation overlap. For receivers: [docs/webhooks.md](docs/webhooks.md).
   Then System / Light / Dark, applied before the first paint with no flash, on static pages too.
+- [Day 27: A booking widget for other websites](docs/day-27.md): one script, inline or popup, an iframe of
+  `/embed/{username}/{slug}` (the only route other sites may frame), `postMessage` checked by origin and by source,
+  a frame that fits its content as it changes, Escape passed out of the frame, and a see-through background that
+  needed the right `color-scheme` on both sides. For site owners: [docs/embed.md](docs/embed.md). This completes
+  Phase 2.
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

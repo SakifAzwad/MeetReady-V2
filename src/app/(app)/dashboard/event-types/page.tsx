@@ -9,6 +9,8 @@ import { formatMinutes } from "@/lib/format";
 import { LOCATION_LABELS } from "@/lib/validation/event-type";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { listEventTypes } from "@/server/event-types";
+import { env } from "@/lib/env";
+import { EmbedDialog } from "./embed-dialog";
 import { ActiveToggle, CopyLinkButton } from "./event-type-controls";
 import { PageTransition } from "@/components/motion";
 
@@ -40,6 +42,7 @@ export default function EventTypesPage() {
 async function EventTypeList() {
   const user = await requireOnboardedUser();
   const items = await listEventTypes(db, user.id); // scoped to this user in the WHERE
+  const origin = new URL(env.BETTER_AUTH_URL).origin; // embed snippets point at this deployment
 
   if (items.length === 0) {
     return (
@@ -83,11 +86,18 @@ async function EventTypeList() {
               </Badge>
               {!et.isActive && <Badge>Off: hidden from guests</Badge>}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={`/dashboard/event-types/${et.id}/edit`}>Edit</Link>
               </Button>
               <CopyLinkButton path={`/${user.username}/${et.slug}`} />
+              <EmbedDialog
+                origin={origin}
+                username={user.username}
+                slug={et.slug}
+                title={et.title}
+                isActive={et.isActive}
+              />
             </div>
           </Card>
         </li>

@@ -22,6 +22,13 @@ export const FAKE_GROQ_URL = `http://localhost:${FAKE_GROQ_PORT}`;
 export const FAKE_WEBHOOKS_PORT = 3103;
 export const FAKE_WEBHOOKS_URL = `http://127.0.0.1:${FAKE_WEBHOOKS_PORT}`;
 
+/**
+ * A fake customer website that embeds the booking widget (e2e/support/fake-site.mjs, Day 27). 127.0.0.1, not
+ * localhost: a different SITE from the app, so the browser treats the frame as third-party (cookies, storage).
+ */
+export const FAKE_SITE_PORT = 3104;
+export const FAKE_SITE_URL = `http://127.0.0.1:${FAKE_SITE_PORT}`;
+
 /** Wiped and re-migrated on every run (e2e/support/prepare-db.mts refuses names without "e2e"). */
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/meetready_e2e";

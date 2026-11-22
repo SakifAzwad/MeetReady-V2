@@ -30,5 +30,13 @@ export const isTheme = (value: unknown): value is Theme => THEMES.includes(value
  * the page simply follows the device. theme-color tags may come after this
  * script (Next.js places metadata), so they're updated once the document is
  * parsed.
+ *
+ * Day 27: the embed (/embed/…, inside another site's frame) takes its theme
+ * from the URL instead, `?theme=dark|system`, light when absent, and never
+ * touches storage. The site owner picks it to match their page: the guest's
+ * saved choice belongs to MeetReady's own pages, and inside a frame the
+ * browser keeps a separate, per-site copy of our storage anyway. Light by
+ * default, not "follow the device", because most sites around it don't
+ * follow the device: a dark widget in a light page looks broken.
  */
-export const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(t!=="light"&&t!=="dark")return;document.documentElement.setAttribute("data-theme",t);var c=t==="dark"?${JSON.stringify(THEME_COLORS.dark)}:${JSON.stringify(THEME_COLORS.light)};document.addEventListener("DOMContentLoaded",function(){var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",c)})}catch(e){}})();`;
+export const THEME_SCRIPT = `(function(){try{var t;if(/^\\/embed\\//.test(location.pathname)){var m=/[?&]theme=(dark|system)(?:&|$)/.exec(location.search);t=m?m[1]:"light"}else t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(t!=="light"&&t!=="dark")return;document.documentElement.setAttribute("data-theme",t);var c=t==="dark"?${JSON.stringify(THEME_COLORS.dark)}:${JSON.stringify(THEME_COLORS.light)};document.addEventListener("DOMContentLoaded",function(){var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",c)})}catch(e){}})();`;

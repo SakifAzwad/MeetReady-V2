@@ -22,4 +22,6 @@ export const APP_ROUTES = new Set([
   "terms",
   // Day 21: AI assistants ask the host's permission at /oauth/consent.
   "oauth",
+  // Day 27: the booking page other sites put in a frame, /embed/{username}/{slug}.
+  "embed",
 ]);

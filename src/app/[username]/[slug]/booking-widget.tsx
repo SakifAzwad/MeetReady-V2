@@ -86,6 +86,8 @@ type Props = {
   layout?: "full" | "embedded";
   /** Show the booking assistant (Day 20): only when the server has an AI key, and never when rescheduling. */
   assistant?: boolean;
+  /** After a new booking is made (not a move). Day 27: the embed tells the site around it. */
+  onBooked?: (booked: Booked) => void;
 };
 
 const noSubscription = () => () => {};
@@ -215,6 +217,7 @@ function Scheduler({
   reschedule,
   layout,
   assistant,
+  onBooked,
   timeZone,
   onTimeZoneChange,
 }: Props & { timeZone: string; onTimeZoneChange: (tz: string) => void }) {
@@ -512,7 +515,10 @@ function Scheduler({
                       draft={draft}
                       questions={bookingQuestions}
                       notice={formNotice}
-                      onBooked={(b) => go("step-forward", () => setBooked(b))}
+                      onBooked={(b) => {
+                        go("step-forward", () => setBooked(b));
+                        onBooked?.(b);
+                      }}
                       onSlotGone={slotGone}
                       onQuestionsChanged={(current, typed) => {
                         setDraft(typed);

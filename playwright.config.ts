@@ -8,6 +8,8 @@ import {
   FAKE_GOOGLE_URL,
   FAKE_GROQ_PORT,
   FAKE_GROQ_URL,
+  FAKE_SITE_PORT,
+  FAKE_SITE_URL,
   FAKE_WEBHOOKS_PORT,
   FAKE_WEBHOOKS_URL,
 } from "./e2e/support/config";
@@ -73,6 +75,13 @@ export default defineConfig({
       url: `${FAKE_WEBHOOKS_URL}/__fake/health`,
       reuseExistingServer: false,
       env: { FAKE_WEBHOOKS_PORT: String(FAKE_WEBHOOKS_PORT) },
+    },
+    // A fake customer website (Day 27) on another origin, embedding the widget the way a host's site would.
+    {
+      command: "node e2e/support/fake-site.mjs",
+      url: `${FAKE_SITE_URL}/__fake/health`,
+      reuseExistingServer: false,
+      env: { FAKE_SITE_PORT: String(FAKE_SITE_PORT), FAKE_SITE_APP_URL: BASE_URL },
     },
     {
       command: [

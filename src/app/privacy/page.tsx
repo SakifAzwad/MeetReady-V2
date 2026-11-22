@@ -112,6 +112,12 @@ export default function PrivacyPage() {
             timezone can be sent to a service the host connected (such as their calendar tool or CRM), when
             you book, move or cancel. Your notes and answers aren&apos;t sent that way.
           </li>
+          <li id="embed">
+            <strong>Booking on another website:</strong> a host can put MeetReady&apos;s booking calendar on
+            their own site. It stays MeetReady&apos;s page inside a frame: what you type goes to MeetReady,
+            not to that site. When you book, the site is told the meeting type and its start and end times,
+            never your name, email, notes or answers.
+          </li>
           <li>
             <strong>After the meeting:</strong> the host can mark that you didn&apos;t show up. It&apos;s a
             note in their own records and counts in their statistics; you aren&apos;t emailed about it, and

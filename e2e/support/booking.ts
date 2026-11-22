@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { expect, type Page } from "@playwright/test";
+import { expect, type FrameLocator, type Page } from "@playwright/test";
 import type { Host } from "../fixtures";
 
 /*
@@ -8,18 +8,21 @@ import type { Host } from "../fixtures";
  * says the page is usable without seeing it.
  */
 
+/** Where the booking widget is: a page, or the iframe of the embed on another site (Day 27). */
+export type Widget = Page | FrameLocator;
+
 /** The list of start times for the selected day. */
-export const timeList = (page: Page) => page.getByRole("group", { name: /^Times on/ });
+export const timeList = (page: Widget) => page.getByRole("group", { name: /^Times on/ });
 
 /** Start-time buttons (each has aria-pressed); excludes the "Show earlier times" disclosure. */
-export const timeButtons = (page: Page) => timeList(page).locator("button[aria-pressed]:visible");
+export const timeButtons = (page: Widget) => timeList(page).locator("button[aria-pressed]:visible");
 
 /** A unique guest email, so this test's emails can't be confused with another test's. */
 export const guestEmail = (name: string) =>
   `${name.toLowerCase().replace(/[^a-z]+/g, "-")}-${randomBytes(3).toString("hex")}@example.com`;
 
 /** The calendar's days that have free times: "Friday, 20 November 2026, 16 times available". */
-const daysWithTimes = (page: Page) => page.getByRole("button", { name: /, \d+ times? available$/ });
+const daysWithTimes = (page: Widget) => page.getByRole("button", { name: /, \d+ times? available$/ });
 
 /**
  * Selects the first day with at least `min` free times, moving to the next month if needed. Returns the day's
@@ -30,7 +33,7 @@ const daysWithTimes = (page: Page) => page.getByRole("button", { name: /, \d+ ti
  * third time, or moves a booking to another time that day, then waits for a button that isn't there. CI failed
  * this way on a run at 3 PM in Dhaka (Day 23 story). Tests choose a day with room, never "today".
  */
-export async function openRoomyDay(page: Page, min = 4): Promise<string> {
+export async function openRoomyDay(page: Widget, min = 4): Promise<string> {
   await expect(timeList(page)).toBeVisible(); // the page has loaded its month and picked a day
   for (let months = 0; months < 3; months++) {
     for (const day of await daysWithTimes(page).all()) {
@@ -59,7 +62,7 @@ export async function chooseTime(page: Page, host: Host, nth = 0): Promise<strin
   return label;
 }
 
-export async function fillDetails(page: Page, name: string, email: string) {
+export async function fillDetails(page: Widget, name: string, email: string) {
   await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByLabel("Email", { exact: true }).fill(email);
 }

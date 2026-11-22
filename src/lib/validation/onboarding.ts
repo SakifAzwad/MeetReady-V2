@@ -19,6 +19,8 @@ export const RESERVED_USERNAMES = new Set([
   // The AI assistants' consent page (/oauth/consent, Day 21), and names an OAuth or MCP page could use.
   "oauth",
   "mcp",
+  // The embeddable booking page (/embed/{username}/{slug}, Day 27).
+  "embed",
   "about",
   "account",
   "admin",

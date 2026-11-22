@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/db";
 import { APP_ROUTES } from "@/lib/app-routes";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
+import { EMBED_SEGMENT } from "@/lib/security-headers";
 import { publicPageExists } from "@/server/booking";
 import { ipOf, rateLimit } from "@/server/rate-limit";
 
@@ -44,10 +45,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // /{username} or /{username}/{slug}
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments.length === 0 || segments.length > 2) return NextResponse.next();
-  if (APP_ROUTES.has(segments[0]!) || segments[0]!.includes(".")) return NextResponse.next(); // routes, files
+  const page = publicPage(pathname.split("/").filter(Boolean));
+  if (!page) return NextResponse.next(); // app routes, files
 
   const limited = await rateLimit([["pages", ipOf(request.headers)]]);
   if (!limited.ok) {
@@ -61,7 +60,7 @@ export async function proxy(request: NextRequest) {
       },
     });
   }
-  if (!(await isPublicPage(segments))) {
+  if (!(await isPublicPage(page))) {
     // Serve Next's own not-found page (app/not-found.tsx), which answers 404.
     // The address bar keeps the URL the visitor typed. (A rewrite to the SAME
     // URL with `{ status: 404 }` doesn't work: the page's streamed response
@@ -69,6 +68,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.rewrite(new URL("/_not-found", request.url));
   }
   return NextResponse.next();
+}
+
+/**
+ * The /{username} or /{username}/{slug} a path shows, or null when it isn't a
+ * public page. Day 27: /embed/{username}/{slug} is the same booking page made
+ * for other sites' frames, so it gets the same lookup and the same real 404.
+ */
+function publicPage(segments: string[]): string[] | null {
+  if (segments[0] === EMBED_SEGMENT) return segments.length === 3 ? segments.slice(1) : null;
+  if (segments.length === 0 || segments.length > 2) return null;
+  if (APP_ROUTES.has(segments[0]!) || segments[0]!.includes(".")) return null;
+  return segments;
 }
 
 async function isPublicPage([rawUsername, rawSlug]: string[]): Promise<boolean> {

@@ -1,7 +1,6 @@
 "use client";
 
 import { X } from "lucide-react";
-import Link from "next/link";
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,12 +151,16 @@ export function AssistantBox({
         </div>
         <p id={noteId} className="text-muted-foreground text-xs">
           Sent to an AI model (Groq) to find times. Don&apos;t include personal details.{" "}
-          <Link
+          {/* A new tab (Day 27): leaving would lose what's typed, and inside another site's frame
+              (the embed) the privacy page refuses to load at all. */}
+          <a
             href="/privacy#booking-assistant"
+            target="_blank"
+            rel="noopener"
             className="hover:text-foreground underline underline-offset-4"
           >
-            Privacy
-          </Link>
+            Privacy<span className="sr-only"> (opens in a new tab)</span>
+          </a>
         </p>
       </form>
 

@@ -650,6 +650,31 @@ Nothing to set up: no migration, no variable. About 2 minutes after the deploy i
 **If a page shows the wrong theme:** the choice is per browser (and per site address: a preview URL has its
 own). Clear it with **System**, or DevTools → Application → Local Storage → delete `theme`.
 
+## 20. Booking widget for other websites, added on Day 27
+
+Nothing to set up: no migration, no variable, no new service. About 5 minutes after the deploy is **Ready**.
+
+1. **Headers:** open <https://meetreadyv2.vercel.app/embed/sakifazwad18/intro>. The booking calendar shows with
+   no page background (white or your browser's default) and no header. DevTools → Network → click the page's
+   request → Response Headers: `content-security-policy: frame-ancestors *` and **no** `x-frame-options`. Then the
+   same for `/sakifazwad18/intro`: `frame-ancestors 'none'` and `x-frame-options: DENY`.
+2. **The snippet:** Dashboard → **Event types** → **Embed** on Intro call. Check the code points at
+   `https://meetreadyv2.vercel.app/embed.js`. Click **Copy code** on the **Inline** tab.
+3. **On another site:** open <https://codepen.io/pen/> (no account needed), paste the code into the **HTML** panel.
+   The calendar appears in the preview and fits its height: no scrollbar inside it.
+4. **Popup:** in the dialog, switch to **Popup**, **Copy code**, replace the HTML panel's contents. Click **Book a
+   meeting** in the preview: the calendar opens over the page. Click into the calendar and press **Escape**: it
+   closes. (CodePen's preview is itself a frame, so this also shows nested frames work.)
+5. **A booking (optional):** book a time through the popup with your own email. Then in the HTML panel, add:
+   `<script>document.addEventListener("meetready:booked", e => alert(JSON.stringify(e.detail)))</script>`
+   and book again: the alert shows the type and times, no name or email. Cancel both from the emails.
+6. **Your portfolio:** add either snippet (for React/Next.js, see `docs/embed.md`), deploy, and book once from
+   there. Then send the URL to put in the README.
+
+**If the calendar doesn't appear:** DevTools → Console on the page with the snippet. `Refused to frame` means the
+headers in step 1 are wrong (redeploy); `MeetReady: …` means a typo in `username/slug`; a blocked
+`embed.js` means an ad blocker or the site's CSP (`docs/embed.md`).
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

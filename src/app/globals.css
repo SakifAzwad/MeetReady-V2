@@ -74,6 +74,16 @@
   --chart-3: #8590b0;
 }
 
+/*
+ * The embed (Day 27) sits on another site's page: no background of its own, so the site shows
+ * around the card. Outside any layer, so it wins over the base layer's body background. The
+ * frame stays see-through only if its color-scheme matches the iframe element's, which
+ * public/embed.js sets to the same theme.
+ */
+body:has([data-embed-root]) {
+  background: transparent;
+}
+
 /* Native parts (scrollbars, form controls, the page behind everything) follow the theme too. */
 :root {
   color-scheme: light dark;

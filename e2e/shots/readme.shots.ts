@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import type pg from "pg";
-import { BASE_URL } from "../support/config";
+import { BASE_URL, FAKE_SITE_URL } from "../support/config";
 import { expect, fakeGroq, randomIp, signInAs, test, type Host } from "../fixtures";
 
 /*
@@ -390,6 +390,23 @@ test("README screenshots", async ({ host, db, browser }) => {
   await hostPage.setViewportSize({ width: 1280, height: 760 });
   await hostPage.screenshot({ path: path.join(OUT, "consent.png") });
   await hostContext.close();
+
+  // ── Day 27: the widget as a popup on someone else's site (the fake site, another origin) ──
+  const visitor = await browser.newContext({
+    viewport: { width: 1280, height: 860 },
+    locale: "en-US",
+    timezoneId: "Asia/Dhaka",
+    extraHTTPHeaders: { "x-forwarded-for": randomIp() },
+  });
+  const sitePage = await visitor.newPage();
+  await sitePage.goto(`${FAKE_SITE_URL}/site?mode=popup&target=sakifazwad18/intro`);
+  await sitePage.getByRole("link", { name: "Book a meeting" }).click();
+  const embedFrame = sitePage.frameLocator('iframe[title="Book a meeting with MeetReady"]');
+  await expect(embedFrame.getByRole("group", { name: /^Times on/ })).toBeVisible();
+  await sitePage.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // no focus ring
+  await sitePage.waitForTimeout(500);
+  await sitePage.screenshot({ path: path.join(OUT, "embed.png") });
+  await visitor.close();
 
   // ── The GIF: the assistant's flow, from the frames recorded above ──
   writeGif(frames, path.join(OUT, "booking-assistant.gif"));

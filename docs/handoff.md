@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 27)
+# Handoff: starting a new chat (after Day 28)
 
-Read this first in a new chat. It replaces the long Days 1–27 conversations. Details live in `docs/day-01.md` …
-`docs/day-27.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–28 conversations. Details live in `docs/day-01.md` …
+`docs/day-28.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -206,8 +206,19 @@ Read this first in a new chat. It replaces the long Days 1–27 conversations. D
     a close, fresh after a booking; link fallback without JS. Dashboard: `EmbedDialog` (Radix Dialog + Tabs) on
     each event type card. `embed` reserved + in `APP_ROUTES`; `proxy.ts` gives `/embed/u/s` the same real 404.
     E2E: `e2e/support/fake-site.mjs` on 127.0.0.1:3104 (a different site from localhost).
-- **Numbers:** 793 unit tests + 50 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
-  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 14 migrations (0000–0013).
+  - Teams (Day 28, team scheduling part 1 of 3): `src/server/teams.ts`, tables `teams` (slug = username rules,
+    own namespace), `team_members` (PK team+user, role `owner|member`, partial unique index = one owner),
+    `team_invites` (SHA-256 `token_hash`, 7 days, single use: `used_at/used_by`, `revoked_at`). Reads check
+    membership in the query (not a member = null = 404); writes put the owner check in their own WHERE
+    (`inArray(…, ownedTeams(db, me))`). Owner can't leave or be removed (delete the team instead). `acceptInvite`:
+    lock the team row `FOR UPDATE` (member cap 20), already a member = ok without using the link, claim with a
+    conditional UPDATE (`pending(now)`), full = `tx.rollback()` (link stays usable). Caps: 5 owned teams, 20
+    people, 10 open links. Pages: `/dashboard/teams` (account menu), `/dashboard/teams/[id]`,
+    `/invite/[token]` (GET only reads; Join = `joinTeamAction`; no-referrer, noindex). `/invite` is login-protected
+    (`isProtectedPath` in `src/lib/app-routes.ts`, whole-segment match); onboarding follows `?next=`. `invite`,
+    `team`, `teams` reserved; invite tokens scrubbed in `monitoring.ts`. Race tests in `teams.race.test.ts`.
+- **Numbers:** 814 unit tests (+ 8 race tests on real Postgres) + 53 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 15 migrations (0000–0014).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -216,11 +227,10 @@ Read this first in a new chat. It replaces the long Days 1–27 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 27 (no migration), then runbook step 20 (CodePen, then the portfolio); send the
-   portfolio URL for the README.
-2. **Next day: Sakif picks from `docs/backlog.md`.** Phase 2 is complete. Candidates: the 5-minute slot hold, round-robin
-   team scheduling (Phase 3, several days), or the domain day once he buys one (setup, emails to every guest,
-   Google verification, then the Claude Connectors Directory). Opinions first, as always.
+1. **Sakif:** push Day 28 (migration 0014; check the three usernames first), then runbook step 21.
+2. **Day 29: collective team event types**, then **Day 30: round-robin** (fewest bookings of that type in the last
+   30 days, ties to the longest idle). Sakif's picks: collective first; invite links copied by hand until the
+   domain day; `/team/{slug}/{event}`; owner and member roles only. The domain day waits until a domain is bought.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
@@ -392,4 +402,8 @@ Read this first in a new chat. It replaces the long Days 1–27 conversations. D
   remove them). Never put private data in a `postMessage` from a frame (any site can embed). Inside a frame,
   measure your own box, not the document (body's min-height = the iframe), keys never reach the parent, and
   links must open in a new tab (our other pages refuse framing). Test from another SITE (127.0.0.1 vs localhost).
+- **Teams (Day 28):** a conditional UPDATE protects one row; a cap across rows (members per team) needs a lock on
+  the parent row. GETs never change state (link previews open links). Outsiders get 404, never 403. URL rules match
+  whole path segments (Day 28 story: `startsWith("/dashboard")` matched the username `dashboard-fan`). Whenever a
+  repo doc changes, update its project copy too (`claude/meetready-v2-*.md`, including `deploy.md`).
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

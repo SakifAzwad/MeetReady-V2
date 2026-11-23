@@ -675,6 +675,40 @@ Nothing to set up: no migration, no variable, no new service. About 5 minutes af
 headers in step 1 are wrong (redeploy); `MeetReady: …` means a typo in `username/slug`; a blocked
 `embed.js` means an ad blocker or the site's CSP (`docs/embed.md`).
 
+## 21. Teams and invite links, added on Day 28
+
+Nothing to set in Vercel. About 10 minutes. A second Google account helps (any personal Gmail); without one,
+steps 4–5 can be skipped.
+
+1. **Before deploying, check three usernames are free** (they're now reserved). Neon → SQL Editor
+   (`production`):
+   ```sql
+   select username from "user" where username in ('invite', 'team', 'teams');
+   ```
+   Expect no rows. (If one exists, that profile would stop being reachable: tell me before deploying.)
+2. **Deploy** (push Day 28). Migration 0014 runs first in the build: three new tables (`teams`, `team_members`,
+   `team_invites`), nothing changed in existing ones. The log ends with `[migrate] up to date`.
+3. **Create a team:** dashboard → your avatar (account menu) → **Teams** → **Create a team**. Type a name: the
+   address under it follows (e.g. `acme-sales`). **Create team** opens the team's page: you, with **Owner**, and
+   "1 of 20".
+4. **Invite (second Google account):** **Create an invite link** → **Copy link**. Open a **private window**, paste
+   the link: the login page says "You've been invited to join a team". Sign in with the second account. If it's
+   new to MeetReady, pick a username: you come back to the invite. It says "Sakif Azwad invited you to join …".
+   Press **Join**: the team's page, "You're a member", 2 people.
+5. **Single use:** in the same private window, open the same link again: "You're already in …". (A third account
+   would see "This invite link has ended".) In your normal window, reload the team: the second account is listed
+   with a **Remove** button, and "Links not used yet" is gone.
+6. **Revoke:** make another link, then **Revoke** it. Open it: "This invite link was cancelled".
+7. **Only a hash is stored.** Neon → SQL Editor (`production`):
+   ```sql
+   select token_hash, expires_at, used_at, revoked_at from team_invites order by created_at desc limit 3;
+   ```
+   `token_hash` is 64 hex characters, never the token in your link.
+8. **Clean up (optional):** **Remove** the second account (or **Leave team** in its window), then **Delete team**.
+
+**If the invite page says "This invite link doesn't work":** the link was cut short when pasted (it ends in 43
+characters after `/invite/`). Make a new one.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

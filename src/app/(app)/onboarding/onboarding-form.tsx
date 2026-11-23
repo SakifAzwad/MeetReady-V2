@@ -13,9 +13,11 @@ type Props = {
   suggestedUsername: string;
   /** e.g. "meetreadyv2.vercel.app", shown before the username. */
   appHost: string;
+  /** Where to go once done (Day 28: an invite link). The action checks it again. */
+  next: string;
 };
 
-export function OnboardingForm({ suggestedUsername, appHost }: Props) {
+export function OnboardingForm({ suggestedUsername, appHost, next }: Props) {
   const [state, formAction, pending] = useActionState<OnboardingFormState, FormData>(submitOnboarding, {});
 
   const [username, setUsername] = useState(state.values?.username ?? suggestedUsername);
@@ -36,6 +38,7 @@ export function OnboardingForm({ suggestedUsername, appHost }: Props) {
 
   return (
     <form action={formAction} className="mt-8 flex flex-col gap-6" noValidate>
+      <input type="hidden" name="next" value={next} />
       <div className="flex flex-col gap-2">
         <label htmlFor="username" className="text-sm font-medium">
           Username

@@ -21,6 +21,10 @@ export const RESERVED_USERNAMES = new Set([
   "mcp",
   // The embeddable booking page (/embed/{username}/{slug}, Day 27).
   "embed",
+  // Teams (Day 28): invite links, and team booking pages (/team/{slug}/{event}).
+  "invite",
+  "team",
+  "teams",
   "about",
   "account",
   "admin",

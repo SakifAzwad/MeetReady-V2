@@ -1,15 +1,17 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 27).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 28).
 
 ## Next, in order
 
-1. **Push Day 27** (the booking widget for other websites; no migration), then runbook step 20, then put it on
-   Sakif's portfolio and add the link to the README.
-2. **Then pick from the list below.** Phase 2 is complete. Candidates: the 5-minute slot hold (a concurrency piece
-   on top of the double-booking protection), round-robin team scheduling (the strongest Phase 3 item, several
-   days), or the domain day (setup, emails to every guest, Google verification) once a domain is bought.
+1. **Push Day 28** (teams, roles and invite links; migration 0014), then runbook step 21.
+2. **Day 29: collective team event types.** Free times = the intersection of every member's free times (their
+   own hours, timezone, bookings and Google Calendar), on `/team/{slug}/{event}`; the booking lands in every
+   member's calendar.
+3. **Day 30: round-robin.** One member per booking: fewest bookings of that type in the last 30 days, ties to
+   whoever was booked longest ago; race tests when two guests book the same time.
+4. **Then pick from the list below.** The domain day waits until a domain is bought.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
@@ -25,7 +27,8 @@ meetings per week, popular times, per type, grouped in the host's timezone) and 
 a Move button for the host, reusing the booking widget (Day 25, Part B); signed webhooks (Standard Webhooks
 format, retries through Inngest, SSRF protection at save and connect time, secret rotation) (Day 26, Part A); a
 System / Light / Dark theme switcher with no flash (Day 26, Part B); a booking widget for other websites, inline or
-as a popup (Day 27), which completes Phase 2.
+as a popup (Day 27), which completes Phase 2; teams with an owner and members, and single-use invite links (Day
+28, team scheduling part 1).
 
 ## Ideas from reviews, deferred
 
@@ -63,6 +66,10 @@ as a popup (Day 27), which completes Phase 2.
 | **Only my sites may embed me** (a per-host list of allowed domains)                 | Day 27 | Any site may frame any booking page today, like Calendly. The page does nothing a visitor can't do on the booking page itself, so a list protects little. It would need `frame-ancestors` per host, read from the database in `proxy.ts` (the page itself is a static shell).                                                                                                                        | When a host asks                                   |
 | **Bookings by source** (booking page, embed, assistant) in Insights                 | Day 27 | Bookings already record `source = 'assistant'`. An `embed` source needs the embed's action to say so, checked on the server, and a breakdown on Insights.                                                                                                                                                                                                                                            | With Insights by booking date                      |
 | **A versioned script** (`/embed/v1.js`) with long caching                           | Day 27 | `/embed.js` is revalidated on every page load (a 304 most times), so a fix reaches every site at once. The cost is that it must never change in a breaking way. A versioned URL could be cached for a year; a breaking change would then get `v2`.                                                                                                                                                   | Before the first breaking change to the script     |
+| **Transfer a team's ownership**                                                     | Day 28 | One owner per team (a partial unique index). Transferring means demoting and promoting in one transaction, in the right order for that index, plus a confirm step. Until then an owner who wants out deletes the team.                                                                                                                                                                               | When an owner asks                                 |
+| **An admin role** (manage members without owning)                                   | Day 28 | Owner and member cover a small team (Sakif's pick). The role is a column with an enum, so a third value is a migration plus the checks in `src/server/teams.ts`.                                                                                                                                                                                                                                     | With bigger teams                                  |
+| **Change a team's address** (slug)                                                  | Day 28 | Only the name can change. A new slug breaks every link already shared (and embeds); it would need redirects from the old one.                                                                                                                                                                                                                                                                        | When a team asks                                   |
+| **Email invites**                                                                   | Day 28 | Links are copied and sent by the owner. Emailing them needs a domain: Resend's test sender only reaches Sakif.                                                                                                                                                                                                                                                                                       | The domain day                                     |
 | **Show the MCP tool calls to the host** (an activity log per assistant)             | Day 21 | Today the dashboard shows which assistants are connected, not what they read. A log is a table and a page; useful once assistants can write.                                                                                                                                                                                                                                                         | With `book_meeting`, if hosts ask                  |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                     | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                                                                                                                                            | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)          | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                                                                                                                                    | As polish, after the AI features                   |
@@ -122,7 +129,7 @@ as a popup (Day 27), which completes Phase 2.
   - signed webhooks (done, Day 26: created, rescheduled, cancelled);
   - an embeddable booking widget (done, Day 27: inline and popup).
 - **Phase 3 (pick 2–3):**
-  - team scheduling (round-robin; collective = everyone free);
+  - team scheduling (in progress: teams and invites Day 28; collective Day 29; round-robin Day 30);
   - group events with seats;
   - meeting polls;
   - routing forms;

@@ -708,6 +708,95 @@ export const webhookDeliveries = pgTable(
   (t) => [index().on(t.endpointId, t.createdAt), index().on(t.createdAt)],
 );
 
+// ─── Teams (Day 28) ─────────────────────────────────────────────────────────────
+// Part 1 of team scheduling: who is in which team. Team event types (collective,
+// then round-robin) come on Days 29–30 and hang off `teams`.
+
+/**
+ * A team: a group of hosts who will share event types. Its slug is its public
+ * address, /team/{slug}/{event} (Day 29), a namespace of its own: a team can
+ * be called "sakif" even though a user is, because the two never share a URL.
+ */
+export const teams = pgTable(
+  "teams",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    slug: varchar({ length: 30 }).notNull().unique(),
+    name: text().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    // Same rules as usernames (teamSchema in src/lib/validation/team.ts).
+    check("teams_slug_check", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(${t.slug}) >= 3`),
+    check("teams_name_check", sql`length(${t.name}) between 1 and 60`),
+  ],
+);
+
+/** owner: manages the team (invites, removing people, renaming, deleting). member: belongs to it. */
+export const teamRole = pgEnum("team_role", ["owner", "member"]);
+
+/**
+ * Who belongs to which team. The primary key (team, user) makes joining twice
+ * impossible, whatever the code does.
+ */
+export const teamMembers = pgTable(
+  "team_members",
+  {
+    teamId: uuid()
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: teamRole().notNull().default("member"),
+    joinedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.teamId, t.userId] }),
+    // "My teams" looks up by user.
+    index().on(t.userId),
+    // At most ONE owner per team, enforced by Postgres: a partial unique index
+    // only covers the owner rows. (At least one: the code never removes the
+    // owner; the owner deletes the team instead.)
+    uniqueIndex("team_members_one_owner")
+      .on(t.teamId)
+      .where(sql`role = 'owner'`),
+  ],
+);
+
+/**
+ * An invite link: /invite/{token}. The token IS the permission to join, like
+ * a guest's manage token (Day 4), so only its SHA-256 is stored. Single use
+ * (a forwarded link lets in one person, not everyone who sees it), 7 days,
+ * revocable.
+ */
+export const teamInvites = pgTable(
+  "team_invites",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    teamId: uuid()
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    tokenHash: text().notNull().unique(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    /** Set once, when someone joins with it. */
+    usedAt: timestamp({ withTimezone: true }),
+    usedBy: text().references(() => user.id, { onDelete: "set null" }),
+    revokedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index().on(t.teamId),
+    check("team_invites_expiry_check", sql`${t.expiresAt} > ${t.createdAt}`),
+    // Used or revoked, never both: whichever happened first ends the link.
+    check("team_invites_end_check", sql`${t.usedAt} is null or ${t.revokedAt} is null`),
+  ],
+);
+
+export type Team = typeof teams.$inferSelect;
+export type TeamRole = (typeof teamRole.enumValues)[number];
+
 export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 

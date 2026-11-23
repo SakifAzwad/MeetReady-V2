@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { APP_ROUTES } from "./app-routes";
+import { APP_ROUTES, isProtectedPath } from "./app-routes";
 import { RESERVED_USERNAMES } from "./validation/onboarding";
 
 /*
@@ -39,5 +39,19 @@ describe("top-level routes vs usernames", () => {
 
   it.each(routes)("/%s can't be taken as a username", (route) => {
     expect(RESERVED_USERNAMES.has(route)).toBe(true);
+  });
+});
+
+describe("isProtectedPath (Day 28)", () => {
+  it("needs a login for the dashboard, onboarding and invite links, at any depth", () => {
+    for (const path of ["/dashboard", "/dashboard/teams/x", "/onboarding", "/invite/abc"]) {
+      expect(isProtectedPath(path), path).toBe(true);
+    }
+  });
+
+  it("matches whole segments only: a username that starts with one is a public page", () => {
+    for (const path of ["/", "/dashboards", "/dashboard-fan/intro", "/invitebot", "/onboardingx", "/sakif"]) {
+      expect(isProtectedPath(path), path).toBe(false);
+    }
   });
 });

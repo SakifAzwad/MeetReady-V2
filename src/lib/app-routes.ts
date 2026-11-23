@@ -24,4 +24,23 @@ export const APP_ROUTES = new Set([
   "oauth",
   // Day 27: the booking page other sites put in a frame, /embed/{username}/{slug}.
   "embed",
+  // Day 28: invite links (/invite/{token}); /team/{slug}/{event} arrives on Day 29, reserved now.
+  "invite",
+  "team",
 ]);
+
+/**
+ * Pages that need a login (proxy.ts sends a signed-out visitor to /login and
+ * back). Day 28: /invite joined, so someone who opens an invite link while
+ * signed out comes back to it after logging in.
+ */
+export const PROTECTED_SEGMENTS = new Set(["dashboard", "onboarding", "invite"]);
+
+/**
+ * Whole first segments only. Before Day 28 this was `pathname.startsWith("/dashboard")`,
+ * which also matched a username like "dashboards": that host's booking page sent
+ * every guest to the login page.
+ */
+export function isProtectedPath(pathname: string): boolean {
+  return PROTECTED_SEGMENTS.has(pathname.split("/")[1] ?? "");
+}

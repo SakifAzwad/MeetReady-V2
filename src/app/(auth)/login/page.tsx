@@ -94,6 +94,8 @@ async function SignIn({ searchParams }: Pick<PageProps<"/login">, "searchParams"
   // Day 21: an AI assistant's request, signed by Better Auth. Signing in carries it on to the consent
   // page (the auth client sends it along), so this page must not redirect away and drop it.
   const forAssistant = typeof sig === "string";
+  // Day 28: someone who opened a team invite link while signed out.
+  const forInvite = destination.startsWith("/invite/");
 
   // Already logged in: skip the login page.
   if (!forAssistant && (await getSession())) redirect(destination);
@@ -104,6 +106,12 @@ async function SignIn({ searchParams }: Pick<PageProps<"/login">, "searchParams"
         <p className="bg-muted mt-6 rounded-md px-3 py-2 text-sm">
           An AI assistant asked to connect to your MeetReady account. Log in, then you&apos;ll see what it can
           do before you allow it.
+        </p>
+      )}
+      {forInvite && (
+        <p className="bg-muted mt-6 rounded-md px-3 py-2 text-sm">
+          You&apos;ve been invited to join a team. Log in (or create your account), then you&apos;ll see the
+          invite.
         </p>
       )}
       <GoogleSignInButton callbackURL={destination} />

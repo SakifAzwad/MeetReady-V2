@@ -1,7 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/db";
-import { APP_ROUTES } from "@/lib/app-routes";
+import { APP_ROUTES, isProtectedPath } from "@/lib/app-routes";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { EMBED_SEGMENT } from "@/lib/security-headers";
 import { publicPageExists } from "@/server/booking";
@@ -11,7 +11,7 @@ import { ipOf, rateLimit } from "@/server/rate-limit";
  * Two jobs, both done before the page renders (Next.js 16 renamed
  * middleware.ts to proxy.ts; it runs on Node.js).
  *
- * 1. Optimistic login redirects for /dashboard and /onboarding.
+ * 1. Optimistic login redirects for /dashboard, /onboarding and /invite (isProtectedPath).
  *    This checks that a session cookie EXISTS, not that it's valid: that's
  *    requireUser() in each page and action. A forged cookie gets past this
  *    file, then gets stopped there. Never rely on proxy alone for security.
@@ -28,7 +28,6 @@ import { ipOf, rateLimit } from "@/server/rate-limit";
  *    exists. So it's rate-limited per IP (Day 14), and ONLY this branch:
  *    app routes, files and the dashboard never wait on the limiter.
  */
-const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
 
 /** First path segments that are the app's own routes, never a username: src/lib/app-routes.ts. */
 
@@ -38,7 +37,7 @@ const USERNAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  if (PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
+  if (isProtectedPath(pathname)) {
     if (getSessionCookie(request) !== null) return NextResponse.next();
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname + search);

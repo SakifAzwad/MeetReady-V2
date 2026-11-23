@@ -18,6 +18,8 @@
 const SECRETS: [RegExp, string][] = [
   // The guest's manage page.
   [/\/booking\/[A-Za-z0-9_-]{16,}/g, "/booking/[token]"],
+  // A team invite link (Day 28): single use, but whoever has it can join the team.
+  [/\/invite\/[A-Za-z0-9_-]{16,}/g, "/invite/[token]"],
   // /api/slots?…&reschedule=<token> while a guest reschedules.
   [/((?:^|[?&])reschedule=)[^&#\s"']+/g, "$1[token]"],
   // Drizzle's error message ends with the query's values: "Failed query: insert …\nparams: Ada,ada@…,notes".

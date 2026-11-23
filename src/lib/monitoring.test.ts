@@ -12,6 +12,12 @@ describe("scrubString", () => {
     expect(scrubString(`GET /booking/${TOKEN} failed`)).toBe("GET /booking/[token] failed");
   });
 
+  it("hides a team invite token (Day 28)", () => {
+    expect(scrubString(`https://meetreadyv2.vercel.app/invite/${TOKEN}`)).toBe(
+      "https://meetreadyv2.vercel.app/invite/[token]",
+    );
+  });
+
   it("hides the reschedule token in the slots API query, with or without a leading ? or &", () => {
     expect(scrubString(`reschedule=${TOKEN}&x=1`)).toBe("reschedule=[token]&x=1");
     expect(scrubString(`/api/slots?username=a&slug=b&reschedule=${TOKEN}&x=1`)).toBe(

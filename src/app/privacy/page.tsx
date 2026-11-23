@@ -63,6 +63,12 @@ export default function PrivacyPage() {
             you and that service. Each delivery is kept for 30 days so you can see what was sent, then
             deleted. The signing secret is stored encrypted.
           </li>
+          <li id="teams">
+            <strong>If you join or create a team:</strong> everyone in it sees your name, email address and
+            picture. A team&apos;s owner makes invite links: each works for one person, once, within 7 days,
+            and MeetReady stores only a scrambled (hashed) form of it. A member can leave at any time; the
+            owner can remove members or delete the team.
+          </li>
         </ul>
       </LegalSection>
 

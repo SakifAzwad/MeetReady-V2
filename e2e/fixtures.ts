@@ -133,7 +133,7 @@ function watch(page: Page, errors: string[]) {
 }
 
 /** A host with a username, a weekly schedule, one event type and a signed-in session. */
-async function createHost(db: pg.Pool): Promise<Host> {
+export async function createHost(db: pg.Pool): Promise<Host> {
   const suffix = randomBytes(4).toString("hex");
   const id = `u_${suffix}`;
   const username = `host-${suffix}`;

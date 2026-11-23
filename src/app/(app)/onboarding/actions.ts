@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { onboardingSchema } from "@/lib/validation/onboarding";
 import { requireUser } from "@/server/auth/session";
 import { completeOnboarding } from "@/server/users";
@@ -39,5 +40,7 @@ export async function submitOnboarding(
     return { errors: { username: ["That username is already taken"] }, values: raw };
   }
 
-  redirect("/dashboard"); // throws, so it must be outside any try/catch
+  // A form field, so anyone can put anything in it: only a path on this site is followed (open redirect).
+  const next = formData.get("next");
+  redirect(safeRedirectPath(typeof next === "string" ? next : undefined)); // throws: outside any try/catch
 }

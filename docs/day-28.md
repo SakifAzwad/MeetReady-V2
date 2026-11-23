@@ -154,6 +154,26 @@ A unit test previews a link three times and then joins with it; the E2E test rel
 **Lesson:** GET requests must be safe to repeat. The rule matters most for anything single-use: magic links,
 invites, unsubscribe and confirm links.
 
+## Follow-up: the landing page caught up
+
+Reviewing the front end after Day 28: the landing page still described Day 7. "Coming next" listed Google
+Calendar sync, reminders, booking questions, the AI assistant, the MCP server and the embed, all built since; the
+FAQ said Google Calendar wasn't connected; "Under the hood" said "over 250 tests" and named half the stack.
+
+- **Features:** six per side, as built (Google Calendar both ways, questions, Insights and the Move button, embed
+  and webhooks; for guests, describing a time, reminders, light and dark).
+- **New section, "AI where it helps, with guardrails"** (`#ai`, in the header and footer): the booking assistant,
+  the meeting brief and booking from Claude, each with the guardrail that makes it safe, in one line.
+- **Coming next** is now what really is next: team booking pages, round-robin, holding a time while the guest
+  types, preferred hours.
+- **Under the hood:** AI guardrails and the OAuth server added; test counts and the stack updated.
+- **FAQ:** Google Calendar (yes, free/busy only for reading), what the AI sees (matches the privacy page), the
+  embed, and teams.
+- **Footer:** links to the embed and webhooks guides.
+
+**Lesson:** a landing page is documentation too, and it goes stale the same way. The comment at the top of
+`src/app/page.tsx` now says to update it in the same change as the feature.
+
 ## Next
 
 Day 29: collective team event types. A team event type's free times are the intersection of every member's free

@@ -13,7 +13,11 @@ import { HeroBands } from "./_landing/hero-bands";
  * Landing page. The order follows the questions a visitor asks:
  *   what is it (hero + live two-band demo) → what would my guests see (real
  *   booking-page components) → how does it work → what can it do (built, and
- *   what's next, labelled honestly) → can I trust it (under the hood) → FAQ.
+ *   what's next, labelled honestly) → where does AI come in → can I trust it
+ *   (under the hood) → FAQ.
+ * Day 28 review: the copy had fallen behind (Google Calendar, reminders, AI,
+ * MCP and the embed were still "coming next"). When a feature ships, update
+ * FOR_HOSTS / FOR_GUESTS / AI_FEATURES / COMING and the FAQ in the same change.
  * The bands carry the colour; every section around them stays quiet.
  */
 export default function Home() {
@@ -30,8 +34,8 @@ export default function Home() {
               </h1>
               <div className="animate-in-up flex flex-col gap-5 [animation-delay:80ms] lg:pb-2">
                 <p className="text-muted-foreground max-w-[46ch] text-lg leading-relaxed">
-                  Share one link. Guests see your working hours laid over their own day, pick a time, and you
-                  each get it on your own clock.
+                  Share one link. Guests see your working hours laid over their own day, or just say when
+                  suits them, and you each get it on your own clock.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Button asChild size="lg">
@@ -104,6 +108,25 @@ export default function Home() {
             </div>
           </Section>
 
+          <Section
+            id="ai"
+            title="AI where it helps, with guardrails"
+            intro="Three features, each built so the model can't book on its own or make up a time."
+          >
+            <ul className="grid gap-5 md:grid-cols-3">
+              {AI_FEATURES.map((item) => (
+                <li key={item.title} className="bg-card flex flex-col gap-3 rounded-2xl border p-6">
+                  <h3 className="text-xl font-semibold">{item.title}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{item.body}</p>
+                  <p className="mt-auto border-t pt-3 text-sm leading-relaxed">
+                    <span className="font-medium">Guardrail: </span>
+                    {item.guardrail}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Section>
+
           <Section id="under-the-hood" title="Under the hood">
             <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div>
@@ -130,8 +153,8 @@ export default function Home() {
                   time.
                 </figcaption>
                 <p className="mt-8 max-w-[56ch] text-sm leading-relaxed">
-                  Built with Next.js 16, TypeScript, PostgreSQL on Neon, Drizzle ORM, Better Auth, React Email
-                  and Resend.{" "}
+                  Built with Next.js 16, TypeScript, PostgreSQL on Neon, Drizzle ORM, Better Auth, Inngest,
+                  Upstash Redis, the Vercel AI SDK with Groq, the MCP SDK, React Email, Resend and Sentry.{" "}
                   <a href={REPO_URL} className="font-medium underline underline-offset-4">
                     Read the code on GitHub
                   </a>
@@ -227,14 +250,17 @@ function FeatureList({ heading, items }: { heading: string; items: { title: stri
 }
 
 const STEPS = [
-  { title: "Set your hours", body: "Weekly hours in your own timezone, plus days off and one-off changes." },
+  {
+    title: "Set your hours",
+    body: "Weekly hours in your own timezone, plus days off and one-off changes. Connect Google Calendar and your other events block times.",
+  },
   {
     title: "Share your link",
-    body: "One link per kind of meeting: a 30-minute intro, an hour-long interview.",
+    body: "One link per kind of meeting: a 30-minute intro, an hour-long interview. Or put the calendar on your own website.",
   },
   {
     title: "Guests pick a time in theirs",
-    body: "Both of you get an email with a calendar invite. Guests can reschedule or cancel from a private link in theirs.",
+    body: "It lands in your Google Calendar with a Meet link, and both of you get an email. Guests get reminders, and can reschedule or cancel from a private link.",
   },
 ];
 
@@ -244,16 +270,24 @@ const FOR_HOSTS = [
     body: "A weekly schedule with several ranges a day, plus date overrides for holidays and one-off hours.",
   },
   {
+    title: "Your Google Calendar, both ways",
+    body: "Busy events block times, and each booking is added to your calendar with a Google Meet link.",
+  },
+  {
     title: "Rules that protect your day",
     body: "Buffers before and after, minimum notice, how far ahead people can book, and a daily limit.",
   },
   {
-    title: "As many meeting types as you need",
-    body: "Each with its own length, location (Google Meet, Zoom, phone, in person), colour and link.",
+    title: "Meeting types with your own questions",
+    body: "Each with its own length, location (Google Meet, Zoom, phone, in person), colour, link and booking questions.",
   },
   {
-    title: "Your week at a glance",
-    body: "Seven days of working hours and booked meetings, then upcoming, past and cancelled bookings.",
+    title: "Your week, and how it's going",
+    body: "Seven days at a glance, upcoming and past bookings, a Move button, no-shows, and Insights on held, missed and cancelled meetings.",
+  },
+  {
+    title: "On your website and in your tools",
+    body: "Embed the calendar inline or as a popup, and send signed webhooks to Zapier, Slack or your CRM when bookings change.",
   },
 ];
 
@@ -267,28 +301,61 @@ const FOR_GUESTS = [
     body: "With the host's time beside every slot and a daylight band showing if it's 3 AM for them.",
   },
   {
-    title: "A real calendar invite",
-    body: "Confirmation emails carry an .ics file that updates or removes the event when plans change.",
+    title: "Or just say when suits them",
+    body: "“Tuesday afternoon, I'm in London” finds real free times, on their clock.",
+  },
+  {
+    title: "A real calendar invite, and reminders",
+    body: "Confirmation emails carry an .ics file that updates when plans change, and reminders arrive a day and an hour before.",
   },
   {
     title: "Change of plans in two clicks",
-    body: "Reschedule or cancel from the private link in their email. The host is told straight away.",
+    body: "Reschedule or cancel from the private link in their emails. The host's calendar updates by itself.",
+  },
+  {
+    title: "Easy on the eyes",
+    body: "Light or dark, following their device or their choice, and laid out for a phone as much as a laptop.",
+  },
+];
+
+const AI_FEATURES = [
+  {
+    title: "Tell us when suits you",
+    body: "A guest types “next week, a morning, I'm in London” and gets three real free times to pick from, in their language.",
+    guardrail:
+      "the model only fills in a search. Code checks it and finds the times; every suggestion comes from the host's calendar, and the guest still confirms in the form.",
+  },
+  {
+    title: "A brief before each meeting",
+    body: "From the guest's notes and answers, a short summary and agenda in the host's email and on the Bookings page.",
+    guardrail:
+      "the guest's text is fenced off as data and the model has no tools. Its reply must match a schema, is cleaned in code before anyone sees it, and is labelled as written by AI.",
+  },
+  {
+    title: "Book from Claude",
+    body: "Connect MeetReady to Claude (or any MCP client) and ask “what's my week?”, or have it book, move or cancel a meeting.",
+    guardrail:
+      "the host approves the connection on MeetReady's own consent page. Each change needs a confirm step (MeetReady's own form where the assistant supports it), and Disconnect works at once.",
   },
 ];
 
 const COMING = [
-  { title: "Google Calendar sync", body: "Your other events block times, and bookings get a Meet link." },
-  { title: "Reminder emails", body: "A day before and an hour before each meeting." },
-  { title: "Booking questions", body: "Ask guests what the meeting is about, with your own fields." },
   {
-    title: "AI booking assistant",
-    body: "“30 minutes next Tuesday afternoon, I'm in London”, then confirm.",
+    title: "Team booking pages",
+    body: "One link that shows only the times when everyone in a team is free. Teams and invite links are already in.",
   },
   {
-    title: "Book from Claude or ChatGPT",
-    body: "An MCP server so AI assistants can check your times and book.",
+    title: "Round-robin",
+    body: "Bookings shared fairly across a team: the next one goes to whoever had the fewest lately.",
   },
-  { title: "Analytics and embeds", body: "Booking trends, no-shows, and a widget for your own website." },
+  {
+    title: "Hold a time while the guest types",
+    body: "A few minutes' hold on the picked time, so nobody takes it halfway through the form.",
+  },
+  {
+    title: "Preferred hours",
+    body: "Times you'd rather have shown first, without closing the rest.",
+  },
 ];
 
 const ENGINEERING = [
@@ -301,12 +368,20 @@ const ENGINEERING = [
     body: "Working hours are stored as local times and converted date by date, so 9 AM stays 9 AM when the clocks change. 23- and 25-hour days have their own tests.",
   },
   {
+    title: "AI that can't invent a time or act alone",
+    body: "Models write searches and text; code does the date maths, checks every answer and decides what's shown. Guests' words are sent only where a feature needs them, to a provider that doesn't train on them.",
+  },
+  {
+    title: "Its own OAuth server for AI assistants",
+    body: "The MCP server signs assistants in with OAuth 2.1: PKCE, tokens bound to MeetReady, refresh tokens that rotate, and a consent page that lists what each one may do.",
+  },
+  {
     title: "Private links that can’t be guessed",
-    body: "Each guest’s manage link carries 256 random bits, and the database stores only a hash of it. The page is never indexed and sends no referrer.",
+    body: "Guests’ manage links and team invites carry 256 random bits, and the database stores only a hash. Those pages are never indexed and send no referrer.",
   },
   {
     title: "Tested where it matters",
-    body: "Over 250 tests. Slot generation is a pure function tested on its own, and CI runs the race tests against real Postgres.",
+    body: "800+ unit tests and 50+ browser tests run in CI. The browser tests use the production build and real Postgres, with fake Google and Groq servers; evals check the AI on the real model.",
   },
 ];
 
@@ -328,12 +403,24 @@ const FAQ = [
     a: "Your hours are stored as local times (9:00–17:00 in your city) and converted for each date, so a 9 AM start stays 9 AM for you after the change, and guests see the right time for them.",
   },
   {
-    q: "Can guests reschedule or cancel?",
-    a: "Yes, from a private link in their confirmation email. Both of you get an updated calendar invite.",
+    q: "Does it connect to Google Calendar?",
+    a: "Yes. Your busy times block slots (MeetReady asks Google only whether you're busy, never what the events are), and each booking is added to your calendar with a Google Meet link.",
   },
   {
-    q: "Does it connect to Google Calendar?",
-    a: "Not yet: it's next on the roadmap. Today, every booking arrives as an email with a calendar invite you can add in one click.",
+    q: "Can guests reschedule or cancel?",
+    a: "Yes, from a private link in their confirmation and reminder emails. Your Google Calendar updates by itself, and they get an updated invite.",
+  },
+  {
+    q: "What does the AI see?",
+    a: "Only what each feature needs. For the brief: the guest's first name, the meeting type, and their notes and answers. For finding a time: what the guest typed and their timezone. It runs on Groq, which doesn't train on it. Without AI everything else still works.",
+  },
+  {
+    q: "Can I put it on my own website?",
+    a: "Yes. Event types → Embed gives you a short snippet: the calendar inside your page, or a link that opens it as a popup. Your site is told when someone books, without their details.",
+  },
+  {
+    q: "Can my team use it?",
+    a: "Teams are in: create one from your account menu and invite people with a link. Booking pages for a whole team (everyone free, or round-robin) are being built next.",
   },
 ];
 

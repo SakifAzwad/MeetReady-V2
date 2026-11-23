@@ -406,4 +406,7 @@ Read this first in a new chat. It replaces the long Days 1–28 conversations. D
   the parent row. GETs never change state (link previews open links). Outsiders get 404, never 403. URL rules match
   whole path segments (Day 28 story: `startsWith("/dashboard")` matched the username `dashboard-fan`). Whenever a
   repo doc changes, update its project copy too (`claude/meetready-v2-*.md`, including `deploy.md`).
+- **The landing page is documentation** (Day 28 follow-up: it still listed shipped features as "coming next").
+  When a feature ships, update `FOR_HOSTS` / `FOR_GUESTS` / `AI_FEATURES` / `COMING` and the FAQ in
+  `src/app/page.tsx` in the same change.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.

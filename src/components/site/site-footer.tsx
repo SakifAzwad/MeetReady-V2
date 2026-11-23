@@ -9,6 +9,7 @@ const COLUMNS = [
     links: [
       { href: "/#features", label: "Features" },
       { href: "/#how-it-works", label: "How it works" },
+      { href: "/#ai", label: "AI features" },
       { href: "/#faq", label: "FAQ" },
       { href: "/login", label: "Log in" },
     ],
@@ -19,6 +20,8 @@ const COLUMNS = [
       { href: REPO_URL, label: "Source code" },
       { href: `${REPO_URL}/tree/main/docs`, label: "Build notes, day by day" },
       { href: "/#under-the-hood", label: "Under the hood" },
+      { href: `${REPO_URL}/blob/main/docs/embed.md`, label: "Embed guide" },
+      { href: `${REPO_URL}/blob/main/docs/webhooks.md`, label: "Webhooks guide" },
       { href: V1_URL, label: "The original v1" },
     ],
   },

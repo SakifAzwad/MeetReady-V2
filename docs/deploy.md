@@ -709,6 +709,45 @@ steps 4–5 can be skipped.
 **If the invite page says "This invite link doesn't work":** the link was cut short when pasted (it ends in 43
 characters after `/invite/`). Make a new one.
 
+## 22. Collective team event types, added on Day 29
+
+Nothing to set in Vercel. About 10 minutes. You need the team from step 21 with your second Google account in it
+(or invite it now).
+
+1. **Deploy** (push Day 29). Migration 0015 runs first in the build: two new tables (`booking_hosts`,
+   `event_type_hosts`), three triggers, two new columns on `event_types`. Every existing booking gets its row in
+   `booking_hosts`. The log ends with `[migrate] up to date`.
+2. **Check the backfill.** Neon → SQL Editor (`production`):
+   ```sql
+   select (select count(*) from bookings) as bookings, (select count(*) from booking_hosts) as host_rows;
+   ```
+   The two numbers are equal (before any team meeting exists).
+3. **Different hours for the second account (to see the intersection):** in its window, **Availability** → set
+   its timezone to e.g. **London** and Mon–Fri 9–5 → Save. Your own stays Dhaka 9–5. Together you overlap only
+   3–5 PM Dhaka time.
+4. **Create a team event type:** your account → **Teams** → the team → **New team event type**. Title `Team intro`;
+   under **Hosts** both of you are ticked, you marked "(organizer)". **Create event type**. The team page lists it
+   with **Copy link** (`/team/{team}/team-intro`).
+5. **Book it as a guest:** in a private window open `https://meetreadyv2.vercel.app/team/{team}`, then **Team
+   intro**. The panel on the left shows both clocks (Dhaka and London), and a weekday offers only 3:00–4:30 PM
+   (in Dhaka). Book one with your own email.
+6. **Both hosts are blocked:** still in the private window, open the second account's own booking page
+   (`/{its username}/…`) for that day: the time you booked is gone, though the meeting is on YOUR dashboard.
+7. **Emails:** your inbox gets the guest's email ("with {you} and {second account}") and the host's email. The
+   second account's host email is sent too but won't arrive: Resend's test sender only reaches your own address
+   until the domain day. Inngest → **Runs** → that `booking-changed` run: an `email-cohosts` step with output `1`.
+8. **Cancel:** open the link in the guest email. Only **Cancel** is offered ("This is a team meeting…"); moving
+   one comes on Day 30. Cancel it: the time is back on both pages.
+9. **The database:** Neon → SQL Editor (`production`):
+   ```sql
+   select b.status, bh.host_id, bh.active from booking_hosts bh join bookings b on b.id = bh.booking_id
+   order by b.created_at desc limit 2;
+   ```
+   Two rows for the team meeting (one per host), both `active = false` after the cancel.
+
+**If the team page says "No meetings available":** the event type is off, or no host is still in the team (someone
+who leaves stops hosting). Edit it and tick a host.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

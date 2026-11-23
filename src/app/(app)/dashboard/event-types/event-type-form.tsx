@@ -19,6 +19,7 @@ import {
   type EventTypeFormValues,
   type EventTypeInput,
 } from "@/lib/validation/event-type";
+import { saveTeamEventTypeAction } from "../teams/[id]/event-types/actions";
 import { createEventTypeAction, updateEventTypeAction, type EventTypeActionResult } from "./actions";
 import { QuestionsEditor } from "./questions-editor";
 
@@ -34,14 +35,30 @@ const LOCATION_PLACEHOLDER: Record<string, string> = {
   in_person: "Street, city",
 };
 
+/**
+ * Day 29: the same form for a TEAM's event type: its link is /team/{slug}/…,
+ * and the owner picks who hosts it (everyone by default). The first one
+ * ticked, in the team's order, is the organizer.
+ */
+export type TeamFormContext = {
+  id: string;
+  slug: string;
+  members: { userId: string; name: string }[];
+  hostIds: string[];
+};
+
 /** `appHost`: e.g. "meetreadyv2.vercel.app", for the "Guests book at …" hint. */
-type Props =
+type Props = (
   | { mode: "create"; username: string; appHost: string; defaultValues: EventTypeFormValues }
-  | { mode: "edit"; username: string; appHost: string; defaultValues: EventTypeFormValues; id: string };
+  | { mode: "edit"; username: string; appHost: string; defaultValues: EventTypeFormValues; id: string }
+) & { team?: TeamFormContext };
 
 export function EventTypeForm(props: Props) {
-  const { username, defaultValues } = props;
+  const { username, defaultValues, team } = props;
   const [formError, setFormError] = useState<string | null>(null);
+  // Day 29: who hosts a team's event type, kept in the team's member order.
+  const [hostIds, setHostIds] = useState<string[]>(team?.hostIds ?? []);
+  const linkPrefix = team ? `team/${team.slug}` : username;
   // Fill the slug from the title until the user edits the slug themselves.
   const [slugTouched, setSlugTouched] = useState(props.mode === "edit");
 
@@ -71,8 +88,14 @@ export function EventTypeForm(props: Props) {
     // (handleSubmit's argument is the already-transformed output, which the
     // schema wouldn't accept a second time.)
     const values = form.getValues();
-    const result: EventTypeActionResult =
-      props.mode === "create"
+    const orderedHosts = team ? team.members.map((m) => m.userId).filter((id) => hostIds.includes(id)) : [];
+    const result: EventTypeActionResult = team
+      ? await saveTeamEventTypeAction(
+          { teamId: team.id, eventTypeId: props.mode === "edit" ? props.id : undefined },
+          values,
+          orderedHosts,
+        )
+      : props.mode === "create"
         ? await createEventTypeAction(values)
         : await updateEventTypeAction(props.id, values);
 
@@ -105,12 +128,14 @@ export function EventTypeForm(props: Props) {
         <Field
           id="slug"
           label="Link"
-          hint={`Guests book at ${props.appHost}/${username}/${slug || "…"}`}
+          hint={`Guests book at ${props.appHost}/${linkPrefix}/${slug || "…"}`}
           error={errors.slug?.message}
         >
           {(aria) => (
             <div className="border-input focus-within:ring-ring/50 flex items-center rounded-md border focus-within:ring-[3px]">
-              <span className="text-muted-foreground pl-3 text-sm select-none">/{username}/</span>
+              <span className="text-muted-foreground shrink-0 pl-3 text-sm whitespace-nowrap select-none">
+                /{linkPrefix}/
+              </span>
               <input
                 {...aria}
                 className="h-9 w-full bg-transparent pr-3 text-sm outline-none"
@@ -200,6 +225,41 @@ export function EventTypeForm(props: Props) {
           )}
         </Field>
       </Card>
+
+      {team && (
+        <Card>
+          <CardTitle>Hosts</CardTitle>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-muted-foreground mb-2 text-sm">
+              Guests see only the times when everyone ticked here is free, and the meeting is with all of
+              them. The first one is the organizer: the booking goes on their dashboard and Google Calendar.
+            </legend>
+            {team.members.map((m) => {
+              const organizer = team.members.find((x) => hostIds.includes(x.userId))?.userId === m.userId;
+              return (
+                <label key={m.userId} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hostIds.includes(m.userId)}
+                    onChange={(e) =>
+                      setHostIds((now) =>
+                        e.target.checked ? [...now, m.userId] : now.filter((id) => id !== m.userId),
+                      )
+                    }
+                  />
+                  {m.name}
+                  {organizer && <span className="text-muted-foreground">(organizer)</span>}
+                </label>
+              );
+            })}
+          </fieldset>
+          {hostIds.length === 0 && (
+            <p role="alert" className="text-destructive text-sm">
+              Pick at least one host.
+            </p>
+          )}
+        </Card>
+      )}
 
       <Card>
         <CardTitle>Location</CardTitle>
@@ -309,11 +369,11 @@ export function EventTypeForm(props: Props) {
       )}
 
       <div className="flex gap-3">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || (team !== undefined && hostIds.length === 0)}>
           {isSubmitting ? "Saving…" : props.mode === "create" ? "Create event type" : "Save changes"}
         </Button>
         <Button asChild variant="ghost">
-          <Link href="/dashboard/event-types">Cancel</Link>
+          <Link href={team ? `/dashboard/teams/${team.id}` : "/dashboard/event-types"}>Cancel</Link>
         </Button>
       </div>
     </form>

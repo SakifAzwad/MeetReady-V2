@@ -67,7 +67,9 @@ export default function PrivacyPage() {
             <strong>If you join or create a team:</strong> everyone in it sees your name, email address and
             picture. A team&apos;s owner makes invite links: each works for one person, once, within 7 days,
             and MeetReady stores only a scrambled (hashed) form of it. A member can leave at any time; the
-            owner can remove members or delete the team.
+            owner can remove members or delete the team. If the owner makes you a host of a team event type,
+            its public booking page shows guests your name and the time in your city, and your bookings and
+            working hours decide which times it offers (guests see the times, never your other meetings).
           </li>
         </ul>
       </LegalSection>
@@ -123,6 +125,10 @@ export default function PrivacyPage() {
             their own site. It stays MeetReady&apos;s page inside a frame: what you type goes to MeetReady,
             not to that site. When you book, the site is told the meeting type and its start and end times,
             never your name, email, notes or answers.
+          </li>
+          <li>
+            <strong>Booking a team meeting:</strong> your booking, notes and answers go to every host of that
+            meeting, the same as to a single host.
           </li>
           <li>
             <strong>After the meeting:</strong> the host can mark that you didn&apos;t show up. It&apos;s a

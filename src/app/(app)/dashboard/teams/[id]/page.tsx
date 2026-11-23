@@ -10,7 +10,11 @@ import { db } from "@/db";
 import { formatDateKey, formatTime } from "@/lib/scheduling/calendar";
 import { dateKeyInZone } from "@/lib/scheduling/time";
 import { requireOnboardedUser } from "@/server/auth/session";
+import { formatMinutes } from "@/lib/format";
+import { listTeamEventTypes } from "@/server/team-event-types";
 import { getTeam, listMembers, listPendingInvites, MAX_MEMBERS } from "@/server/teams";
+import { Button } from "@/components/ui/button";
+import { CopyLinkButton } from "../../event-types/event-type-controls";
 import {
   DeleteTeamButton,
   InviteButton,
@@ -18,6 +22,7 @@ import {
   RemoveMemberButton,
   RenameTeamForm,
   RevokeInviteButton,
+  TeamEventTypeToggle,
 } from "../controls";
 
 export const metadata: Metadata = { title: "Team" };
@@ -56,9 +61,10 @@ async function TeamBody({ params }: Pick<PageProps<"/dashboard/teams/[id]">, "pa
 
   const now = new Date();
   const isOwner = team.role === "owner";
-  const [members, invites] = await Promise.all([
+  const [members, invites, eventTypes] = await Promise.all([
     listMembers(db, user.id, id),
     isOwner ? listPendingInvites(db, user.id, id, now) : Promise.resolve([]),
+    listTeamEventTypes(db, user.id, id),
   ]);
   const tz = user.timeZone;
   const when = (d: Date) => `${formatDateKey(dateKeyInZone(d, tz), "short")}, ${formatTime(d, tz)}`;
@@ -100,6 +106,68 @@ async function TeamBody({ params }: Pick<PageProps<"/dashboard/teams/[id]">, "pa
             </li>
           ))}
         </ul>
+      </section>
+
+      <section aria-labelledby="team-types-heading" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="team-types-heading" className="text-xl font-semibold">
+            Event types
+          </h2>
+          {isOwner && (
+            <Button asChild size="sm">
+              <Link href={`/dashboard/teams/${team.id}/event-types/new`}>New team event type</Link>
+            </Button>
+          )}
+        </div>
+        {eventTypes.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            {isOwner
+              ? "None yet. A team event type shows guests only the times when all its hosts are free."
+              : "None yet. The team's owner can add them."}
+          </p>
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {eventTypes.map((et) => (
+              <li key={et.id}>
+                <Card className={et.isActive ? "relative gap-3 p-5" : "relative gap-3 p-5 opacity-60"}>
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+                    style={{ backgroundColor: et.color }}
+                  />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold">{et.title}</h3>
+                      <p className="text-muted-foreground truncate font-mono text-xs">
+                        /team/{team.slug}/{et.slug}
+                      </p>
+                    </div>
+                    {isOwner && (
+                      <TeamEventTypeToggle
+                        teamId={team.id}
+                        eventTypeId={et.id}
+                        title={et.title}
+                        isActive={et.isActive}
+                      />
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-sm">
+                    {formatMinutes(et.durationMinutes)} with{" "}
+                    {et.hosts.map((h) => h.name).join(", ") || "nobody yet"}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {isOwner && (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/teams/${team.id}/event-types/${et.id}/edit`}>Edit</Link>
+                      </Button>
+                    )}
+                    <CopyLinkButton path={`/team/${team.slug}/${et.slug}`} />
+                  </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {isOwner && (

@@ -2,12 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/db";
-import type { EventType } from "@/db/schema";
-import type { EventTypeFormValues } from "@/lib/validation/event-type";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { getEventType } from "@/server/event-types";
 import { appHost } from "@/lib/env";
 import { EventTypeForm } from "../../event-type-form";
+import { toFormValues } from "../../form-values";
 import { PageTransition } from "@/components/motion";
 
 export const metadata: Metadata = { title: "Edit event type" };
@@ -40,24 +39,4 @@ async function EditForm({ params }: Pick<PageProps<"/dashboard/event-types/[id]/
       defaultValues={toFormValues(eventType)}
     />
   );
-}
-
-/** DB row -> form values (nullable text columns become "" for the inputs). */
-function toFormValues(et: EventType): EventTypeFormValues {
-  return {
-    title: et.title,
-    slug: et.slug,
-    description: et.description ?? "",
-    durationMinutes: et.durationMinutes,
-    slotIntervalMinutes: et.slotIntervalMinutes,
-    locationType: et.locationType,
-    locationValue: et.locationValue ?? "",
-    color: et.color,
-    bufferBeforeMinutes: et.bufferBeforeMinutes,
-    bufferAfterMinutes: et.bufferAfterMinutes,
-    minimumNoticeMinutes: et.minimumNoticeMinutes,
-    bookingWindowDays: et.bookingWindowDays,
-    maxBookingsPerDay: et.maxBookingsPerDay,
-    questions: et.questions,
-  };
 }

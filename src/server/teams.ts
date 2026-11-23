@@ -1,7 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, count, desc, eq, gt, inArray, isNull, sql, TransactionRollbackError } from "drizzle-orm";
 import { pgConstraintName, pgErrorCode, PG_UNIQUE_VIOLATION } from "@/db/errors";
-import { teamInvites, teamMembers, teams, user, type TeamRole } from "@/db/schema";
+import {
+  eventTypeHosts,
+  eventTypes,
+  teamInvites,
+  teamMembers,
+  teams,
+  user,
+  type TeamRole,
+} from "@/db/schema";
 import type { Database } from "@/db/types";
 import type { CreateTeamInput } from "@/lib/validation/team";
 
@@ -191,18 +199,21 @@ export async function removeMember(
   teamId: string,
   memberId: string,
 ): Promise<boolean> {
-  const rows = await db
-    .delete(teamMembers)
-    .where(
-      and(
-        eq(teamMembers.teamId, teamId),
-        eq(teamMembers.userId, memberId),
-        eq(teamMembers.role, "member"),
-        inArray(teamMembers.teamId, ownedTeams(db, ownerId)),
-      ),
-    )
-    .returning({ userId: teamMembers.userId });
-  return rows.length === 1;
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .delete(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.userId, memberId),
+          eq(teamMembers.role, "member"),
+          inArray(teamMembers.teamId, ownedTeams(tx, ownerId)),
+        ),
+      )
+      .returning({ userId: teamMembers.userId });
+    if (rows.length === 1) await dropFromTeamHosts(tx, teamId, memberId);
+    return rows.length === 1;
+  });
 }
 
 export type LeaveResult = { ok: true } | { ok: false; error: "not_member" | "owner_cannot_leave" };
@@ -211,12 +222,27 @@ export async function leaveTeam(db: Database, userId: string, teamId: string): P
   const role = await roleIn(db, userId, teamId);
   if (!role) return { ok: false, error: "not_member" };
   if (role === "owner") return { ok: false, error: "owner_cannot_leave" };
-  await db
-    .delete(teamMembers)
-    .where(
-      and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId), eq(teamMembers.role, "member")),
-    );
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(teamMembers)
+      .where(
+        and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId), eq(teamMembers.role, "member")),
+      );
+    await dropFromTeamHosts(tx, teamId, userId);
+  });
   return { ok: true };
+}
+
+/**
+ * Day 29: someone who leaves a team (or is removed) stops hosting its event
+ * types, in the same transaction as the membership change. (The booking pages
+ * also only use hosts still in the team, so a missed row could never book them.)
+ */
+async function dropFromTeamHosts(db: Database, teamId: string, userId: string) {
+  const teamTypes = db.select({ id: eventTypes.id }).from(eventTypes).where(eq(eventTypes.teamId, teamId));
+  await db
+    .delete(eventTypeHosts)
+    .where(and(eq(eventTypeHosts.userId, userId), inArray(eventTypeHosts.eventTypeId, teamTypes)));
 }
 
 // ─── Invites ────────────────────────────────────────────────────────────────────

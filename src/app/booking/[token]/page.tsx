@@ -112,6 +112,8 @@ async function BookingPanel({ params }: { params: Params }) {
         <ManageBooking
           token={token}
           changeable={changeable}
+          // Day 29: a team meeting can be cancelled here; moving one comes on Day 30.
+          canReschedule={booking.eventTeamId === null}
           username={booking.hostUsername ?? ""}
           slug={booking.eventSlug}
           hostName={booking.hostName}

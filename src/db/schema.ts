@@ -303,16 +303,29 @@ export const oauthClientAssertion = pgTable("oauth_client_assertion", {
 // ─── Event types ────────────────────────────────────────────────────────────────
 
 export const locationType = pgEnum("location_type", ["google_meet", "zoom", "phone", "in_person"]);
+/**
+ * Day 29: how a TEAM event type picks its hosts. collective = everyone on its
+ * host list takes the meeting (only times when all of them are free);
+ * round_robin (Day 31) = one of them. Personal event types are null.
+ */
+export const teamEventKind = pgEnum("team_event_kind", ["collective", "round_robin"]);
 
 export const eventTypes = pgTable(
   "event_types",
   {
     id: uuid().primaryKey().defaultRandom(),
-    userId: text()
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    /**
+     * The host who owns a personal event type. Null for a team's (Day 29): then
+     * teamId is set. Nullable rather than "the team owner", so every existing
+     * query that says `where user_id = me` can never pick up a team's event type.
+     */
+    userId: text().references(() => user.id, { onDelete: "cascade" }),
+    /** Day 29: the team that owns it (its hosts are in event_type_hosts). */
+    teamId: uuid().references(() => teams.id, { onDelete: "cascade" }),
+    /** Day 29: collective or round-robin; null for a personal event type. */
+    teamKind: teamEventKind(),
     title: varchar({ length: 120 }).notNull(),
-    /** URL part: meetreadyv2.vercel.app/{username}/{slug}. Unique per host, not globally. */
+    /** URL part: meetreadyv2.vercel.app/{username}/{slug}, or /team/{team}/{slug}. Unique per owner. */
     slug: varchar({ length: 80 }).notNull(),
     description: text(),
     durationMinutes: integer().notNull(),
@@ -340,6 +353,12 @@ export const eventTypes = pgTable(
   },
   (t) => [
     unique("event_types_user_slug_unique").on(t.userId, t.slug),
+    unique("event_types_team_slug_unique").on(t.teamId, t.slug),
+    // Day 29: owned by exactly one of a user or a team; a team's has a kind, a person's doesn't.
+    check(
+      "event_types_owner_check",
+      sql`(${t.userId} is null) <> (${t.teamId} is null) and (${t.teamId} is null) = (${t.teamKind} is null)`,
+    ),
     check("event_types_duration_check", sql`${t.durationMinutes} between 5 and 720`),
     check(
       "event_types_interval_check",
@@ -522,6 +541,64 @@ export const bookings = pgTable(
     // The no-double-booking EXCLUDE constraint is in a custom migration
     // (drizzle/0001_bookings_no_overlap.sql): Drizzle can't express EXCLUDE yet.
   ],
+);
+
+// ─── Hosts of a booking (Day 29) ────────────────────────────────────────────────
+
+/**
+ * Who takes part in each booking, one row per host: one for a personal
+ * booking, several for a collective team meeting. Since Day 29 this table, not
+ * `bookings`, carries the no-double-booking guarantee: an EXCLUDE constraint
+ * (drizzle/0015_booking_hosts.sql) refuses two ACTIVE rows of the same host
+ * whose times overlap, whichever meeting each belongs to.
+ *
+ * Only booking_id and host_id are ever written by the app. Triggers copy the
+ * rest from the booking (times, and active = status 'confirmed') when a row is
+ * added, and again whenever the booking moves or is cancelled, so this table
+ * can't disagree with `bookings`. A new booking gets its first row (its
+ * `host_id`, the organizer) from a trigger too: every existing code path that
+ * inserts a booking is covered without knowing this table exists.
+ */
+export const bookingHosts = pgTable(
+  "booking_hosts",
+  {
+    bookingId: uuid()
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    hostId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Filled by the triggers from the booking: placeholders here are overwritten.
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    active: boolean().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bookingId, t.hostId] }),
+    // "What is this host busy with?": the slot query reads by host and time.
+    index().on(t.hostId, t.startsAt),
+  ],
+);
+
+/**
+ * Day 29: who hosts a team event type: everyone in the team by default, or a
+ * chosen few ("investor call" = 2 of the 5 founders). `position` orders them:
+ * the first one is the organizer (the booking's host_id, whose calendar and
+ * timezone lead). Leaving the team removes the row (cascade from membership
+ * isn't possible across tables, so teams.ts does it in the same transaction).
+ */
+export const eventTypeHosts = pgTable(
+  "event_type_hosts",
+  {
+    eventTypeId: uuid()
+      .notNull()
+      .references(() => eventTypes.id, { onDelete: "cascade" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    position: smallint().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.eventTypeId, t.userId] }), index().on(t.userId)],
 );
 
 // ─── Reminders (Day 17) ─────────────────────────────────────────────────────────

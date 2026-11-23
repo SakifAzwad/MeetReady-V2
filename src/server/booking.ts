@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, eq, gt, isNotNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
-import { bookings, eventTypes, user } from "@/db/schema";
+import { bookingHosts, bookings, eventTypeHosts, eventTypes, teamMembers, teams, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import {
   availabilityWindows,
@@ -9,7 +9,7 @@ import {
   type BusyInterval,
   type Slot,
 } from "@/lib/scheduling/generate-slots";
-import { addMinutes, type Interval } from "@/lib/scheduling/intervals";
+import { addMinutes, intersectAll, type Interval } from "@/lib/scheduling/intervals";
 import { addDaysToKey, dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import type { BookingRequest } from "@/lib/validation/booking";
 import { answersSchema, toAnswerSnapshot, type Question } from "@/lib/validation/questions";
@@ -23,6 +23,15 @@ import { newManageToken } from "./manage-token";
  * active event types of onboarded hosts are visible, and every rule is
  * enforced on the server.
  */
+
+/** Someone who takes the meeting (Day 29: a team event type has several). */
+export type EventHost = {
+  id: string;
+  name: string;
+  image: string | null;
+  timeZone: string;
+  username: string;
+};
 
 /** What a guest may see about a host's event type. No email, no internal settings. */
 export type PublicEventType = {
@@ -42,6 +51,15 @@ export type PublicEventType = {
   questions: Question[];
   /** Fingerprint of `questions`, sent back with the booking (see questionsVersion()). */
   questionsVersion: string;
+  /**
+   * Day 29: everyone who takes the meeting, organizer first. A personal event
+   * type has one (its host); a collective team event type has all its hosts.
+   * hostId / hostName / hostTimeZone / username above are the organizer's: the
+   * booking's host_id, and the clock that decides "which day" for its rules.
+   */
+  hosts: EventHost[];
+  /** Day 29: the team that owns it; null for a host's own event type. */
+  team: { id: string; slug: string; name: string } | null;
   // Booking rules: used by generateSlots on the server, not sent to the browser.
   rules: {
     slotIntervalMinutes: number | null;
@@ -72,13 +90,82 @@ export async function getPublicEventType(
   const hostUsername = row?.host.username;
   if (!row || !hostUsername) return null; // not onboarded yet: no public pages
   const { et, host } = row;
+  const only: EventHost = {
+    id: host.id,
+    name: host.name,
+    image: host.image,
+    timeZone: host.timeZone,
+    username: hostUsername,
+  };
+  return toPublic(et, [only], null);
+}
+
+/**
+ * Day 29: a team's event type, /team/{teamSlug}/{slug}. Only active,
+ * collective ones for now (round-robin is Day 31), and only with at least one
+ * host who is still in the team: someone who left never hosts.
+ */
+export async function getTeamEventType(
+  db: Database,
+  teamSlug: string,
+  slug: string,
+): Promise<PublicEventType | null> {
+  const [row] = await db
+    .select({ et: eventTypes, team: { id: teams.id, slug: teams.slug, name: teams.name } })
+    .from(eventTypes)
+    .innerJoin(teams, eq(teams.id, eventTypes.teamId))
+    .where(
+      and(
+        eq(teams.slug, teamSlug.toLowerCase()),
+        eq(eventTypes.slug, slug.toLowerCase()),
+        eq(eventTypes.isActive, true),
+        eq(eventTypes.teamKind, "collective"),
+      ),
+    );
+  if (!row) return null;
+  const hosts = await teamEventHosts(db, row.et.id, row.team.id);
+  if (hosts.length === 0) return null;
+  return toPublic(row.et, hosts, row.team);
+}
+
+/** A team event type's hosts, organizer first: on its host list AND still in the team, with a username. */
+export async function teamEventHosts(
+  db: Database,
+  eventTypeId: string,
+  teamId: string,
+): Promise<EventHost[]> {
+  const rows = await db
+    .select({
+      id: user.id,
+      name: user.name,
+      image: user.image,
+      timeZone: user.timeZone,
+      username: user.username,
+    })
+    .from(eventTypeHosts)
+    .innerJoin(user, eq(user.id, eventTypeHosts.userId))
+    .innerJoin(teamMembers, and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .where(and(eq(eventTypeHosts.eventTypeId, eventTypeId), isNotNull(user.username)))
+    .orderBy(asc(eventTypeHosts.position));
+  return rows.map((r) => ({ ...r, username: r.username! }));
+}
+
+/** The guest-facing shape, for a host's or a team's event type. */
+function toPublic(
+  et: typeof eventTypes.$inferSelect,
+  hosts: EventHost[],
+  team: PublicEventType["team"],
+): PublicEventType {
+  const organizer = hosts[0]!;
   return {
     id: et.id,
-    hostId: host.id,
-    hostName: host.name,
-    hostImage: host.image,
-    username: hostUsername,
-    hostTimeZone: host.timeZone,
+    hostId: organizer.id,
+    hostName: organizer.name,
+    hostImage: organizer.image,
+    username: organizer.username,
+    hostTimeZone: organizer.timeZone,
+    hosts,
+    team,
     title: et.title,
     slug: et.slug,
     description: et.description,
@@ -96,6 +183,13 @@ export async function getPublicEventType(
       maxBookingsPerDay: et.maxBookingsPerDay,
     },
   };
+}
+
+/** A booking request's event type: a host's (username) or a team's (Day 29). */
+export function resolveEventType(db: Database, where: { username?: string; team?: string; slug: string }) {
+  if (where.team !== undefined) return getTeamEventType(db, where.team, where.slug);
+  if (where.username !== undefined) return getPublicEventType(db, where.username, where.slug);
+  return Promise.resolve(null);
 }
 
 /**
@@ -225,56 +319,80 @@ export async function getBookingCalendar(
   now: Date,
   options: CalendarOptions = {},
 ): Promise<{ slots: Slot[]; windows: Interval[] }> {
-  const tz = eventType.hostTimeZone;
   const { start: loadFrom, end: loadTo } = busyLoadRange(range);
 
-  const availability = await getAvailability(db, eventType.hostId, {
-    overridesFrom: addDaysToKey(dateKeyInZone(loadFrom, tz), -1),
-    overridesTo: addDaysToKey(dateKeyInZone(loadTo, tz), 1),
-  });
+  // Each host's working hours, in their own timezone. One at a time: inside a
+  // transaction every query goes over the same connection anyway.
+  const schedules = [];
+  for (const h of eventType.hosts) {
+    const availability = await getAvailability(db, h.id, {
+      overridesFrom: addDaysToKey(dateKeyInZone(loadFrom, h.timeZone), -1),
+      overridesTo: addDaysToKey(dateKeyInZone(loadTo, h.timeZone), 1),
+    });
+    schedules.push({
+      timeZone: h.timeZone,
+      weeklyRules: availability.rules,
+      // Postgres `date` arrives as a "YYYY-MM-DD" string: exactly the DateKey format.
+      dateOverrides: availability.overrides.map((o) => ({ ...o, date: o.date as DateKey })),
+    });
+  }
 
-  // Every confirmed booking of this HOST (any event type) blocks time; each
-  // carries its own event type's buffers. Only this event type's bookings
-  // count towards its maxBookingsPerDay.
+  // Every active booking of ANY of these hosts (any event type, their own or a
+  // team's) blocks time; each carries its own event type's buffers. Read from
+  // booking_hosts (Day 29), which lists every host of every meeting. A meeting
+  // two hosts share appears once per host: kept once. Only this event type's
+  // bookings count towards its maxBookingsPerDay.
   const existing = await db
     .select({
+      bookingId: bookings.id,
       startsAt: bookings.startsAt,
       endsAt: bookings.endsAt,
       eventTypeId: bookings.eventTypeId,
       bufferBeforeMinutes: eventTypes.bufferBeforeMinutes,
       bufferAfterMinutes: eventTypes.bufferAfterMinutes,
     })
-    .from(bookings)
+    .from(bookingHosts)
+    .innerJoin(bookings, eq(bookings.id, bookingHosts.bookingId))
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
     .where(
       and(
-        eq(bookings.hostId, eventType.hostId),
-        eq(bookings.status, "confirmed"),
-        lt(bookings.startsAt, loadTo),
-        gt(bookings.endsAt, loadFrom),
+        inArray(
+          bookingHosts.hostId,
+          eventType.hosts.map((h) => h.id),
+        ),
+        eq(bookingHosts.active, true),
+        lt(bookingHosts.startsAt, loadTo),
+        gt(bookingHosts.endsAt, loadFrom),
         options.excludeBookingId ? ne(bookings.id, options.excludeBookingId) : undefined,
       ),
     );
 
-  const busy: BusyInterval[] = existing.map((b) => ({
-    start: b.startsAt,
-    end: b.endsAt,
-    bufferBeforeMinutes: b.bufferBeforeMinutes,
-    bufferAfterMinutes: b.bufferAfterMinutes,
-    countsTowardDailyLimit: b.eventTypeId === eventType.id,
-  }));
-  // Meetings in the host's own calendar: no buffers of their own (the new slot's
+  const seen = new Set<string>();
+  const busy: BusyInterval[] = [];
+  for (const b of existing) {
+    if (seen.has(b.bookingId)) continue;
+    seen.add(b.bookingId);
+    busy.push({
+      start: b.startsAt,
+      end: b.endsAt,
+      bufferBeforeMinutes: b.bufferBeforeMinutes,
+      bufferAfterMinutes: b.bufferAfterMinutes,
+      countsTowardDailyLimit: b.eventTypeId === eventType.id,
+    });
+  }
+  // Meetings in the hosts' own calendars: no buffers of their own (the new slot's
   // buffers still keep a gap), and they never count towards a daily limit.
   for (const b of options.externalBusy ?? []) {
     busy.push({ start: b.start, end: b.end, countsTowardDailyLimit: false });
   }
 
-  const host = {
-    timeZone: tz,
-    weeklyRules: availability.rules,
-    // Postgres `date` arrives as a "YYYY-MM-DD" string: exactly the DateKey format.
-    dateOverrides: availability.overrides.map((o) => ({ ...o, date: o.date as DateKey })),
-  };
+  // The organizer's schedule leads (its timezone decides "which day" for the rules).
+  // Day 29: with several hosts, the working windows are the times ALL of them work.
+  const host = schedules[0]!;
+  const windows =
+    schedules.length === 1
+      ? availabilityWindows(range, host)
+      : intersectAll(schedules.map((schedule) => availabilityWindows(range, schedule)));
   return {
     slots: generateSlots({
       range,
@@ -282,9 +400,26 @@ export async function getBookingCalendar(
       host,
       eventType: { durationMinutes: eventType.durationMinutes, ...eventType.rules },
       busy,
+      windows: schedules.length === 1 ? undefined : windows,
     }),
-    windows: availabilityWindows(range, host),
+    windows,
   };
+}
+
+/**
+ * Day 29: the hosts' Google busy times for `range`, all of them together.
+ * Any one that can't be read makes the whole answer unreadable
+ * (CalendarUnavailableError): a team meeting needs every host to be free.
+ */
+export async function hostsBusyTimes(
+  calendar: ExternalBusy,
+  hosts: readonly EventHost[],
+  range: Interval,
+  mode: Parameters<ExternalBusy["busyTimes"]>[2],
+): Promise<Interval[]> {
+  const all: Interval[] = [];
+  for (const h of hosts) all.push(...(await calendar.busyTimes(h.id, range, mode)));
+  return all;
 }
 
 export type BookingResult =
@@ -348,10 +483,10 @@ export async function createBooking(
   const window = { start: request.startsAt, end: addMinutes(request.startsAt, 1) };
   let externalBusy: Interval[] = [];
   if (options.calendar) {
-    const host = await getPublicEventType(db, request.username, request.slug);
-    if (!host) return { ok: false, error: "not_found" };
+    const found = await resolveEventType(db, request);
+    if (!found) return { ok: false, error: "not_found" };
     try {
-      externalBusy = await options.calendar.busyTimes(host.hostId, busyLoadRange(window), "live");
+      externalBusy = await hostsBusyTimes(options.calendar, found.hosts, busyLoadRange(window), "live");
     } catch (error) {
       if (error instanceof CalendarUnavailableError) return { ok: false, error: "calendar_unavailable" };
       throw error;
@@ -359,8 +494,10 @@ export async function createBooking(
   }
   try {
     return await db.transaction(async (tx) => {
-      const eventType = await getPublicEventType(tx, request.username, request.slug);
+      const eventType = await resolveEventType(tx, request);
       if (!eventType) return { ok: false, error: "not_found" } as const;
+      // Day 29: an assistant books for its host's own event types only.
+      if (options.byAssistant && eventType.team) return { ok: false, error: "not_found" } as const;
 
       // Answers are checked against the questions as they are NOW, before the
       // lock: a bad request shouldn't make other guests of this host wait.
@@ -385,8 +522,14 @@ export async function createBooking(
         return { ok: false, error: "invalid_answers", answerErrors } as const;
       }
 
-      // (2) Take this host's lock before reading their bookings.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${eventType.hostId}, 0))`);
+      // (2) Take each host's lock before reading their bookings. Day 29: a team
+      // meeting needs every host's, ALWAYS in the same order (sorted ids). Two
+      // bookings sharing hosts, each holding one lock and waiting for the
+      // other's, would deadlock; in one fixed order the second simply waits.
+      await lockHosts(
+        tx,
+        eventType.hosts.map((h) => h.id),
+      );
 
       // (1) Is this exact start still offered? Ask for slots in a 1-minute window around it.
       const start = request.startsAt;
@@ -422,6 +565,15 @@ export async function createBooking(
             : {}),
         })
         .returning({ id: bookings.id, startsAt: bookings.startsAt, endsAt: bookings.endsAt });
+      // The organizer's booking_hosts row came from a trigger; the other hosts are added here.
+      // Their times come from the booking too (another trigger), and the no-overlap constraint
+      // on booking_hosts refuses the whole booking if any of them is already busy then.
+      const others = eventType.hosts.slice(1);
+      if (others.length > 0) {
+        await tx
+          .insert(bookingHosts)
+          .values(others.map((h) => ({ bookingId: id, hostId: h.id, ...FILLED_BY_TRIGGER })));
+      }
       return { ok: true, booking: row!, manageToken: token } as const;
     });
   } catch (error) {
@@ -429,4 +581,65 @@ export async function createBooking(
     if (pgErrorCode(error) === PG_EXCLUSION_VIOLATION) return { ok: false, error: "slot_taken" };
     throw error;
   }
+}
+
+/**
+ * Day 29: one transaction-scoped advisory lock per host, in sorted order (the
+ * deadlock rule above). Exported for the reschedule path, which needs the same.
+ */
+export async function lockHosts(db: Database, hostIds: readonly string[]): Promise<void> {
+  for (const id of [...new Set(hostIds)].sort()) {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`);
+  }
+}
+
+/** booking_hosts' times and "active" are copied from the booking by a trigger; these are never kept. */
+const FILLED_BY_TRIGGER = { startsAt: new Date(0), endsAt: new Date(0), active: false };
+
+/**
+ * Day 29: a team's public page, /team/{slug}: its name and the event types a
+ * guest can book now (active, collective, with at least one host still in the
+ * team). Null if there's no such team.
+ */
+export async function getPublicTeam(db: Database, slug: string) {
+  const [team] = await db
+    .select({ id: teams.id, slug: teams.slug, name: teams.name })
+    .from(teams)
+    .where(eq(teams.slug, slug.toLowerCase()));
+  if (!team) return null;
+  const types = await db
+    .select({
+      id: eventTypes.id,
+      title: eventTypes.title,
+      slug: eventTypes.slug,
+      description: eventTypes.description,
+      durationMinutes: eventTypes.durationMinutes,
+      locationType: eventTypes.locationType,
+      color: eventTypes.color,
+    })
+    .from(eventTypes)
+    .where(
+      and(
+        eq(eventTypes.teamId, team.id),
+        eq(eventTypes.isActive, true),
+        eq(eventTypes.teamKind, "collective"),
+      ),
+    )
+    .orderBy(asc(eventTypes.createdAt));
+  const withHosts = [];
+  for (const t of types) {
+    const hosts = await teamEventHosts(db, t.id, team.id);
+    if (hosts.length > 0)
+      withHosts.push({ ...t, hosts: hosts.map((h) => ({ name: h.name, image: h.image })) });
+  }
+  return { ...team, eventTypes: withHosts };
+}
+
+/** proxy.ts's check for /team/{slug} and /team/{slug}/{event} (a real 404 before streaming starts). */
+export async function teamPageExists(db: Database, teamSlug: string, eventSlug?: string): Promise<boolean> {
+  if (eventSlug === undefined) {
+    const [row] = await db.select({ id: teams.id }).from(teams).where(eq(teams.slug, teamSlug.toLowerCase()));
+    return row !== undefined;
+  }
+  return (await getTeamEventType(db, teamSlug, eventSlug)) !== null;
 }

@@ -25,6 +25,7 @@ import type { Slot } from "@/lib/scheduling/generate-slots";
 import { groupSlotsByDate } from "@/lib/scheduling/group-slots";
 import type { Interval } from "@/lib/scheduling/intervals";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
+import { ownerKey, ownerOf, shortName } from "@/lib/booking-owner";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { cn } from "@/lib/utils";
 import { AssistantBox } from "./assistant-box";
@@ -179,7 +180,7 @@ const moverParam = (r?: Mover): [string, string] | null =>
 /** One cache entry per month (as the guest sees it), timezone and booking being moved. */
 const calendarKey = (event: EventInfo, from: Date, to: Date, mover?: Mover) => [
   "calendar",
-  event.username,
+  ownerKey(ownerOf(event)),
   event.slug,
   from.toISOString(),
   to.toISOString(),
@@ -189,8 +190,10 @@ const calendarKey = (event: EventInfo, from: Date, to: Date, mover?: Mover) => [
 const TAKEN = "Someone just booked that time. Pick another one.";
 
 async function fetchCalendar(event: EventInfo, from: Date, to: Date, mover?: Mover): Promise<CalendarData> {
+  const owner = ownerOf(event);
   const params = new URLSearchParams({
-    username: event.username,
+    // ?username=… or, Day 29, ?team=…
+    ...(owner.team !== undefined ? { team: owner.team } : { username: owner.username }),
     slug: event.slug,
     from: from.toISOString(),
     to: to.toISOString(),
@@ -346,7 +349,7 @@ function Scheduler({
                 ? "Meeting moved"
                 : reschedule
                   ? "Your meeting has moved"
-                  : `You're booked with ${event.hostName.split(" ")[0]}`
+                  : `You're booked with ${shortName(event)}`
             }
             note={
               reschedule && "host" in reschedule
@@ -356,7 +359,7 @@ function Scheduler({
             booked={booked}
             timeZone={timeZone}
             hour12={hour12}
-            hostName={event.hostName}
+            hostName={shortName(event)}
             hostTimeZone={event.hostTimeZone}
             locationLabel={event.locationLabel}
           />
@@ -417,6 +420,7 @@ function Scheduler({
                 timeZone={timeZone}
                 hostTimeZone={event.hostTimeZone}
                 hostName={event.hostName}
+                hostShortName={shortName(event)}
                 hour12={hour12}
               />
             ) : (
@@ -509,7 +513,7 @@ function Scheduler({
                       slot={inDetails}
                       timeZone={timeZone}
                       hour12={hour12}
-                      username={event.username}
+                      owner={ownerOf(event)}
                       slug={event.slug}
                       onBack={backToTimes}
                       draft={draft}
@@ -524,7 +528,7 @@ function Scheduler({
                         setDraft(typed);
                         setBookingQuestions(current);
                         setFormNotice(
-                          `${event.hostName.split(" ")[0]} just changed these questions. Check your answers and confirm again: what still fits is kept.`,
+                          `${shortName(event)} just changed these questions. Check your answers and confirm again: what still fits is kept.`,
                         );
                       }}
                     />

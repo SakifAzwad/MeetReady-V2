@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm";
 import { alias, type PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
-import { bookingBriefs, bookings, eventTypes, oauthClient, user } from "@/db/schema";
+import { bookingBriefs, bookingHosts, bookings, eventTypes, oauthClient, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { addMinutes, subtractInterval } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
@@ -37,6 +37,8 @@ export type BookingDetails = {
   eventTitle: string;
   eventSlug: string;
   eventActive: boolean;
+  /** Day 29: set for a team's event type (a collective meeting). Moving those comes on Day 30. */
+  eventTeamId: string | null;
   durationMinutes: number;
   locationType: (typeof eventTypes.$inferSelect)["locationType"];
   locationValue: string | null;
@@ -57,6 +59,12 @@ export type BookingDetails = {
   /** Day 24: the latest cancel or move was made through an assistant: its id, and its name if it still exists. */
   changedByClient: string | null;
   changeAssistantName: string | null;
+  /**
+   * Day 29: the other hosts of a team meeting (organizer excluded), for their
+   * own emails. Loaded where emails and the guest's page need it; elsewhere
+   * left out. For a team meeting, hostName then names everyone ("Ada and Grace").
+   */
+  coHosts?: { id: string; name: string; email: string; timeZone: string }[];
 };
 
 /** The assistant behind the latest change (Day 24): the same table, joined a second time. */
@@ -79,6 +87,7 @@ const detailsColumns = {
   eventTitle: eventTypes.title,
   eventSlug: eventTypes.slug,
   eventActive: eventTypes.isActive,
+  eventTeamId: eventTypes.teamId,
   durationMinutes: eventTypes.durationMinutes,
   locationType: eventTypes.locationType,
   locationValue: eventTypes.locationValue,
@@ -113,7 +122,26 @@ function selectDetails(db: Database) {
 export async function getBookingDetails(db: Database, bookingId: string): Promise<BookingDetails | null> {
   if (!z.uuid().safeParse(bookingId).success) return null;
   const [row] = await selectDetails(db).where(eq(bookings.id, bookingId));
-  return row ?? null;
+  return row ? withTeamHosts(db, row) : null;
+}
+
+const names = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/**
+ * Day 29: a team meeting is "with" all of its hosts. The guest's emails and
+ * page name every one ("Ada Lovelace and Grace Hopper"), organizer first, and
+ * each co-host gets their own copy of the host's email.
+ */
+async function withTeamHosts(db: Database, row: BookingDetails): Promise<BookingDetails> {
+  if (!row.eventTeamId) return row;
+  const hosts = await db
+    .select({ id: user.id, name: user.name, email: user.email, timeZone: user.timeZone })
+    .from(bookingHosts)
+    .innerJoin(user, eq(user.id, bookingHosts.hostId))
+    .where(eq(bookingHosts.bookingId, row.id))
+    .orderBy(asc(user.name));
+  const coHosts = hosts.filter((h) => h.id !== row.hostId);
+  return { ...row, hostName: names.format([row.hostName, ...coHosts.map((h) => h.name)]), coHosts };
 }
 
 /**
@@ -141,7 +169,7 @@ export async function getBookingByToken(db: Database, token: string): Promise<Bo
   // Malformed tokens never reach the database.
   if (!manageTokenSchema.safeParse(token).success) return null;
   const [row] = await selectDetails(db).where(eq(bookings.manageTokenHash, hashManageToken(token)));
-  return row ?? null;
+  return row ? withTeamHosts(db, row) : null;
 }
 
 export type ManageError = "not_found" | "not_changeable";
@@ -242,11 +270,16 @@ async function moveBooking(
         return { ok: false, error: "not_changeable" } as const;
       }
 
-      // The event type must still be bookable (active, host onboarded).
+      // The event type must still be bookable (active, host onboarded), and be THIS
+      // booking's: Day 29 made the lookup by username + slug ambiguous, since a team's
+      // event type can share a slug with its organizer's own. Team meetings can't be
+      // moved yet (Day 30): their event type isn't the host's, so they stop here.
       const eventType = current.hostUsername
         ? await getPublicEventType(tx, current.hostUsername, current.eventSlug)
         : null;
-      if (!eventType) return { ok: false, error: "not_changeable" } as const;
+      if (!eventType || eventType.id !== current.eventTypeId) {
+        return { ok: false, error: "not_changeable" } as const;
+      }
 
       const slots = await getBookableSlots(tx, eventType, window, now, {
         excludeBookingId: current.id,

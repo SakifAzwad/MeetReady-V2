@@ -57,6 +57,14 @@ export type SlotGenerationInput = {
     maxBookingsPerDay: number | null;
   };
   busy: readonly BusyInterval[];
+  /**
+   * Day 29: working windows worked out by the caller, used instead of the
+   * host's rules. A collective team event type passes the intersection of
+   * every host's windows ("when they're all working"); `host.timeZone` (the
+   * organizer's) still decides which day it is for notice, booking window and
+   * daily limit, and `busy` holds everyone's meetings.
+   */
+  windows?: readonly Interval[];
 };
 
 export type Slot = Interval;
@@ -69,8 +77,8 @@ export function generateSlots(input: SlotGenerationInput): Slot[] {
   const duration = eventType.durationMinutes;
   const step = eventType.slotIntervalMinutes ?? duration;
 
-  // 1–2. The host's availability windows around the range, as UTC instants.
-  const windows = availabilityWindows(range, host);
+  // 1–2. The host's availability windows around the range, as UTC instants (or the team's, Day 29).
+  const windows = input.windows ?? availabilityWindows(range, host);
 
   // 3. Limits that don't depend on the individual slot.
   const earliestStart = addMinutes(now, eventType.minimumNoticeMinutes);

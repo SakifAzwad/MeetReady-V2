@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { subtractInterval } from "@/lib/scheduling/intervals";
 import { slotsQuerySchema } from "@/lib/validation/booking";
-import { busyLoadRange, getBookingCalendar, getPublicEventType } from "@/server/booking";
+import { busyLoadRange, getBookingCalendar, hostsBusyTimes, resolveEventType } from "@/server/booking";
 import { CalendarUnavailableError, calendarBusy } from "@/server/calendar";
 import { getSession } from "@/server/auth/session";
 import { getBookingByToken, getHostBookingDetails } from "@/server/manage-booking";
@@ -11,6 +11,7 @@ import { ipOf, rateLimit, tooManyRequests } from "@/server/rate-limit";
 
 /**
  * GET /api/slots?username=sakif&slug=intro&from=<ISO>&to=<ISO>
+ *     (Day 29: or ?team=acme&slug=demo for a team's collective event type)
  * -> { slots: [{ start, end }], windows: [{ start, end }] } as UTC ISO strings.
  *
  * A route handler, not a server action: reads should be GET (cacheable,
@@ -30,9 +31,9 @@ export async function GET(request: NextRequest) {
   if (!parsed.success) {
     return Response.json({ error: z.flattenError(parsed.error).fieldErrors }, { status: 400 });
   }
-  const { username, slug, from, to, reschedule, move } = parsed.data;
+  const { from, to, reschedule, move } = parsed.data;
 
-  const eventType = await getPublicEventType(db, username, slug);
+  const eventType = await resolveEventType(db, parsed.data);
   if (!eventType) return Response.json({ error: "Not found" }, { status: 404 });
 
   // Rescheduling: the guest's own booking (proved by its token, and only if it
@@ -59,7 +60,8 @@ export async function GET(request: NextRequest) {
   const range = { start: from, end: to };
   let externalBusy;
   try {
-    externalBusy = await calendarBusy.busyTimes(eventType.hostId, busyLoadRange(range), "cached");
+    // Day 29: every host's, for a team event type.
+    externalBusy = await hostsBusyTimes(calendarBusy, eventType.hosts, busyLoadRange(range), "cached");
     // Its own Google Calendar event (Day 16) mustn't block the times around it either.
     if (ownTime) externalBusy = subtractInterval(externalBusy, ownTime);
   } catch (error) {

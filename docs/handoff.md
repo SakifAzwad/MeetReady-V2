@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 28)
+# Handoff: starting a new chat (after Day 29)
 
-Read this first in a new chat. It replaces the long Days 1–28 conversations. Details live in `docs/day-01.md` …
-`docs/day-28.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–29 conversations. Details live in `docs/day-01.md` …
+`docs/day-29.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -217,8 +217,24 @@ Read this first in a new chat. It replaces the long Days 1–28 conversations. D
     `/invite/[token]` (GET only reads; Join = `joinTeamAction`; no-referrer, noindex). `/invite` is login-protected
     (`isProtectedPath` in `src/lib/app-routes.ts`, whole-segment match); onboarding follows `?next=`. `invite`,
     `team`, `teams` reserved; invite tokens scrubbed in `monitoring.ts`. Race tests in `teams.race.test.ts`.
-- **Numbers:** 814 unit tests (+ 8 race tests on real Postgres) + 53 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
-  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 15 migrations (0000–0014).
+  - Collective team event types (Day 29, part 2 of 3): `event_types.team_id` + `team_kind` (`collective`;
+    `round_robin` Day 31), `user_id` nullable, CHECK exactly one owner; slug unique per team.
+    `event_type_hosts (event_type_id, user_id, position)`: position 0 = organizer (= `bookings.host_id`, whose
+    timezone decides the day rules). `booking_hosts (booking_id, host_id, starts_at, ends_at, active)` with the
+    no-overlap EXCLUDE (`booking_hosts_no_overlap`); triggers: organizer row on booking insert, times/active copied
+    from the booking on every insert/update, all rows follow a move/cancel. App writes only (booking_id, host_id).
+    Old `bookings_no_overlap` kept. `PublicEventType.hosts` (+ `team`); `getTeamEventType`, `resolveEventType`
+    (username OR team, schemas refine "exactly one"), `getBookingCalendar` = intersect windows (`intersectAll`,
+    `generateSlots({ windows })`), busy from `booking_hosts` deduped by booking id; `hostsBusyTimes`; `lockHosts`
+    (sorted!). Pages `/team/[slug]`, `/team/[slug]/[event]` (widget `event.team`, `ownerOf`/`ownerKey`/`shortName`
+    in `src/lib/booking-owner.ts`, facts panel lists each host's clock, no assistant); dashboard
+    `/dashboard/teams/[id]/event-types/new|[eventTypeId]/edit` (the event type form with `team` + host picker),
+    team page lists them (owner: toggle, Edit). `src/server/team-event-types.ts` (owner checks). Co-hosts get the
+    host email (`email-cohosts` step, `sendCoHostEmails`); `withTeamHosts` names everyone in guest-facing
+    details. Moving a team meeting is refused (`eventType.id !== current.eventTypeId` guard); guest page offers
+    Cancel only. Not yet (Day 30): co-hosts in Google, moves, co-hosts' Bookings/Insights/week view.
+- **Numbers:** 842 unit tests (+ 10 race tests on real Postgres) + 55 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 16 migrations (0000–0015).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -227,10 +243,10 @@ Read this first in a new chat. It replaces the long Days 1–28 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 28 (migration 0014; check the three usernames first), then runbook step 21.
-2. **Day 29: collective team event types**, then **Day 30: round-robin** (fewest bookings of that type in the last
-   30 days, ties to the longest idle). Sakif's picks: collective first; invite links copied by hand until the
-   domain day; `/team/{slug}/{event}`; owner and member roles only. The domain day waits until a domain is bought.
+1. **Sakif:** push Day 29 (migration 0015), then runbook step 22.
+2. **Day 30: team meetings for every host** (Google with co-hosts invited, moving with all hosts' locks, co-hosts'
+   Bookings page / week view / Insights), then **Day 31: round-robin** (fewest bookings of that type in the last
+   30 days, ties to the longest idle). The domain day waits until a domain is bought.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
@@ -406,6 +422,9 @@ Read this first in a new chat. It replaces the long Days 1–28 conversations. D
   the parent row. GETs never change state (link previews open links). Outsiders get 404, never 403. URL rules match
   whole path segments (Day 28 story: `startsWith("/dashboard")` matched the username `dashboard-fan`). Whenever a
   repo doc changes, update its project copy too (`claude/meetready-v2-*.md`, including `deploy.md`).
+- **Several locks in one transaction (Day 29):** always in one global order (sorted ids), or two bookings sharing
+  hosts deadlock (40P01). A join table multiplies rows: dedupe before counting. A lookup by name that stops being
+  unique (username + slug, once teams share slugs) must compare ids.
 - **The landing page is documentation** (Day 28 follow-up: it still listed shipped features as "coming next").
   When a feature ships, update `FOR_HOSTS` / `FOR_GUESTS` / `AI_FEATURES` / `COMING` and the FAQ in
   `src/app/page.tsx` in the same change.

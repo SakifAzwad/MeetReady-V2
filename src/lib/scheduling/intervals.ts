@@ -67,3 +67,37 @@ export function subtractInterval(intervals: readonly Interval[], cut: Interval):
   }
   return out;
 }
+
+/**
+ * Day 29: the times inside BOTH lists ("when are Ada and Grace both
+ * working?"). Each list is merged first, then walked together like the merge
+ * step of merge sort: O(n + m). Pieces that only touch (09:00–12:00 and
+ * 12:00–13:00) share no instant, so they give nothing.
+ * [09:00,17:00) ∩ [13:00,21:00) -> [13:00,17:00)
+ */
+export function intersectIntervals(a: readonly Interval[], b: readonly Interval[]): Interval[] {
+  const left = mergeIntervals(a);
+  const right = mergeIntervals(b);
+  const out: Interval[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    const x = left[i]!;
+    const y = right[j]!;
+    const start = Math.max(x.start.getTime(), y.start.getTime());
+    const end = Math.min(x.end.getTime(), y.end.getTime());
+    if (start < end) out.push({ start: new Date(start), end: new Date(end) });
+    // Move past whichever ends first: it can't overlap anything later in the other list.
+    if (x.end.getTime() <= y.end.getTime()) i++;
+    else j++;
+  }
+  return out;
+}
+
+/** Day 29: the intersection of any number of lists (everyone in a collective meeting). No lists: nothing. */
+export function intersectAll(lists: readonly (readonly Interval[])[]): Interval[] {
+  if (lists.length === 0) return [];
+  return lists
+    .slice(1)
+    .reduce<Interval[]>((acc, list) => intersectIntervals(acc, list), mergeIntervals(lists[0]!));
+}

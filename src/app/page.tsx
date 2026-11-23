@@ -286,6 +286,10 @@ const FOR_HOSTS = [
     body: "Seven days at a glance, upcoming and past bookings, a Move button, no-shows, and Insights on held, missed and cancelled meetings.",
   },
   {
+    title: "Meetings with your whole team",
+    body: "Create a team, invite people with a link, and share one page that offers only the times when everyone on it is free.",
+  },
+  {
     title: "On your website and in your tools",
     body: "Embed the calendar inline or as a popup, and send signed webhooks to Zapier, Slack or your CRM when bookings change.",
   },
@@ -341,10 +345,6 @@ const AI_FEATURES = [
 
 const COMING = [
   {
-    title: "Team booking pages",
-    body: "One link that shows only the times when everyone in a team is free. Teams and invite links are already in.",
-  },
-  {
     title: "Round-robin",
     body: "Bookings shared fairly across a team: the next one goes to whoever had the fewest lately.",
   },
@@ -355,6 +355,10 @@ const COMING = [
   {
     title: "Preferred hours",
     body: "Times you'd rather have shown first, without closing the rest.",
+  },
+  {
+    title: "More for team meetings",
+    body: "Every host's Google Calendar, moving a team meeting, and team meetings on every host's dashboard.",
   },
 ];
 
@@ -420,7 +424,7 @@ const FAQ = [
   },
   {
     q: "Can my team use it?",
-    a: "Teams are in: create one from your account menu and invite people with a link. Booking pages for a whole team (everyone free, or round-robin) are being built next.",
+    a: "Yes. Create a team from your account menu, invite people with a link, and add team event types: guests see only the times when every host you picked is free, and the meeting is with all of them. Round-robin (one host per meeting, shared fairly) is next.",
   },
 ];
 

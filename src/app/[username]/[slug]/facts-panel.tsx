@@ -8,6 +8,12 @@ import { cityName } from "@/lib/scheduling/daylight";
 export type EventInfo = {
   username: string;
   slug: string;
+  /**
+   * Day 29: a team's collective event type (booked at /team/{slug}/…). Then
+   * username is unused, hostName is the team's name and hostTimeZone the
+   * organizer's; `hosts` are everyone who takes the meeting.
+   */
+  team?: { slug: string; name: string; hosts: { name: string; timeZone: string }[] };
   title: string;
   description: string | null;
   durationMinutes: number;
@@ -36,16 +42,24 @@ export function FactsPanel({
   const now = useMinuteClock();
   const Title = titleAs;
   const firstName = event.hostName.split(" ")[0];
-  const sameZone = timeZone === event.hostTimeZone;
+  // Day 29: a team meeting lists every host's clock (Sakif's pick); "your time" only if it differs from all.
+  const clocks = event.team
+    ? event.team.hosts.map((h) => ({ term: h.name.split(" ")[0] ?? h.name, timeZone: h.timeZone }))
+    : [{ term: firstName, timeZone: event.hostTimeZone }];
+  const sameZone = clocks.some((c) => c.timeZone === timeZone);
 
   return (
     <aside className="flex flex-col gap-5 border-b p-6 md:border-r md:border-b-0 md:p-8">
       <div className="flex items-center gap-3">
-        <span
-          aria-hidden
-          className="font-display bg-night grid size-9 place-items-center rounded-full text-sm font-bold text-white"
-        >
-          {event.hostName.charAt(0)}
+        <span aria-hidden className="flex -space-x-2">
+          {(event.team?.hosts ?? [{ name: event.hostName }]).slice(0, 4).map((h, i) => (
+            <span
+              key={i}
+              className="font-display bg-night ring-card grid size-9 place-items-center rounded-full text-sm font-bold text-white ring-2"
+            >
+              {h.name.charAt(0)}
+            </span>
+          ))}
         </span>
         <span className="font-medium">{event.hostName}</span>
       </div>
@@ -54,11 +68,14 @@ export function FactsPanel({
       <dl className="border-foreground border-t-[1.5px] text-sm">
         <Fact term="Length" value={formatMinutes(event.durationMinutes)} />
         <Fact term="Where" value={event.locationLabel} note="Details in your confirmation email" />
-        <Fact
-          term={`${firstName}'s time`}
-          value={cityName(event.hostTimeZone)}
-          note={now ? `${formatTime(now, event.hostTimeZone, hour12)} right now` : undefined}
-        />
+        {clocks.map((c, i) => (
+          <Fact
+            key={i}
+            term={`${c.term}'s time`}
+            value={cityName(c.timeZone)}
+            note={now ? `${formatTime(now, c.timeZone, hour12)} right now` : undefined}
+          />
+        ))}
         {!sameZone && (
           <Fact
             term="Your time"

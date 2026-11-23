@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarCheck } from "lucide-react";
 import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useForm, type Path, type Resolver } from "react-hook-form";
 import { rescheduleByTokenAction } from "@/app/booking/[token]/actions";
+import { ownerKey, type BookingOwner } from "@/lib/booking-owner";
 import type { Mover } from "./booking-widget";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -71,7 +72,7 @@ export function GuestForm({
   slot,
   timeZone,
   hour12,
-  username,
+  owner,
   slug,
   draft,
   questions: { questions, questionsVersion },
@@ -85,7 +86,8 @@ export function GuestForm({
   slot: Slot;
   timeZone: string;
   hour12: boolean;
-  username: string;
+  /** Whose page: a host's username, or (Day 29) a team's slug. */
+  owner: BookingOwner;
   slug: string;
   /** What they typed last time (they went back, or the time was taken): never make them type it twice. */
   draft: GuestDraft;
@@ -115,7 +117,7 @@ export function GuestForm({
     setFormError(null);
     const result = await bookSlotAction({
       ...form.getValues(), // raw values: the server parses them with the same schema
-      username,
+      ...owner,
       slug,
       startsAt: slot.start.toISOString(),
       guestTimeZone: timeZone,
@@ -132,7 +134,7 @@ export function GuestForm({
       return;
     }
     // Either way the free times have changed: refetch them.
-    await queryClient.invalidateQueries({ queryKey: ["calendar", username, slug] });
+    await queryClient.invalidateQueries({ queryKey: ["calendar", ownerKey(owner), slug] });
 
     if (result.ok) {
       onBooked({ startsAt: new Date(result.booking.startsAt), endsAt: new Date(result.booking.endsAt) });
@@ -323,7 +325,7 @@ export function Confirmation({
       </p>
       {!sameZone && (
         <p className="text-muted-foreground">
-          That&apos;s {formatTime(booked.startsAt, hostTimeZone, hour12)} for {hostName.split(" ")[0]} in{" "}
+          That&apos;s {formatTime(booked.startsAt, hostTimeZone, hour12)} for {hostName} in{" "}
           {cityName(hostTimeZone)}.
         </p>
       )}

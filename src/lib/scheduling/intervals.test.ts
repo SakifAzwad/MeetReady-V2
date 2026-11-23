@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mergeIntervals, overlaps, subtractInterval } from "./intervals";
+import fc from "fast-check";
+import { intersectAll, intersectIntervals, mergeIntervals, overlaps, subtractInterval } from "./intervals";
 import { addDaysToKey, dateKeyInZone, dayOfWeek, wallTimeToInstant } from "./time";
 
 const i = (a: string, b: string) => ({
@@ -83,5 +84,62 @@ describe("subtractInterval (rescheduling: cut the booking's own event out of bus
     expect(
       show(subtractInterval([iv("09:00", "10:00"), iv("10:30", "11:00")], iv("10:00", "10:30"))),
     ).toEqual(["09:00-10:00", "10:30-11:00"]);
+  });
+});
+
+describe("intersectIntervals (Day 29: when are both free?)", () => {
+  it("keeps only the shared part", () => {
+    expect(intersectIntervals([i("09:00", "17:00")], [i("13:00", "21:00")])).toEqual([i("13:00", "17:00")]);
+  });
+
+  it("handles several pieces on each side, unsorted and overlapping", () => {
+    const ada = [i("13:00", "15:00"), i("09:00", "11:00"), i("10:00", "12:00")]; // = 09–12, 13–15
+    const grace = [i("11:00", "14:00"), i("14:30", "18:00")];
+    expect(intersectIntervals(ada, grace)).toEqual([
+      i("11:00", "12:00"),
+      i("13:00", "14:00"),
+      i("14:30", "15:00"),
+    ]);
+  });
+
+  it("gives nothing for intervals that only touch, or don't meet", () => {
+    expect(intersectIntervals([i("09:00", "12:00")], [i("12:00", "13:00")])).toEqual([]);
+    expect(intersectIntervals([i("09:00", "10:00")], [])).toEqual([]);
+  });
+
+  it("intersectAll: three people, and no people", () => {
+    expect(
+      intersectAll([
+        [i("09:00", "17:00")],
+        [i("10:00", "18:00")],
+        [i("08:00", "11:30"), i("16:00", "20:00")],
+      ]),
+    ).toEqual([i("10:00", "11:30"), i("16:00", "17:00")]);
+    expect(intersectAll([])).toEqual([]);
+  });
+
+  it("property: a minute is in the result exactly when it's in both lists", () => {
+    const day = Date.UTC(2026, 10, 9);
+    const minute = 60_000;
+    const interval = fc
+      .tuple(fc.integer({ min: 0, max: 1439 }), fc.integer({ min: 1, max: 300 }))
+      .map(([s, len]) => ({
+        start: new Date(day + s * minute),
+        end: new Date(day + Math.min(1440, s + len) * minute),
+      }));
+    const list = fc.array(interval, { maxLength: 6 });
+    const contains = (xs: { start: Date; end: Date }[], t: number) =>
+      xs.some((x) => x.start.getTime() <= t && t < x.end.getTime());
+    fc.assert(
+      fc.property(list, list, (a, b) => {
+        const both = intersectIntervals(a, b);
+        for (let m = 0; m < 1440; m += 7) {
+          const t = day + m * minute;
+          if (contains(both, t) !== (contains(a, t) && contains(b, t))) return false;
+        }
+        // Sorted, and no two pieces touch or overlap.
+        return both.every((x, k) => k === 0 || both[k - 1]!.end.getTime() < x.start.getTime());
+      }),
+    );
   });
 });

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { APP_ROUTES, isProtectedPath } from "@/lib/app-routes";
 import { tooManyAttempts } from "@/lib/rate-limit-text";
 import { EMBED_SEGMENT } from "@/lib/security-headers";
-import { publicPageExists } from "@/server/booking";
+import { publicPageExists, teamPageExists } from "@/server/booking";
 import { ipOf, rateLimit } from "@/server/rate-limit";
 
 /*
@@ -76,12 +76,34 @@ export async function proxy(request: NextRequest) {
  */
 function publicPage(segments: string[]): string[] | null {
   if (segments[0] === EMBED_SEGMENT) return segments.length === 3 ? segments.slice(1) : null;
+  // Day 29: /team/{slug} and /team/{slug}/{event}, checked by isPublicPage below.
+  if (segments[0] === "team") return segments.length === 2 || segments.length === 3 ? segments : null;
   if (segments.length === 0 || segments.length > 2) return null;
   if (APP_ROUTES.has(segments[0]!) || segments[0]!.includes(".")) return null;
   return segments;
 }
 
-async function isPublicPage([rawUsername, rawSlug]: string[]): Promise<boolean> {
+async function isPublicPage(segments: string[]): Promise<boolean> {
+  if (segments[0] === "team") return isTeamPage(segments.slice(1));
+  return isUserPage(segments);
+}
+
+/** Day 29: a team's page, or one of its event types. Same rules for the names as usernames and slugs. */
+async function isTeamPage([rawTeam, rawSlug]: string[]): Promise<boolean> {
+  let team: string;
+  let slug: string | undefined;
+  try {
+    team = decodeURIComponent(rawTeam!).toLowerCase();
+    slug = rawSlug === undefined ? undefined : decodeURIComponent(rawSlug).toLowerCase();
+  } catch {
+    return false;
+  }
+  if (team.length < 3 || team.length > 30 || !USERNAME.test(team)) return false;
+  if (slug !== undefined && (slug.length > 80 || !USERNAME.test(slug))) return false;
+  return teamPageExists(db, team, slug);
+}
+
+async function isUserPage([rawUsername, rawSlug]: string[]): Promise<boolean> {
   let username: string;
   let slug: string | undefined;
   try {

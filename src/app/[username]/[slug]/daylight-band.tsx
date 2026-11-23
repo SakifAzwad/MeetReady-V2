@@ -29,6 +29,7 @@ export function DaylightBand({
   timeZone,
   hostTimeZone,
   hostName,
+  hostShortName,
   hour12,
   headingAs: Heading = "h2",
 }: {
@@ -37,6 +38,8 @@ export function DaylightBand({
   timeZone: string;
   hostTimeZone: string;
   hostName: string;
+  /** How sentences name the host: their first name by default; Day 29, a team's name. */
+  hostShortName?: string;
   hour12: boolean;
   /** "h4" inside the landing page preview, where it sits under other headings. */
   headingAs?: "h2" | "h4";
@@ -59,7 +62,7 @@ export function DaylightBand({
         hour12,
       })
     : null;
-  const firstName = hostName.split(" ")[0];
+  const firstName = hostShortName ?? hostName.split(" ")[0];
   const difference = offsetDifference(
     hostTimeZone,
     timeZone,

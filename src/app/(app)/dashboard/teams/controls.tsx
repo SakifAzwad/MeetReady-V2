@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { suggestTeamSlug } from "@/lib/validation/team";
 import {
   createInviteAction,
@@ -17,6 +18,7 @@ import {
   type ActionResult,
   type FieldErrors,
 } from "./actions";
+import { setTeamEventTypeActiveAction } from "./[id]/event-types/actions";
 
 /*
  * The Teams pages' interactive parts (Day 28). The pages are server-rendered;
@@ -318,5 +320,40 @@ export function RenameTeamForm({ teamId, name }: { teamId: string; name: string 
       </span>
       <ActionError error={error} />
     </form>
+  );
+}
+
+/** Day 29: on/off for a team's event type (owner only; the action checks again). */
+export function TeamEventTypeToggle({
+  teamId,
+  eventTypeId,
+  title,
+  isActive,
+}: {
+  teamId: string;
+  eventTypeId: string;
+  title: string;
+  isActive: boolean;
+}) {
+  const [optimistic, setOptimistic] = useOptimistic(isActive);
+  const [pending, startTransition] = useTransition();
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Switch
+        checked={optimistic}
+        disabled={pending}
+        aria-label={`${title}: ${optimistic ? "on" : "off"}`}
+        onCheckedChange={(next) =>
+          startTransition(async () => {
+            setFailed(false);
+            setOptimistic(next);
+            const result = await setTeamEventTypeActiveAction({ teamId, eventTypeId }, next);
+            if (!result.ok) setFailed(true);
+          })
+        }
+      />
+      {failed && <span className="text-destructive text-xs">Couldn&apos;t save</span>}
+    </div>
   );
 }

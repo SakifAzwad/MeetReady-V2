@@ -1,15 +1,15 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 28).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 29).
 
 ## Next, in order
 
-1. **Push Day 28** (teams, roles and invite links; migration 0014), then runbook step 21.
-2. **Day 29: collective team event types.** Free times = the intersection of every member's free times (their
-   own hours, timezone, bookings and Google Calendar), on `/team/{slug}/{event}`; the booking lands in every
-   member's calendar.
-3. **Day 30: round-robin.** One member per booking: fewest bookings of that type in the last 30 days, ties to
+1. **Push Day 29** (collective team event types; migration 0015), then runbook step 22.
+2. **Day 30: team meetings for every host.** Google Calendar (one event in the organizer's calendar, co-hosts
+   invited as attendees, one Meet link), moving a team meeting (every host's lock, sorted), team meetings on each
+   host's Bookings page, week view and Insights, and a band sentence that fits a team.
+3. **Day 31: round-robin.** One member per booking: fewest bookings of that type in the last 30 days, ties to
    whoever was booked longest ago; race tests when two guests book the same time.
 4. **Then pick from the list below.** The domain day waits until a domain is bought.
 
@@ -28,7 +28,8 @@ a Move button for the host, reusing the booking widget (Day 25, Part B); signed 
 format, retries through Inngest, SSRF protection at save and connect time, secret rotation) (Day 26, Part A); a
 System / Light / Dark theme switcher with no flash (Day 26, Part B); a booking widget for other websites, inline or
 as a popup (Day 27), which completes Phase 2; teams with an owner and members, and single-use invite links (Day
-28, team scheduling part 1).
+28, team scheduling part 1); collective team event types, with every host's double booking guarded by Postgres
+(Day 29, part 2).
 
 ## Ideas from reviews, deferred
 
@@ -70,6 +71,9 @@ as a popup (Day 27), which completes Phase 2; teams with an owner and members, a
 | **An admin role** (manage members without owning)                                   | Day 28 | Owner and member cover a small team (Sakif's pick). The role is a column with an enum, so a third value is a migration plus the checks in `src/server/teams.ts`.                                                                                                                                                                                                                                     | With bigger teams                                  |
 | **Change a team's address** (slug)                                                  | Day 28 | Only the name can change. A new slug breaks every link already shared (and embeds); it would need redirects from the old one.                                                                                                                                                                                                                                                                        | When a team asks                                   |
 | **Email invites**                                                                   | Day 28 | Links are copied and sent by the owner. Emailing them needs a domain: Resend's test sender only reaches Sakif.                                                                                                                                                                                                                                                                                       | The domain day                                     |
+| **The booking assistant on team pages**                                             | Day 29 | It searches one host's calendar (`getPublicEventType` by username). Teams need it to search the collective free times instead, and its own lines in `LIMITS` per team.                                                                                                                                                                                                                               | After round-robin                                  |
+| **Embedding a team's page**                                                         | Day 29 | `/embed/{username}/{slug}` only. A team route needs the embed page to resolve teams too, and a snippet in the team's Embed dialog.                                                                                                                                                                                                                                                                   | When a team asks                                   |
+| **Booking a team meeting through MCP**                                              | Day 29 | `book_meeting` refuses a team's event type: the assistant acts for one host, and a team meeting books several people's time. Needs a rule for who may (the owner? any host?).                                                                                                                                                                                                                        | If hosts ask                                       |
 | **Show the MCP tool calls to the host** (an activity log per assistant)             | Day 21 | Today the dashboard shows which assistants are connected, not what they read. A log is a table and a page; useful once assistants can write.                                                                                                                                                                                                                                                         | With `book_meeting`, if hosts ask                  |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                     | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                                                                                                                                            | After the MCP server                               |
 | **Pick a time on the daylight band** (tap or drag, snapping to free times)          | Day 16 | The most original option for the time picker, but tapping a 30-minute strip is fiddly on a phone, and it still needs the grid as a keyboard-friendly fallback. The grid (option A) shipped first.                                                                                                                                                                                                    | As polish, after the AI features                   |
@@ -129,7 +133,8 @@ as a popup (Day 27), which completes Phase 2; teams with an owner and members, a
   - signed webhooks (done, Day 26: created, rescheduled, cancelled);
   - an embeddable booking widget (done, Day 27: inline and popup).
 - **Phase 3 (pick 2–3):**
-  - team scheduling (in progress: teams and invites Day 28; collective Day 29; round-robin Day 30);
+  - team scheduling (in progress: teams and invites Day 28; collective Day 29; every host's calendar and moves
+    Day 30; round-robin Day 31);
   - group events with seats;
   - meeting polls;
   - routing forms;

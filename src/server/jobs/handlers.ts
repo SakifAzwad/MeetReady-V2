@@ -107,7 +107,10 @@ export async function onBookingChanged(data: BookingChangedData, steps: Steps, d
         ? await steps.run("brief", () => deps.briefs.prepare(data.bookingId))
         : "not_needed";
     const host = await steps.run("email-host", () => sendChangeEmail(deps, data, "host"));
-    return { brief, host };
+    // Day 29: the other hosts of a team meeting get the host's email too, each on their own clock.
+    // One step for all of them; a retry resends none twice (one idempotency key per host).
+    const coHosts = await steps.run("email-cohosts", () => sendCoHostEmails(deps, data));
+    return { brief, host, coHosts };
   };
   // Day 26: webhooks, side by side with the emails (a slow receiver never holds up an email, and a
   // failing email never holds up a webhook). This step only WRITES the deliveries and queues one
@@ -144,6 +147,32 @@ export async function onBookingChanged(data: BookingChangedData, steps: Steps, d
 }
 
 export type ChangeEmailOutcome = "sent" | "superseded" | "not_needed" | "missing";
+
+/**
+ * Day 29: a team meeting's co-hosts. The same email as the organizer's, sent
+ * to each of them, in their own timezone. Always with an .ics: the event is in
+ * the ORGANIZER's Google Calendar (Day 30 adds the co-hosts there), not theirs.
+ * Returns how many were sent (0 for anything but a team meeting).
+ */
+export async function sendCoHostEmails(deps: JobDeps, data: BookingChangedData): Promise<number> {
+  const b = await getBookingDetails(deps.db, data.bookingId);
+  if (!b?.coHosts?.length || b.sequence !== data.sequence) return 0;
+  const change = toChange(data);
+  if (!audiencesFor(b, change).includes("host")) return 0;
+  const brief = change.kind === "created" ? await getBrief(deps.db, b.id) : null;
+  for (const h of b.coHosts) {
+    const message = await composeChangeEmail(
+      { appUrl: deps.appUrl, now: new Date(data.at) },
+      { ...b, hostEmail: h.email, hostTimeZone: h.timeZone, calendarSync: null },
+      change,
+      "host",
+      null,
+      { brief },
+    );
+    await deps.sender.send(message, { idempotencyKey: `booking/${b.id}/${b.sequence}/host/${h.id}` });
+  }
+  return b.coHosts.length;
+}
 
 function toChange(data: BookingChangedData): BookingChange {
   if (data.change === "rescheduled") {

@@ -425,6 +425,9 @@ Read this first in a new chat. It replaces the long Days 1–29 conversations. D
 - **Several locks in one transaction (Day 29):** always in one global order (sorted ids), or two bookings sharing
   hosts deadlock (40P01). A join table multiplies rows: dedupe before counting. A lookup by name that stops being
   unique (username + slug, once teams share slugs) must compare ids.
+- **Rate-limit tests (Day 29 story 6):** windows are aligned to the clock and the previous one is weighted down, so a
+  burst that crosses a boundary counts low. Bursts start early in a window (`startEarlyInWindow` in
+  `e2e/rate-limit.spec.ts`).
 - **Emails from jobs (Day 29 story 5):** `PermanentEmailError` (any Resend error except rate limits, Resend's own
   5xx and nameless ones) is reported once and answered `rejected`; everything else throws and is retried. Without a
   domain, every email to anyone but Sakif is a permanent refusal: expected, one Sentry issue each.

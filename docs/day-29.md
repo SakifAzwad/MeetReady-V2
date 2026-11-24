@@ -27,7 +27,8 @@
   and the full E2E suite passes (55). Four protections were removed one at a time and the tests caught each
   (Stories 1–3, and the extra host rows).
 - **Setup:** migration 0015 runs in the build. Runbook **step 22**.
-- **Follow-up (after deploying):** permanent email refusals no longer fail a background run (Story 5).
+- **Follow-ups (after deploying):** permanent email refusals no longer fail a background run (Story 5); the
+  rate-limit E2E tests no longer fail when a burst crosses a clock minute (Story 6).
 
 ## 1. Decisions (Sakif's picks, from the options proposed)
 
@@ -176,6 +177,25 @@ way Resend's test sender does; without the fix, they fail.
 **Lesson:** "retry on error" needs a definition of which errors. A retry can only fix what time can fix
 (timeouts, rate limits, an outage); a refusal is permanent, and retrying it only delays the failure and repeats
 the alert. Classify errors where they come from, and test both kinds.
+
+### 6. A rate-limit test that failed whenever it crossed a minute (CI, after pushing Day 29)
+
+**Problem:** CI failed `the slots API answers 429 with Retry-After after 60 calls a minute`: the 61st call got
+400, not 429. Nothing in Day 29 touched the limiter. The limiter (the same algorithm as Upstash's sliding window)
+counts `current + floor(previous × share of the previous window still inside the last minute)`, and windows are
+clock minutes. A burst that crosses a minute boundary, even by two calls, is counted below 60, so the 61st is let
+through. Reproduced on purpose: calls 1–2 at :59.96 and :59.98, calls 3–61 after the minute turned, and call 61
+answered 400. The booking test (5 per 10 minutes) had the same risk at 10-minute boundaries. It had passed since
+Day 14 because a local burst takes half a second; a busy CI runner gave it more time to cross a boundary.
+
+**What I did:** the tests now start each burst early in a limiter window (`startEarlyInWindow`: if less than 20 s
+are left in the minute, or 2 minutes in the 10-minute block, wait for the next one). The server runs on the same
+machine, so the test sees the same clock. Not a retry: the burst is made to fit, so a pass means the limit works.
+The limiter itself is unchanged: rounding the previous window down makes it slightly lenient at a boundary, which
+is fine for abuse limits (runbook step 11 met the same thing on the live site on 12 Nov).
+
+**Lesson:** a test that depends on the clock must decide where it starts on the clock. "Passes locally" can mean
+"usually too fast to cross a boundary". Reproduce the bad timing on purpose before calling it fixed.
 
 ## Next
 

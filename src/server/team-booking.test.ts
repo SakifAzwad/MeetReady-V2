@@ -7,6 +7,8 @@ import { createTestDb } from "@/test/db";
 import { saveWeeklySchedule } from "./availability";
 import { createBooking, getBookableSlots, getPublicEventType, getTeamEventType } from "./booking";
 import { createEventType } from "./event-types";
+import { createMemorySender, resendError, type EmailMessage } from "./email/sender";
+import { sendCoHostEmails, type JobDeps } from "./jobs/handlers";
 import { getBookingDetails, rescheduleBookingByToken } from "./manage-booking";
 import {
   createTeamEventType,
@@ -174,6 +176,32 @@ describe("booking a collective time", () => {
     expect(details.coHosts).toEqual([
       { id: "grace", name: "Grace", email: "grace@example.com", timeZone: "Europe/London" },
     ]);
+  });
+
+  it("emails each co-host; one refused address doesn't stop the others or fail the step", async () => {
+    expect(
+      (await updateTeamEventType(db, "ada", teamId, syncId, input(), ["ada", "grace", "linus"])).ok,
+    ).toBe(true);
+    const r = await createBooking(db, request("09:00"), NOW);
+    if (!r.ok) throw new Error(r.error);
+    const mail = createMemorySender();
+    const reports: unknown[] = [];
+    const deps = {
+      db,
+      appUrl: "https://meetready.test",
+      report: (e: unknown) => reports.push(e),
+      sender: {
+        async send(m: EmailMessage, o?: { idempotencyKey?: string }) {
+          // Resend's test sender: only the account's own address gets through.
+          if (m.to === "grace@example.com") throw resendError("validation_error", "testing emails only");
+          return mail.send(m, o);
+        },
+      },
+    } as unknown as JobDeps;
+    const data = { bookingId: r.booking.id, change: "created" as const, sequence: 0, at: NOW.toISOString() };
+    expect(await sendCoHostEmails(deps, data)).toEqual({ sent: 1, rejected: 1 });
+    expect(mail.sent.map((m) => m.to)).toEqual(["linus@example.com"]);
+    expect(reports).toHaveLength(1);
   });
 
   it("can't be moved yet (Day 30), even though the organizer has an event type with the same slug", async () => {

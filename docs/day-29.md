@@ -27,6 +27,7 @@
   and the full E2E suite passes (55). Four protections were removed one at a time and the tests caught each
   (Stories 1–3, and the extra host rows).
 - **Setup:** migration 0015 runs in the build. Runbook **step 22**.
+- **Follow-up (after deploying):** permanent email refusals no longer fail a background run (Story 5).
 
 ## 1. Decisions (Sakif's picks, from the options proposed)
 
@@ -152,6 +153,29 @@ Grace's own booking over a team meeting she's in and gets 23P01; the old constra
 
 **Lesson:** a constraint can only see its own table's columns. When the shape of the data changes (one host
 becomes several), the guarantee has to move to where the new shape lives.
+
+### 5. A refused email that failed the whole run (found by Sakif on the live site)
+
+**Problem:** after deploying, Sakif booked a team meeting from a private window and found the `booking-changed`
+run **Failed** in Inngest after 5 minutes: the `email-cohosts` step kept getting `Resend: validation_error: You can
+only send testing emails to your own email address`. With no domain, Resend's test sender delivers only to the
+account's owner, and a co-host's address is never the owner's. The sender turned every Resend error into a plain
+`Error`; a job step that throws is retried (8 times, with growing gaps), then the run fails. The booking, the
+guest's and organizer's emails and the webhooks had all gone through; only the run's status (and a Sentry alert
+per retry) was wrong. The same was true since Day 17 for any guest booking with an address other than Sakif's:
+the runbook always said "use your own email", so it never showed.
+
+**What I did:** the sender now tells two kinds of failure apart. `rate_limit_exceeded`, Resend's own outages
+(`internal_server_error`, `application_error`) and errors with no name stay plain errors, retried as before. Any
+other Resend error (a refused or invalid recipient, a bad key) is a `PermanentEmailError`: the job reports it once
+to Sentry (`booking-emails` or `reminders`), answers `rejected`, and the run completes. Each co-host gets their try
+before anything is retried, so one refused address doesn't hold back the others. A refused reminder is recorded
+like a sent one, or every 15-minute sweep would try it again. Tests use a mailbox that refuses one address, the
+way Resend's test sender does; without the fix, they fail.
+
+**Lesson:** "retry on error" needs a definition of which errors. A retry can only fix what time can fix
+(timeouts, rate limits, an outage); a refusal is permanent, and retrying it only delays the failure and repeats
+the alert. Classify errors where they come from, and test both kinds.
 
 ## Next
 

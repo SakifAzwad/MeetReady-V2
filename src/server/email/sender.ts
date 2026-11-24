@@ -30,6 +30,31 @@ export type SendOptions = {
   idempotencyKey?: string;
 };
 
+/**
+ * Resend refused this email for good: a bad or forbidden recipient (with no
+ * domain yet, Resend's test sender only delivers to the account's own
+ * address), a bad API key, an invalid field. Sending it again can't work, so
+ * the background jobs don't retry it: they report it once (Sentry) and move
+ * on. Any other failure stays a plain Error, which the jobs retry.
+ */
+export class PermanentEmailError extends Error {
+  override name = "PermanentEmailError";
+}
+
+/** Resend errors that can pass: too many requests, a race on the same key, their own outage. */
+const RETRYABLE = new Set([
+  "rate_limit_exceeded",
+  "concurrent_idempotent_requests",
+  "internal_server_error",
+  "application_error",
+]);
+
+/** Day 30 fix: which kind of error a Resend error name is (unknown or missing name: retry, the safe side). */
+export function resendError(name: string | undefined, message: string): Error {
+  const text = `Resend: ${name ?? "unknown"}: ${message}`;
+  return name && !RETRYABLE.has(name) ? new PermanentEmailError(text) : new Error(text);
+}
+
 export interface EmailSender {
   send(message: EmailMessage, options?: SendOptions): Promise<void>;
 }
@@ -62,8 +87,9 @@ export function createResendSender(apiKey: string, from: string): EmailSender {
       // Same key, different content: this email was already sent once (a retry rebuilt
       // it with a new timestamp). That's success, not a reason to retry forever.
       if (error?.name === "invalid_idempotent_request") return;
-      // The Resend SDK returns errors instead of throwing; make them throw so callers notice.
-      if (error) throw new Error(`Resend: ${error.name}: ${error.message}`);
+      // The Resend SDK returns errors instead of throwing; make them throw so callers notice,
+      // as the kind that tells the jobs whether trying again could help.
+      if (error) throw resendError(error.name, error.message);
     },
   };
 }

@@ -1,14 +1,20 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Inngest } from "inngest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bookingBriefs, bookings, webhookDeliveries, webhookEndpoints } from "@/db/schema";
+import { bookingBriefs, bookingReminders, bookings, webhookDeliveries, webhookEndpoints } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { APP, book, connectCalendar, SECRET, setupHost } from "@/test/booking-fixture";
 import { createTestDb } from "@/test/db";
 import { CalendarUnavailableError } from "../calendar/google-api";
 import type { BriefOutcome } from "../ai/briefs";
 import type { SyncAttempt } from "../calendar/sync";
-import { createMemorySender, type EmailMessage, type EmailSender } from "../email/sender";
+import {
+  createMemorySender,
+  PermanentEmailError,
+  resendError,
+  type EmailMessage,
+  type EmailSender,
+} from "../email/sender";
 import { cancelBookingAsHost, rescheduleBookingByToken } from "../manage-booking";
 import { reminderEventId } from "../reminders";
 import {
@@ -529,5 +535,81 @@ describe("webhooks in the jobs (Day 26)", () => {
     const [d] = await db.select().from(webhookDeliveries);
     expect(d).toMatchObject({ status: "failed", attempts: 1, lastStatusCode: 503 });
     expect(report).not.toHaveBeenCalled(); // a receiver's 503 isn't our error
+  });
+});
+
+/**
+ * A mailbox that refuses one address, the way Resend's test sender refuses anyone but the account's
+ * owner (Day 29 story): a permanent error by default, or the given one.
+ */
+function refusing(
+  address: string,
+  error: Error = resendError(
+    "validation_error",
+    "You can only send testing emails to your own email address",
+  ),
+) {
+  const inner = createMemorySender();
+  const send = inner.send.bind(inner);
+  return Object.assign(inner, {
+    async send(m: EmailMessage, o?: Parameters<EmailSender["send"]>[1]) {
+      if (m.to === address) throw error;
+      return send(m, o);
+    },
+  });
+}
+
+describe("refused emails (Day 29 story)", () => {
+  it("Resend errors: refusals are permanent, outages and rate limits are worth retrying", () => {
+    expect(resendError("validation_error", "x")).toBeInstanceOf(PermanentEmailError);
+    expect(resendError("invalid_api_key", "x")).toBeInstanceOf(PermanentEmailError);
+    for (const name of ["rate_limit_exceeded", "internal_server_error", "application_error", undefined]) {
+      const error = resendError(name, "x");
+      expect(error, String(name)).not.toBeInstanceOf(PermanentEmailError);
+    }
+  });
+
+  it("a refused guest address is reported once, not retried, and the host still gets theirs", async () => {
+    const r = await book(db, START, LONG_AGO);
+    const sender = refusing("ada@example.com");
+    const { deps, report } = makeDeps({ sender });
+    const result = await onBookingChanged(changed(r.booking.id), durable().steps, deps);
+    expect(result).toMatchObject({ guest: "rejected", host: "sent" });
+    expect(sender.sent.map((m) => m.to)).toEqual(["sakif@example.com"]);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(expect.any(PermanentEmailError), {
+      area: "booking-emails",
+      bookingId: r.booking.id,
+    });
+  });
+
+  it("a failure that can pass still throws, so Inngest retries the step", async () => {
+    const r = await book(db, START, LONG_AGO);
+    const sender = refusing("ada@example.com", resendError("internal_server_error", "down"));
+    const { deps } = makeDeps({ sender });
+    await expect(onBookingChanged(changed(r.booking.id), durable().steps, deps)).rejects.toThrow("down");
+  });
+
+  it("a refused reminder is recorded (no sweep tries again) and reported", async () => {
+    const start = new Date(NOW.getTime() + 2 * 3_600_000);
+    const r = await book(db, start, LONG_AGO);
+    const { deps, report } = makeDeps({ sender: refusing("ada@example.com") });
+    const due = {
+      bookingId: r.booking.id,
+      kind: "hour" as const,
+      startsAt: start.toISOString(),
+      remindAt: new Date(start.getTime() - 3_600_000).toISOString(),
+    };
+    expect(await onReminderDue(due, durable().steps, deps)).toBe("rejected");
+    expect(report).toHaveBeenCalledWith(expect.any(PermanentEmailError), {
+      area: "reminders",
+      bookingId: r.booking.id,
+    });
+    const recorded = await db
+      .select()
+      .from(bookingReminders)
+      .where(and(eq(bookingReminders.bookingId, r.booking.id), eq(bookingReminders.kind, "hour")));
+    expect(recorded).toHaveLength(1);
+    expect(await onReminderDue(due, durable().steps, deps)).toBe("already_sent");
   });
 });

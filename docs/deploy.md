@@ -734,8 +734,11 @@ Nothing to set in Vercel. About 10 minutes. You need the team from step 21 with 
 6. **Both hosts are blocked:** still in the private window, open the second account's own booking page
    (`/{its username}/…`) for that day: the time you booked is gone, though the meeting is on YOUR dashboard.
 7. **Emails:** your inbox gets the guest's email ("with {you} and {second account}") and the host's email. The
-   second account's host email is sent too but won't arrive: Resend's test sender only reaches your own address
-   until the domain day. Inngest → **Runs** → that `booking-changed` run: an `email-cohosts` step with output `1`.
+   second account's host email can't be sent: Resend's test sender only reaches your own address until the domain
+   day. Since the Day 29 fix, that's expected and harmless: Inngest → **Runs** → the `booking-changed` run is
+   **Completed**, its `email-cohosts` step says `{ "sent": 0, "rejected": 1 }`, and Sentry gets one issue tagged
+   `booking-emails` ("validation_error: You can only send testing emails…"). Before the fix, the step retried for
+   about 5 minutes and the run **Failed** (Day 29 story 5).
 8. **Cancel:** open the link in the guest email. Only **Cancel** is offered ("This is a team meeting…"); moving
    one comes on Day 30. Cancel it: the time is back on both pages.
 9. **The database:** Neon → SQL Editor (`production`):

@@ -425,6 +425,9 @@ Read this first in a new chat. It replaces the long Days 1–29 conversations. D
 - **Several locks in one transaction (Day 29):** always in one global order (sorted ids), or two bookings sharing
   hosts deadlock (40P01). A join table multiplies rows: dedupe before counting. A lookup by name that stops being
   unique (username + slug, once teams share slugs) must compare ids.
+- **Emails from jobs (Day 29 story 5):** `PermanentEmailError` (any Resend error except rate limits, Resend's own
+  5xx and nameless ones) is reported once and answered `rejected`; everything else throws and is retried. Without a
+  domain, every email to anyone but Sakif is a permanent refusal: expected, one Sentry issue each.
 - **The landing page is documentation** (Day 28 follow-up: it still listed shipped features as "coming next").
   When a feature ships, update `FOR_HOSTS` / `FOR_GUESTS` / `AI_FEATURES` / `COMING` and the FAQ in
   `src/app/page.tsx` in the same change.

@@ -2,7 +2,7 @@ import { and, asc, eq, gt, lte, notExists, sql } from "drizzle-orm";
 import { bookingReminders, bookings } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { composeReminderEmail, type ReminderKind } from "./email/notifications";
-import type { EmailSender } from "./email/sender";
+import { PermanentEmailError, type EmailSender } from "./email/sender";
 import { getBookingDetails, readManageToken } from "./manage-booking";
 
 /*
@@ -127,7 +127,7 @@ export async function sendReminder(
   deps: { db: Database; sender: EmailSender; appUrl: string; secret: string },
   r: { bookingId: string; kind: ReminderKind; startsAt: Date },
   now: Date,
-): Promise<ReminderOutcome> {
+): Promise<ReminderOutcome | { rejected: PermanentEmailError }> {
   const b = await getBookingDetails(deps.db, r.bookingId);
   if (!b || b.status !== "confirmed" || b.startsAt.getTime() !== r.startsAt.getTime()) return "changed";
   if (b.startsAt.getTime() - now.getTime() < minutes(REMINDERS[r.kind].latest)) return "too_late";
@@ -146,10 +146,17 @@ export async function sendReminder(
 
   const token = await readManageToken(deps.db, b.id, deps.secret);
   const message = await composeReminderEmail({ appUrl: deps.appUrl, now }, b, token);
-  await deps.sender.send(message, { idempotencyKey: `reminder/${b.id}/${r.kind}/${b.startsAt.getTime()}` });
+  let rejected: PermanentEmailError | null = null;
+  try {
+    await deps.sender.send(message, { idempotencyKey: `reminder/${b.id}/${r.kind}/${b.startsAt.getTime()}` });
+  } catch (error) {
+    // Refused for good (Day 30 fix): recorded like a sent one, or every 15-minute sweep would try again.
+    if (!(error instanceof PermanentEmailError)) throw error;
+    rejected = error;
+  }
   await deps.db
     .insert(bookingReminders)
     .values({ bookingId: b.id, kind: r.kind, startsAt: b.startsAt, sentAt: now })
     .onConflictDoNothing();
-  return "sent";
+  return rejected ? { rejected } : "sent";
 }

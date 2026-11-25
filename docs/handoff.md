@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 29)
+# Handoff: starting a new chat (after Day 30)
 
-Read this first in a new chat. It replaces the long Days 1–29 conversations. Details live in `docs/day-01.md` …
-`docs/day-29.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–30 conversations. Details live in `docs/day-01.md` …
+`docs/day-30.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -231,10 +231,26 @@ Read this first in a new chat. It replaces the long Days 1–29 conversations. D
     `/dashboard/teams/[id]/event-types/new|[eventTypeId]/edit` (the event type form with `team` + host picker),
     team page lists them (owner: toggle, Edit). `src/server/team-event-types.ts` (owner checks). Co-hosts get the
     host email (`email-cohosts` step, `sendCoHostEmails`); `withTeamHosts` names everyone in guest-facing
-    details. Moving a team meeting is refused (`eventType.id !== current.eventTypeId` guard); guest page offers
-    Cancel only. Not yet (Day 30): co-hosts in Google, moves, co-hosts' Bookings/Insights/week view.
-- **Numbers:** 842 unit tests (+ 10 race tests on real Postgres) + 55 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
-  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 16 migrations (0000–0015).
+    details (`organizerName` keeps the organizer's own).
+  - Team meetings for every host (Day 30, part 3 of 3): a meeting's hosts are its `booking_hosts` rows.
+    `hostedBy(userId)` (`src/server/hosted-by.ts`, an EXISTS) scopes every host query in `manage-booking.ts`
+    (Bookings, `getHostBooking(Details)`, cancel, no-show, week view) and Insights.
+    `eventTypeForBooking(db, booking)` (booking.ts) = the booking's event type BY ID with the MEETING's hosts,
+    organizer first (not the event type's current list); used by `moveBooking` (every host's live Google minus its own time, `lockHosts`,
+    re-check, UPDATE; triggers move every row), `/api/slots?reschedule|move`, and MCP `find_free_times` (with
+    `bookingId`) / `reschedule_booking`. Any host may cancel/move/mark no-show; `bookings.changed_by_host_id`
+    (migration 0016) = which host made the latest cancel or move (null + host = organizer, pre-Day 30).
+    Emails: `hostIsTold(b, change, hostId)` (everyone but the host who did it by hand); `changedBy` names them
+    ("Grace moved your meeting"). Labels (`booking-labels.ts`) take the viewer: "Moved by you" / "Moved by Grace".
+    `HostBookingRow` has `hostId` (organizer), `team`, `hosts`. Google: one event in the organizer's calendar,
+    co-hosts as `attendees` (only on create: PATCH replaces arrays), `sendUpdates=all` for team events (and the
+    delete), `none` otherwise; co-hosts' email has no `.ics` when synced. Webhooks: every host's endpoints. MCP:
+    `list_bookings`/`get_booking` add `team`, `hosts`, `organizer`. Guest page offers Reschedule again;
+    `bookingEventInfo(b)` (`src/lib/booking-event-info.ts`) gives the widget the team page + meeting's hosts.
+    Band on team pages: `lib/scheduling/team-band.ts` + `momentReadout({ team })` ("Everyone is working 3–5 PM
+    your time.", "Hosts in Dhaka and London").
+- **Numbers:** 870 unit tests (+ 11 race tests on real Postgres) + 56 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 17 migrations (0000–0016).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
   `docs/deploy.md`.
@@ -243,10 +259,9 @@ Read this first in a new chat. It replaces the long Days 1–29 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 29 (migration 0015), then runbook step 22.
-2. **Day 30: team meetings for every host** (Google with co-hosts invited, moving with all hosts' locks, co-hosts'
-   Bookings page / week view / Insights), then **Day 31: round-robin** (fewest bookings of that type in the last
-   30 days, ties to the longest idle). The domain day waits until a domain is bought.
+1. **Sakif:** push Day 30 (migration 0016), then runbook step 23 (the real Google: co-host invited, moves).
+2. **Day 31: round-robin** (fewest bookings of that type in the last 30 days, ties to the longest idle; race tests
+   when two guests book the same time). The domain day waits until a domain is bought.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
@@ -435,3 +450,11 @@ Read this first in a new chat. It replaces the long Days 1–29 conversations. D
   When a feature ships, update `FOR_HOSTS` / `FOR_GUESTS` / `AI_FEATURES` / `COMING` and the FAQ in
   `src/app/page.tsx` in the same change.
 - **`eval.log` is committed** (Sakif's eval output). Fine as evidence; regenerate it rather than editing it.
+- **Changing existing data (Day 30 story 4):** check it against its own facts (the meeting's `booking_hosts`), not
+  today's settings (the event type's host list), or you offer what the constraint then refuses.
+- **A bug fixed once is a pattern (Day 30 story 2):** search for every copy. Anything that starts from a booking
+  finds its event type by ID (`eventTypeForBooking`), never username + slug.
+- **Overlapping protections (Day 30 story 3):** a race test of "one wins" passes if any layer works. Assert how
+  the loser lost (`slot_unavailable` = the locks, `slot_taken` = the constraint).
+- **A role that becomes plural (Day 30 story 5):** "the host did it" needs "which host" (`changed_by_host_id`).
+  Words on screen describe data: when its meaning changes, update the sentences too (story 1).

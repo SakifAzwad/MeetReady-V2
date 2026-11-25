@@ -6,7 +6,8 @@ import { getBookingDetails, type BookingDetails } from "../manage-booking";
 import { CalendarUnavailableError, googleEventId, type CalendarEvent } from "./google-api";
 
 /*
- * Keeping the host's Google Calendar in step with a booking (Day 16).
+ * Keeping the host's Google Calendar in step with a booking (Day 16). For a
+ * team meeting, the organizer's calendar, with the co-hosts invited (Day 30).
  *
  * One operation, syncBooking(), for every case: it reads the booking as it is
  * NOW and makes Google match it.
@@ -32,7 +33,13 @@ export type CalendarWriter = {
     event: CalendarEvent;
     exists: boolean;
   }) => Promise<{ meetUrl: string | null }>;
-  deleteEvent: (args: { accessToken: string; calendarId: string; bookingId: string }) => Promise<void>;
+  deleteEvent: (args: {
+    accessToken: string;
+    calendarId: string;
+    bookingId: string;
+    /** Day 30: tell the invited co-hosts (a team meeting). */
+    notify: boolean;
+  }) => Promise<void>;
 };
 
 export type CalendarSyncDeps = {
@@ -62,8 +69,13 @@ export function isRetryableSyncError(error: unknown): boolean {
  * The event in the HOST's calendar. Only what the host needs to recognise it:
  * the guest's name and email, and a link to the dashboard. The answers to the
  * host's questions and the guest's notes stay in MeetReady (Day 10 rule).
- * No attendees: the guest gets MeetReady's own email and invite, and adding
- * them here would send a second, different invite.
+ * The guest is not an attendee: they get MeetReady's own email and invite,
+ * and adding them here would send a second, different invite.
+ *
+ * Day 30: a team meeting is ONE event, in the organizer's calendar, with the
+ * co-hosts invited as attendees: one Meet link for everyone, and Google puts
+ * it in each co-host's calendar (and keeps it there when it moves). Their
+ * email addresses go to Google; the privacy page says so.
  */
 export function toCalendarEvent(b: BookingDetails, appUrl: string): CalendarEvent {
   return {
@@ -79,6 +91,7 @@ export function toCalendarEvent(b: BookingDetails, appUrl: string): CalendarEven
     end: b.endsAt,
     withMeet: b.locationType === "google_meet",
     location: b.locationType === "google_meet" ? undefined : locationText(b),
+    attendees: (b.coHosts ?? []).map((h) => ({ email: h.email, displayName: h.name })),
   };
 }
 
@@ -147,7 +160,7 @@ export function createCalendarSync(deps: CalendarSyncDeps) {
           calendarSync: "synced",
         });
       } else {
-        await deps.writer.deleteEvent({ ...call, bookingId: b.id });
+        await deps.writer.deleteEvent({ ...call, bookingId: b.id, notify: (b.coHosts?.length ?? 0) > 0 });
         await mark(b.id, { calendarSync: "synced" });
       }
       return { outcome: "synced" };

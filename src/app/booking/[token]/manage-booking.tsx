@@ -3,7 +3,7 @@
 import { CalendarClock, CalendarX2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BookingWidget } from "@/app/[username]/[slug]/booking-widget";
+import { BookingWidget, type EventInfo } from "@/app/[username]/[slug]/booking-widget";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/input";
@@ -13,15 +13,10 @@ import { cancelByTokenAction } from "./actions";
 type Props = {
   token: string;
   changeable: boolean;
-  /** Day 29: false for a team meeting (moving one comes on Day 30). */
-  canReschedule: boolean;
-  username: string;
-  slug: string;
+  /** The booking's event type as the widget needs it (Day 30: a team meeting's is the team's page). */
+  event: EventInfo;
+  /** Who to contact: the host, or every host of a team meeting. */
   hostName: string;
-  hostTimeZone: string;
-  locationLabel: string;
-  title: string;
-  durationMinutes: number;
   currentStartsAt: string;
   currentEndsAt: string;
 };
@@ -43,16 +38,7 @@ export function ManageBooking(props: Props) {
     return (
       <BookingWidget
         layout="embedded"
-        event={{
-          username: props.username,
-          slug: props.slug,
-          title: props.title,
-          description: null,
-          durationMinutes: props.durationMinutes,
-          hostName: props.hostName,
-          hostTimeZone: props.hostTimeZone,
-          locationLabel: props.locationLabel,
-        }}
+        event={props.event}
         reschedule={{
           token: props.token,
           currentStartsAt: props.currentStartsAt,
@@ -71,25 +57,18 @@ export function ManageBooking(props: Props) {
   return (
     <div className="flex flex-col gap-4 p-6">
       <h2 className="text-lg font-semibold">Need to change something?</h2>
-      {!props.canReschedule && (
-        <p className="text-muted-foreground text-sm">
-          This is a team meeting: to change the time, cancel it and book again on the team&apos;s page.
-        </p>
-      )}
       <div className="grid gap-3 sm:grid-cols-2">
-        {props.canReschedule && (
-          <Button
-            variant="outline"
-            className="h-auto justify-start gap-3 p-4"
-            onClick={() => setMode("reschedule")}
-          >
-            <CalendarClock className="size-5" />
-            <span className="text-left">
-              <span className="block font-medium">Reschedule</span>
-              <span className="text-muted-foreground block text-xs font-normal">Pick another time</span>
-            </span>
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          className="h-auto justify-start gap-3 p-4"
+          onClick={() => setMode("reschedule")}
+        >
+          <CalendarClock className="size-5" />
+          <span className="text-left">
+            <span className="block font-medium">Reschedule</span>
+            <span className="text-muted-foreground block text-xs font-normal">Pick another time</span>
+          </span>
+        </Button>
         <Button
           variant="outline"
           className="h-auto justify-start gap-3 p-4"

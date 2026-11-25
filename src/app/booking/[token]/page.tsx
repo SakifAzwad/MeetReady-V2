@@ -6,6 +6,7 @@ import { Reveal } from "@/components/motion";
 import { PoweredBy } from "@/components/site/powered-by";
 import { db } from "@/db";
 import { formatMinutes } from "@/lib/format";
+import { bookingEventInfo } from "@/lib/booking-event-info";
 import { formatWhen, locationText } from "@/lib/booking-format";
 import { getBookingByToken } from "@/server/manage-booking";
 import { ManageBooking } from "./manage-booking";
@@ -99,7 +100,10 @@ async function BookingPanel({ params }: { params: Params }) {
           <CalendarX2 className="text-muted-foreground size-10" />
           <h2 className="text-xl font-semibold">This meeting is cancelled</h2>
           <p className="text-muted-foreground text-sm">
-            {booking.cancelledBy === "host" ? `${booking.hostName} cancelled it.` : "You cancelled it."}
+            {/* Day 30: name who did it: any host of a team meeting can cancel it. */}
+            {booking.cancelledBy === "host"
+              ? `${booking.changedByHostName ?? booking.organizerName} cancelled it.`
+              : "You cancelled it."}
             {booking.cancellationReason && ` Reason: ${booking.cancellationReason}`}
           </p>
         </div>
@@ -112,15 +116,9 @@ async function BookingPanel({ params }: { params: Params }) {
         <ManageBooking
           token={token}
           changeable={changeable}
-          // Day 29: a team meeting can be cancelled here; moving one comes on Day 30.
-          canReschedule={booking.eventTeamId === null}
-          username={booking.hostUsername ?? ""}
-          slug={booking.eventSlug}
+          // Day 30: team meetings move too, on the team's page with the meeting's own hosts.
+          event={bookingEventInfo(booking)}
           hostName={booking.hostName}
-          hostTimeZone={booking.hostTimeZone}
-          locationLabel={locationText(booking)}
-          title={booking.eventTitle}
-          durationMinutes={booking.durationMinutes}
           currentStartsAt={booking.startsAt.toISOString()}
           currentEndsAt={booking.endsAt.toISOString()}
         />

@@ -16,12 +16,17 @@ import {
 import type { Interval } from "@/lib/scheduling/intervals";
 import { momentReadout } from "@/lib/scheduling/readout";
 import { skyGradient, sunSummary } from "@/lib/scheduling/sky";
+import { anyHostDiffers, hostCities, teamSentence } from "@/lib/scheduling/team-band";
 import { dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import { useMinuteClock } from "@/components/daylight/preferences";
 
 /*
  * "When is this for me?" (from direction B): the guest's day with the host's
  * working hours bracketed on it, plus the same thing as a sentence.
+ *
+ * Day 30: on a team's page the brackets are the hours when EVERY host works,
+ * so the words say that, on the guest's clock (lib/scheduling/team-band.ts),
+ * instead of naming one host's hours in one city.
  */
 export function DaylightBand({
   windows,
@@ -30,6 +35,7 @@ export function DaylightBand({
   hostTimeZone,
   hostName,
   hostShortName,
+  teamZones,
   hour12,
   headingAs: Heading = "h2",
 }: {
@@ -40,6 +46,8 @@ export function DaylightBand({
   hostName: string;
   /** How sentences name the host: their first name by default; Day 29, a team's name. */
   hostShortName?: string;
+  /** Day 30: a team's page: every host's timezone, organizer first. The windows are their shared hours. */
+  teamZones?: string[];
   hour12: boolean;
   /** "h4" inside the landing page preview, where it sits under other headings. */
   headingAs?: "h2" | "h4";
@@ -60,6 +68,7 @@ export function DaylightBand({
         hostName,
         windows,
         hour12,
+        team: !!teamZones,
       })
     : null;
   const firstName = hostShortName ?? hostName.split(" ")[0];
@@ -69,6 +78,11 @@ export function DaylightBand({
     windows[0]?.start ?? new Date(`${day}T12:00:00Z`),
   );
   const hostCity = cityName(hostTimeZone);
+  // Day 30: on a team's page, does any host's clock differ from the guest's? (Then "your time" matters.)
+  const teamDiffers = teamZones
+    ? anyHostDiffers(teamZones, timeZone, windows[0]?.start ?? new Date(`${day}T12:00:00Z`))
+    : false;
+  const differs = teamZones ? teamDiffers : !!difference;
 
   const yourRanges = segments.map((s) => formatTimeRange(s.start, s.end, timeZone, hour12));
   // When the guest's day spans two of the host's dates, say which day each range is
@@ -81,21 +95,22 @@ export function DaylightBand({
       formatTimeRange(s.start, s.end, hostTimeZone, hour12) +
       (hostDates.size > 1 ? ` ${hostWeekday(s.start)}` : ""),
   );
-  const sentence =
-    segments.length === 0
+  const sentence = teamZones
+    ? teamSentence(yourRanges, teamDiffers)
+    : segments.length === 0
       ? `${firstName} isn't working on this day.`
       : !difference
         ? `${firstName} works ${hostRanges.join(" and ")}.`
         : `${firstName} works ${hostRanges.join(" and ")} in ${hostCity}, which is ${yourRanges.join(" and ")} your time.`;
 
   // "Times in your daytime" (8 AM–8 PM): only worth saying when it isn't all of them.
-  const overlap = difference ? daytimeOverlap(segments, day, timeZone) : [];
+  const overlap = differs ? daytimeOverlap(segments, day, timeZone) : [];
   const overlapMs = overlap.reduce((sum, i) => sum + (i.end.getTime() - i.start.getTime()), 0);
   const segmentMs = segments.reduce((sum, i) => sum + (i.end.getTime() - i.start.getTime()), 0);
   const daytime = daytimeBounds(day, timeZone);
   const daytimeLabel = formatTimeRange(daytime.start, daytime.end, timeZone, hour12);
   let daytimeNote: React.ReactNode = null;
-  if (difference && segments.length > 0 && overlapMs < segmentMs) {
+  if (differs && segments.length > 0 && overlapMs < segmentMs) {
     if (overlap.length > 0) {
       daytimeNote = (
         <>
@@ -113,7 +128,7 @@ export function DaylightBand({
         startsAfter &&
           `${endsBefore ? "start again" : "they start"} at ${formatTime(startsAfter, timeZone, hour12)}`,
       ].filter(Boolean);
-      daytimeNote = `None of ${firstName}'s hours fall in your daytime (${daytimeLabel}): ${parts.join(" and ")} your time.`;
+      daytimeNote = `None of ${teamZones ? "the shared" : `${firstName}'s`} hours fall in your daytime (${daytimeLabel}): ${parts.join(" and ")} your time.`;
     }
   }
 
@@ -124,7 +139,13 @@ export function DaylightBand({
           Your day in {cityName(timeZone)}
         </Heading>
         <p className="text-muted-foreground text-sm">
-          {difference ? `${hostCity} is ${difference}` : `Same timezone as ${firstName}`}
+          {teamZones
+            ? teamDiffers
+              ? hostCities(teamZones)
+              : "Same timezone as every host"
+            : difference
+              ? `${hostCity} is ${difference}`
+              : `Same timezone as ${firstName}`}
         </p>
       </div>
 

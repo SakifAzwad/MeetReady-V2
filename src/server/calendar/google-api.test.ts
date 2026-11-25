@@ -144,6 +144,7 @@ describe("Google events (Day 16)", () => {
     start: new Date("2026-11-09T04:00:00Z"),
     end: new Date("2026-11-09T04:30:00Z"),
     withMeet: true,
+    attendees: [] as { email: string; displayName: string }[],
   };
   const base = { baseUrl: "https://g.test/v3", accessToken: "tok", calendarId: "primary" };
   const meetResponse = (id = googleEventId(BOOKING)) =>
@@ -240,10 +241,45 @@ describe("Google events (Day 16)", () => {
         ...base,
         fetch: fakeFetch(() => new Response(null, { status })),
         bookingId: BOOKING,
+        notify: false,
       });
     await expect(del(204)).resolves.toBeUndefined();
     await expect(del(404)).resolves.toBeUndefined();
     await expect(del(410)).resolves.toBeUndefined();
     await expect(del(503)).rejects.toBeInstanceOf(CalendarUnavailableError);
+  });
+
+  describe("a team meeting (Day 30): co-hosts invited to the organizer's event", () => {
+    const team = {
+      ...event,
+      attendees: [
+        { email: "grace@example.com", displayName: "Grace Hopper" },
+        { email: "linus@example.com", displayName: "Linus T" },
+      ],
+    };
+
+    it("creates it with the co-hosts as attendees, and Google sends them the invitation", async () => {
+      const f = fakeFetch(() => meetResponse());
+      await upsertGoogleEvent({ ...base, fetch: f, event: team, exists: false });
+      const [url, init] = f.mock.calls[0]!;
+      expect(url).toBe("https://g.test/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all");
+      expect(JSON.parse(init?.body as string).attendees).toEqual(team.attendees);
+    });
+
+    it("updates leave the attendee list alone (their RSVPs), but still tell them", async () => {
+      const f = fakeFetch(() => meetResponse());
+      await upsertGoogleEvent({ ...base, fetch: f, event: team, exists: true });
+      const [url, init] = f.mock.calls[0]!;
+      expect(init?.method).toBe("PATCH");
+      expect(url).toContain("sendUpdates=all");
+      expect(JSON.parse(init?.body as string).attendees).toBeUndefined();
+    });
+
+    it("a cancel tells them too; a personal booking's tells nobody", async () => {
+      const f = fakeFetch(() => new Response(null, { status: 204 }));
+      await deleteGoogleEvent({ ...base, fetch: f, bookingId: BOOKING, notify: true });
+      await deleteGoogleEvent({ ...base, fetch: f, bookingId: BOOKING, notify: false });
+      expect(f.mock.calls.map(([url]) => String(url).split("sendUpdates=")[1])).toEqual(["all", "none"]);
+    });
   });
 });

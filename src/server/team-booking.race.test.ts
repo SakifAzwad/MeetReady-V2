@@ -6,6 +6,7 @@ import { createPostgresTestDb, TEST_DATABASE_URL } from "@/test/postgres";
 import { saveWeeklySchedule } from "./availability";
 import { createBooking } from "./booking";
 import { createEventType } from "./event-types";
+import { rescheduleBookingByToken } from "./manage-booking";
 import { createTeamEventType } from "./team-event-types";
 import { acceptInvite, createInvite, createTeam } from "./teams";
 
@@ -95,5 +96,37 @@ describe.skipIf(!TEST_DATABASE_URL)("team bookings at the same moment (real Post
       createBooking(db, request({ username: "grace" }, "own", 2), NOW, { afterCheck: pause(50) }),
     ]);
     expect(results.filter((r) => r.ok)).toHaveLength(1);
+  });
+
+  it("moving a team meeting while a co-host books their own time: one wins, decided by the locks", async () => {
+    // Day 30. The move takes EVERY host's lock (sorted), so the two take turns and the second one's re-check
+    // sees the first: it answers "slot_unavailable". With only the organizer's lock, both would pass the
+    // re-check and the constraint would refuse one at insert time ("slot_taken"): still one winner, but
+    // only because of the last layer.
+    for (let round = 0; round < 5; round++) {
+      const hour = String(9 + round).padStart(2, "0");
+      const from = at(`${hour}:00`);
+      const to = at(`${hour}:30`);
+      const team = await createBooking(
+        db,
+        { ...request({ team: "acme" }, "one", 10 + round), startsAt: from },
+        NOW,
+      );
+      if (!team.ok) throw new Error(team.error);
+      const results = await Promise.all([
+        rescheduleBookingByToken(db, team.manageToken, to, NOW, { afterCheck: pause(50) }),
+        createBooking(db, { ...request({ username: "grace" }, "own", 20 + round), startsAt: to }, NOW, {
+          afterCheck: pause(50),
+        }),
+      ]);
+      expect(
+        results.filter((r) => r.ok),
+        `round ${round}`,
+      ).toHaveLength(1);
+      expect(
+        results.find((r) => !r.ok),
+        `round ${round}`,
+      ).toEqual({ ok: false, error: "slot_unavailable" });
+    }
   });
 });

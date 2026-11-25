@@ -287,7 +287,7 @@ const FOR_HOSTS = [
   },
   {
     title: "Meetings with your whole team",
-    body: "Create a team, invite people with a link, and share one page that offers only the times when everyone on it is free.",
+    body: "Create a team, invite people with a link, and share one page that offers only the times when everyone on it is free. Every host sees the meeting on their dashboard and gets it in Google Calendar, and any of them can move it.",
   },
   {
     title: "On your website and in your tools",
@@ -356,10 +356,6 @@ const COMING = [
     title: "Preferred hours",
     body: "Times you'd rather have shown first, without closing the rest.",
   },
-  {
-    title: "More for team meetings",
-    body: "Every host's Google Calendar, moving a team meeting, and team meetings on every host's dashboard.",
-  },
 ];
 
 const ENGINEERING = [
@@ -424,7 +420,7 @@ const FAQ = [
   },
   {
     q: "Can my team use it?",
-    a: "Yes. Create a team from your account menu, invite people with a link, and add team event types: guests see only the times when every host you picked is free, and the meeting is with all of them. Round-robin (one host per meeting, shared fairly) is next.",
+    a: "Yes. Create a team from your account menu, invite people with a link, and add team event types: guests see only the times when every host you picked is free, and the meeting is with all of them. It's one event in the organizer's Google Calendar with the other hosts invited, it's on every host's Bookings page and Insights, and any host (or the guest) can move or cancel it. Round-robin (one host per meeting, shared fairly) is next.",
   },
 ];
 

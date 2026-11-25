@@ -8,7 +8,8 @@
  *   POST /__fake/calendar  { token, busy: [{start,end}], down, eventsDown }   set a calendar
  *     (down: every call fails; eventsDown: only writing events fails, free/busy works)
  *   GET  /__fake/revoked?token=…                                   was it revoked?
- *   GET  /__fake/events?token=…                                    the events MeetReady wrote (Day 16)
+ *   GET  /__fake/events?token=…                                    the events MeetReady wrote (Day 16),
+ *                                                                  each with the last write's sendUpdates (Day 30)
  * What the app calls:
  *   POST /calendar/v3/freeBusy   (Authorization: Bearer <token>)
  *   POST|PATCH|DELETE /calendar/v3/calendars/primary/events[/id]   (Day 16)
@@ -78,8 +79,10 @@ http
       const mine = events.get(token) ?? new Map();
       events.set(token, mine);
       const id = eventPath[2];
+      // Day 30: what the app asked Google to email attendees (co-hosts): "all" or "none", per write.
+      const sendUpdates = url.searchParams.get("sendUpdates");
       if (req.method === "POST") {
-        const event = JSON.parse(await body(req));
+        const event = { ...JSON.parse(await body(req)), sendUpdates };
         if (mine.has(event.id)) return send(res, 409, { error: { code: 409 } });
         if (event.conferenceData?.createRequest) {
           event.conferenceData = {
@@ -93,7 +96,7 @@ http
       }
       if (req.method === "PATCH") {
         if (!mine.has(id)) return send(res, 404, { error: { code: 404 } });
-        const event = { ...mine.get(id), ...JSON.parse(await body(req)) };
+        const event = { ...mine.get(id), ...JSON.parse(await body(req)), sendUpdates };
         mine.set(id, event);
         return send(res, 200, event);
       }

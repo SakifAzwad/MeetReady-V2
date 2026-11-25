@@ -228,7 +228,7 @@ export function buildMcpServer(
     {
       title: "List bookings",
       description:
-        "The user's bookings, compact: id, start and end, meeting type, guest name and email, status, and whether the guest left notes or there's an AI brief. Use get_booking for one booking's details.",
+        "The user's bookings, compact: id, start and end, meeting type, guest name and email, status, and whether the guest left notes or there's an AI brief. Team meetings the user hosts are included, with the team, every host and the organizer. Use get_booking for one booking's details.",
       inputSchema: listBookingsInput,
       annotations: READ_ONLY,
     },
@@ -278,7 +278,7 @@ export function buildMcpServer(
     {
       title: "Cancel a booking",
       description:
-        "Cancels one of the user's upcoming bookings and emails the guest that the user cancelled (with the reason, if the user gave one). Removes it from the user's Google Calendar. Before calling, tell the user which booking (meeting type, guest, time) and get a clear yes. Needs the bookings:write permission.",
+        "Cancels one of the user's upcoming bookings and emails the guest that the user cancelled (with the reason, if the user gave one); for a team meeting, the other hosts are emailed too. Removes it from Google Calendar. Before calling, tell the user which booking (meeting type, guest, time) and get a clear yes. Needs the bookings:write permission.",
       inputSchema: cancelBookingInput,
       annotations: CHANGES,
     },
@@ -293,7 +293,7 @@ export function buildMcpServer(
     {
       title: "Move a booking",
       description:
-        "Moves one of the user's upcoming bookings to a new free time and emails the guest the new time (with a link to reschedule or cancel). Find the time with find_free_times, passing this bookingId. The same rules as the booking page apply. Before calling, tell the user which booking and the new date, time and timezone, and get a clear yes. Needs the bookings:write permission.",
+        "Moves one of the user's upcoming bookings to a new free time and emails the guest the new time (with a link to reschedule or cancel). Find the time with find_free_times, passing this bookingId. The same rules as the booking page apply; a team meeting's new time must suit every host, and the other hosts are emailed. Before calling, tell the user which booking and the new date, time and timezone, and get a clear yes. Needs the bookings:write permission.",
       inputSchema: rescheduleBookingInput,
       annotations: CHANGES,
     },

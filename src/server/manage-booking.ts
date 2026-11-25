@@ -1,14 +1,15 @@
-import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias, type PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { pgErrorCode, PG_EXCLUSION_VIOLATION } from "@/db/errors";
-import { bookingBriefs, bookingHosts, bookings, eventTypes, oauthClient, user } from "@/db/schema";
+import { bookingBriefs, bookingHosts, bookings, eventTypes, oauthClient, teams, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { addMinutes, subtractInterval } from "@/lib/scheduling/intervals";
 import type { BookingAnswer } from "@/lib/validation/questions";
 import type { MeetingBrief } from "./ai/brief";
-import { busyLoadRange, getBookableSlots, getPublicEventType } from "./booking";
+import { busyLoadRange, eventTypeForBooking, getBookableSlots, hostsBusyTimes, lockHosts } from "./booking";
 import { CalendarUnavailableError, type ExternalBusy } from "./calendar/busy";
+import { hostedBy } from "./hosted-by";
 import { hashManageToken, manageTokenSchema, openManageToken } from "./manage-token";
 
 /*
@@ -16,7 +17,7 @@ import { hashManageToken, manageTokenSchema, openManageToken } from "./manage-to
  * manages it from the dashboard. Two kinds of authorisation, same habit as
  * everywhere: who you are decides the WHERE clause.
  *   guest -> WHERE manage_token_hash = sha256(token)
- *   host  -> WHERE host_id = session user id
+ *   host  -> WHERE the session user is one of the booking's hosts (hostedBy)
  */
 
 /** Everything the manage page and the emails need about one booking. */
@@ -37,13 +38,17 @@ export type BookingDetails = {
   eventTitle: string;
   eventSlug: string;
   eventActive: boolean;
-  /** Day 29: set for a team's event type (a collective meeting). Moving those comes on Day 30. */
+  /** Day 29: set for a team's event type (a collective meeting). */
   eventTeamId: string | null;
+  /** Day 30: that team's address and name (null for a personal booking), for moving it on the team's page. */
+  team: { slug: string; name: string } | null;
   durationMinutes: number;
   locationType: (typeof eventTypes.$inferSelect)["locationType"];
   locationValue: string | null;
   hostId: string;
   hostName: string;
+  /** Day 30: the organizer's own name. hostName names every host of a team meeting ("Ada and Grace"). */
+  organizerName: string;
   hostEmail: string;
   hostTimeZone: string;
   hostUsername: string | null;
@@ -59,6 +64,9 @@ export type BookingDetails = {
   /** Day 24: the latest cancel or move was made through an assistant: its id, and its name if it still exists. */
   changedByClient: string | null;
   changeAssistantName: string | null;
+  /** Day 30: which host made the latest cancel or move (null: the guest, or the organizer before Day 30). */
+  changedByHostId: string | null;
+  changedByHostName: string | null;
   /**
    * Day 29: the other hosts of a team meeting (organizer excluded), for their
    * own emails. Loaded where emails and the guest's page need it; elsewhere
@@ -69,6 +77,8 @@ export type BookingDetails = {
 
 /** The assistant behind the latest change (Day 24): the same table, joined a second time. */
 const changeClient = alias(oauthClient, "change_client");
+/** Day 30: the host behind the latest change, the user table joined a second time. */
+const changer = alias(user, "changer");
 
 const detailsColumns = {
   id: bookings.id,
@@ -88,11 +98,13 @@ const detailsColumns = {
   eventSlug: eventTypes.slug,
   eventActive: eventTypes.isActive,
   eventTeamId: eventTypes.teamId,
+  team: { slug: teams.slug, name: teams.name },
   durationMinutes: eventTypes.durationMinutes,
   locationType: eventTypes.locationType,
   locationValue: eventTypes.locationValue,
   hostId: user.id,
   hostName: user.name,
+  organizerName: user.name,
   hostEmail: user.email,
   hostTimeZone: user.timeZone,
   hostUsername: user.username,
@@ -104,6 +116,8 @@ const detailsColumns = {
   rescheduledBy: bookings.rescheduledBy,
   changedByClient: bookings.changedByClient,
   changeAssistantName: changeClient.name,
+  changedByHostId: bookings.changedByHostId,
+  changedByHostName: changer.name,
 };
 
 function selectDetails(db: Database) {
@@ -112,10 +126,12 @@ function selectDetails(db: Database) {
       .select(detailsColumns)
       .from(bookings)
       .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+      .leftJoin(teams, eq(teams.id, eventTypes.teamId))
       .innerJoin(user, eq(user.id, bookings.hostId))
       // Only for bookings an assistant made; null (and harmless) for the rest, or once the client is gone.
       .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient))
       .leftJoin(changeClient, eq(changeClient.clientId, bookings.changedByClient))
+      .leftJoin(changer, eq(changer.id, bookings.changedByHostId))
   );
 }
 
@@ -195,6 +211,7 @@ export async function cancelBookingByToken(
       cancelledBy: "guest",
       cancellationReason: reason,
       changedByClient: null,
+      changedByHostId: null,
       sequence: sql`${bookings.sequence} + 1`,
     })
     .where(and(eq(bookings.manageTokenHash, hash), changeable(now)))
@@ -211,14 +228,14 @@ export type RescheduleResult =
 
 /** Shared by the guest's and the host's reschedule (and the race-test seam). */
 type MoveOptions = {
-  /** The host's calendar: checked live, fail closed (same as createBooking). */
+  /** The hosts' calendars: checked live, fail closed (same as createBooking). */
   calendar?: ExternalBusy;
   afterCheck?: () => Promise<void>;
 };
 
 /**
  * Moves a booking to a new start. Same three layers as createBooking:
- * per-host lock, re-check with generateSlots (ignoring this booking, so a
+ * the hosts' locks, re-check with generateSlots (ignoring this booking, so a
  * meeting can move by 15 minutes even though its old time overlaps the new),
  * and the exclusion constraint as the last guard.
  *
@@ -226,8 +243,13 @@ type MoveOptions = {
  * apps treat the new invite as an update of the old one.
  *
  * Day 24: one core for both people who can move a meeting. Only two things
- * differ: how the booking is found (the guest's token hash, or the host's id
- * in the WHERE clause) and what's recorded about who moved it.
+ * differ: how the booking is found (the guest's token hash, or the host in the
+ * WHERE clause) and what's recorded about who moved it.
+ *
+ * Day 30: team meetings too. The event type comes from eventTypeForBooking
+ * (by id, with the MEETING's hosts), so every host's hours, bookings and Google
+ * calendar decide, every host's lock is taken (sorted, Day 29 story 1), and
+ * the triggers move every host's booking_hosts row in the same UPDATE.
  */
 async function moveBooking(
   db: Database,
@@ -243,10 +265,13 @@ async function moveBooking(
   if (options.calendar) {
     const current = await find(db);
     if (!current) return { ok: false, error: "not_found" };
+    const eventType = await eventTypeForBooking(db, current);
+    if (!eventType) return { ok: false, error: "not_changeable" };
     try {
-      // The booking's own event is in the host's calendar (Day 16): it mustn't block its own move.
+      // The booking's own event is in the organizer's calendar (Day 16), and since Day 30 in each
+      // invited co-host's too: it mustn't block its own move.
       externalBusy = subtractInterval(
-        await options.calendar.busyTimes(current.hostId, busyLoadRange(window), "live"),
+        await hostsBusyTimes(options.calendar, eventType.hosts, busyLoadRange(window), "live"),
         { start: current.startsAt, end: current.endsAt },
       );
     } catch (error) {
@@ -259,25 +284,23 @@ async function moveBooking(
       const current = await find(tx);
       if (!current) return { ok: false, error: "not_found" } as const;
 
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${current.hostId}, 0))`);
+      // The event type must still be bookable (active, organizer onboarded). Found by id, with the
+      // meeting's own hosts: never by username + slug, which a team's event type can share (Day 29).
+      const eventType = await eventTypeForBooking(tx, current);
+      if (!eventType) return { ok: false, error: "not_changeable" } as const;
 
-      // Re-read under the lock: the booking may have been cancelled or moved meanwhile.
+      // Every host's lock, in sorted order, before reading anyone's bookings.
+      await lockHosts(
+        tx,
+        eventType.hosts.map((h) => h.id),
+      );
+
+      // Re-read under the locks: the booking may have been cancelled or moved meanwhile.
       const [fresh] = await tx
         .select({ status: bookings.status, startsAt: bookings.startsAt })
         .from(bookings)
         .where(eq(bookings.id, current.id));
       if (!fresh || fresh.status !== "confirmed" || fresh.startsAt <= now) {
-        return { ok: false, error: "not_changeable" } as const;
-      }
-
-      // The event type must still be bookable (active, host onboarded), and be THIS
-      // booking's: Day 29 made the lookup by username + slug ambiguous, since a team's
-      // event type can share a slug with its organizer's own. Team meetings can't be
-      // moved yet (Day 30): their event type isn't the host's, so they stop here.
-      const eventType = current.hostUsername
-        ? await getPublicEventType(tx, current.hostUsername, current.eventSlug)
-        : null;
-      if (!eventType || eventType.id !== current.eventTypeId) {
         return { ok: false, error: "not_changeable" } as const;
       }
 
@@ -290,6 +313,8 @@ async function moveBooking(
       }
       await options.afterCheck?.();
 
+      // The triggers copy the new times to every host's booking_hosts row; if any host is in
+      // another meeting then, this UPDATE fails (23P01) and nothing moves.
       const [moved] = await tx
         .update(bookings)
         .set({
@@ -340,6 +365,7 @@ export async function rescheduleBookingByToken(
       return {
         rescheduledBy: "guest",
         changedByClient: null,
+        changedByHostId: null,
         ...(sealed && { manageTokenEncrypted: sql`coalesce(${bookings.manageTokenEncrypted}, ${sealed})` }),
       };
     },
@@ -378,9 +404,18 @@ export type HostBookingRow = {
   changeAssistantName: string | null;
   /** Day 25: when the host marked that the guest didn't show up (null: attended, or not marked). */
   noShowAt: Date | null;
+  /** Day 30: the organizer (whose Google Calendar holds the event); not the viewer, for a co-host. */
+  hostId: string;
+  /** Day 30: which host made the latest cancel or move (see BookingDetails). */
+  changedByHostId: string | null;
+  changedByHostName: string | null;
+  /** Day 30: the team, for a team meeting. */
+  team: { name: string; slug: string } | null;
+  /** Day 30: everyone in a team meeting, organizer first ([] for a personal booking). */
+  hosts: { id: string; name: string }[];
 };
 
-/** The Bookings page's columns, joined to the event type and the brief. Unscoped: callers add the host. */
+/** The Bookings page's columns, joined to the event type and the brief. Unscoped: callers add hostedBy. */
 const hostBookingQuery = (db: Database) =>
   db
     .select({
@@ -408,12 +443,18 @@ const hostBookingQuery = (db: Database) =>
       changedByClient: bookings.changedByClient,
       changeAssistantName: changeClient.name,
       noShowAt: bookings.noShowAt,
+      hostId: bookings.hostId,
+      changedByHostId: bookings.changedByHostId,
+      changedByHostName: changer.name,
+      team: { name: teams.name, slug: teams.slug },
     })
     .from(bookings)
     .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(teams, eq(teams.id, eventTypes.teamId))
     .leftJoin(bookingBriefs, eq(bookingBriefs.bookingId, bookings.id))
     .leftJoin(oauthClient, eq(oauthClient.clientId, bookings.createdByClient))
-    .leftJoin(changeClient, eq(changeClient.clientId, bookings.changedByClient));
+    .leftJoin(changeClient, eq(changeClient.clientId, bookings.changedByClient))
+    .leftJoin(changer, eq(changer.id, bookings.changedByHostId));
 
 export async function listHostBookings(
   db: Database,
@@ -423,28 +464,63 @@ export async function listHostBookings(
   limit = 100,
 ): Promise<HostBookingRow[]> {
   const base = hostBookingQuery(db);
-  const mine = eq(bookings.hostId, hostId);
+  // Day 30: every meeting this user hosts, team meetings they don't organize included.
+  const mine = hostedBy(hostId);
   switch (view) {
     case "upcoming": // still running counts as upcoming
-      return base
-        .where(and(mine, eq(bookings.status, "confirmed"), gt(bookings.endsAt, now)))
-        .orderBy(asc(bookings.startsAt))
-        .limit(limit);
+      return withHosts(
+        db,
+        await base
+          .where(and(mine, eq(bookings.status, "confirmed"), gt(bookings.endsAt, now)))
+          .orderBy(asc(bookings.startsAt))
+          .limit(limit),
+      );
     case "past":
-      return base
-        .where(and(mine, eq(bookings.status, "confirmed"), lte(bookings.endsAt, now)))
-        .orderBy(desc(bookings.startsAt))
-        .limit(limit);
+      return withHosts(
+        db,
+        await base
+          .where(and(mine, eq(bookings.status, "confirmed"), lte(bookings.endsAt, now)))
+          .orderBy(desc(bookings.startsAt))
+          .limit(limit),
+      );
     case "cancelled":
-      return base
-        .where(and(mine, eq(bookings.status, "cancelled")))
-        .orderBy(desc(bookings.startsAt))
-        .limit(limit);
+      return withHosts(
+        db,
+        await base
+          .where(and(mine, eq(bookings.status, "cancelled")))
+          .orderBy(desc(bookings.startsAt))
+          .limit(limit),
+      );
   }
 }
 
 /**
- * One booking, in full, if it's this host's (Day 21: the MCP get_booking tool).
+ * Day 30: the hosts of the team meetings in a list, in ONE query for the whole
+ * page (not one per row). Organizer first, then by name.
+ */
+async function withHosts(db: Database, rows: Omit<HostBookingRow, "hosts">[]): Promise<HostBookingRow[]> {
+  const teamIds = rows.filter((r) => r.team).map((r) => r.id);
+  const hosts =
+    teamIds.length === 0
+      ? []
+      : await db
+          .select({ bookingId: bookingHosts.bookingId, id: user.id, name: user.name })
+          .from(bookingHosts)
+          .innerJoin(user, eq(user.id, bookingHosts.hostId))
+          .where(inArray(bookingHosts.bookingId, teamIds))
+          .orderBy(asc(user.name));
+  return rows.map((r) => {
+    if (!r.team) return { ...r, hosts: [] };
+    const mine = hosts.filter((h) => h.bookingId === r.id).map(({ id, name }) => ({ id, name }));
+    return {
+      ...r,
+      hosts: [...mine.filter((h) => h.id === r.hostId), ...mine.filter((h) => h.id !== r.hostId)],
+    };
+  });
+}
+
+/**
+ * One booking, in full, if this user is one of its hosts (Day 21: the MCP get_booking tool).
  * Another host's booking and a made-up id look the same: null.
  */
 export async function getHostBooking(
@@ -453,10 +529,8 @@ export async function getHostBooking(
   bookingId: string,
 ): Promise<HostBookingRow | null> {
   if (!z.uuid().safeParse(bookingId).success) return null;
-  const [row] = await hostBookingQuery(db).where(
-    and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)),
-  );
-  return row ?? null;
+  const [row] = await hostBookingQuery(db).where(and(eq(bookings.id, bookingId), hostedBy(hostId)));
+  return row ? ((await withHosts(db, [row]))[0] ?? null) : null;
 }
 
 export async function cancelBookingAsHost(
@@ -477,35 +551,41 @@ export async function cancelBookingAsHost(
       cancelledBy: "host",
       cancellationReason: reason,
       changedByClient: options.byAssistant?.clientId ?? null,
+      // Day 30: which host: any host of a team meeting may cancel it, and the others are told who.
+      changedByHostId: hostId,
       sequence: sql`${bookings.sequence} + 1`,
     })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId), changeable(now)))
+    .where(and(eq(bookings.id, bookingId), hostedBy(hostId), changeable(now)))
     .returning({ sequence: bookings.sequence });
   if (row) return { ok: true, sequence: row.sequence };
   const [exists] = await db
     .select({ id: bookings.id })
     .from(bookings)
-    .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
+    .where(and(eq(bookings.id, bookingId), hostedBy(hostId)));
   // Another host's booking looks exactly like a missing one.
   return { ok: false, error: exists ? "not_changeable" : "not_found" };
 }
 
-/** One booking's full details, if it's this host's (Day 24). Another host's booking and a made-up id: null. */
+/**
+ * One booking's full details, if this user is one of its hosts (Day 24; Day 30: any host of a team
+ * meeting). Anyone else's booking and a made-up id: null.
+ */
 export async function getHostBookingDetails(
   db: Database,
   hostId: string,
   bookingId: string,
 ): Promise<BookingDetails | null> {
   if (!z.uuid().safeParse(bookingId).success) return null;
-  const [row] = await selectDetails(db).where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
-  return row ?? null;
+  const [row] = await selectDetails(db).where(and(eq(bookings.id, bookingId), hostedBy(hostId)));
+  return row ? withTeamHosts(db, row) : null;
 }
 
 /**
- * Day 24: the host moves one of their bookings (today only through an
- * assistant, over MCP). The same core as the guest's reschedule, so the same
- * rules: the new time must be one a guest could pick, the booking must still
- * be confirmed and not started. Found by id AND host in the WHERE clause.
+ * Day 24: the host moves one of their bookings (over MCP; the Move button since
+ * Day 25). The same core as the guest's reschedule, so the same rules: the new
+ * time must be one a guest could pick, the booking must still be confirmed and
+ * not started. Found by id AND host in the WHERE clause. Day 30: any host of a
+ * team meeting may move it; who did is recorded for the emails.
  */
 export async function rescheduleBookingAsHost(
   db: Database,
@@ -525,6 +605,7 @@ export async function rescheduleBookingAsHost(
     () => ({
       rescheduledBy: "host",
       changedByClient: options.byAssistant?.clientId ?? null,
+      changedByHostId: hostId,
     }),
   );
 }
@@ -550,7 +631,7 @@ export async function setNoShow(
     .where(
       and(
         eq(bookings.id, bookingId),
-        eq(bookings.hostId, hostId),
+        hostedBy(hostId),
         eq(bookings.status, "confirmed"),
         lte(bookings.endsAt, now),
       ),
@@ -560,7 +641,7 @@ export async function setNoShow(
   const [exists] = await db
     .select({ id: bookings.id })
     .from(bookings)
-    .where(and(eq(bookings.id, bookingId), eq(bookings.hostId, hostId)));
+    .where(and(eq(bookings.id, bookingId), hostedBy(hostId)));
   // Another host's booking looks exactly like a missing one.
   return { ok: false, error: exists ? "not_changeable" : "not_found" };
 }
@@ -580,7 +661,7 @@ export async function listHostBookingsBetween(
     .from(bookings)
     .where(
       and(
-        eq(bookings.hostId, hostId),
+        hostedBy(hostId),
         eq(bookings.status, "confirmed"),
         lt(bookings.startsAt, range.end),
         gt(bookings.endsAt, range.start),

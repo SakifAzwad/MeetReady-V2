@@ -150,6 +150,68 @@ export async function teamEventHosts(
   return rows.map((r) => ({ ...r, username: r.username! }));
 }
 
+/**
+ * Day 30: the event type of an EXISTING booking, for moving it. Two things
+ * differ from the booking page's lookups:
+ *
+ *  - Found by the booking's event type ID, never by username + slug: since
+ *    Day 29 a team's `sync` and its organizer's own `sync` share a slug, and a
+ *    lookup by name picked whichever matched (Day 29 story 2).
+ *  - The hosts are the MEETING's (its booking_hosts rows), not the event
+ *    type's current host list. A move changes when, not who: someone added to
+ *    the event type since isn't in this meeting, and someone taken off it
+ *    still is. The triggers move exactly these rows, so these are the people
+ *    who must be free, or the constraint would refuse a time we offered.
+ *
+ * Organizer first (the booking's host_id: their timezone decides "which day"),
+ * then the event type's order, then by name. Null if the event type is
+ * switched off, or the organizer has no username (not onboarded).
+ */
+export async function eventTypeForBooking(
+  db: Database,
+  booking: { id: string; eventTypeId: string; hostId: string },
+): Promise<PublicEventType | null> {
+  const [row] = await db
+    .select({ et: eventTypes, team: { id: teams.id, slug: teams.slug, name: teams.name } })
+    .from(eventTypes)
+    .leftJoin(teams, eq(teams.id, eventTypes.teamId))
+    .where(and(eq(eventTypes.id, booking.eventTypeId), eq(eventTypes.isActive, true)));
+  if (!row) return null;
+  const rows = await db
+    .select({
+      id: user.id,
+      name: user.name,
+      image: user.image,
+      timeZone: user.timeZone,
+      username: user.username,
+      position: eventTypeHosts.position,
+    })
+    .from(bookingHosts)
+    .innerJoin(user, eq(user.id, bookingHosts.hostId))
+    .leftJoin(
+      eventTypeHosts,
+      and(
+        eq(eventTypeHosts.eventTypeId, booking.eventTypeId),
+        eq(eventTypeHosts.userId, bookingHosts.hostId),
+      ),
+    )
+    .where(eq(bookingHosts.bookingId, booking.id));
+  const organizer = rows.find((r) => r.id === booking.hostId);
+  if (!organizer?.username) return null;
+  const others = rows
+    .filter((r) => r.id !== booking.hostId)
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999) || a.name.localeCompare(b.name));
+  // Only the organizer's username is ever used (the booking page's links); co-hosts may have none.
+  const hosts = [organizer, ...others].map((h) => ({
+    id: h.id,
+    name: h.name,
+    image: h.image,
+    timeZone: h.timeZone,
+    username: h.username ?? "",
+  }));
+  return toPublic(row.et, hosts, row.team ?? null);
+}
+
 /** The guest-facing shape, for a host's or a team's event type. */
 function toPublic(
   et: typeof eventTypes.$inferSelect,

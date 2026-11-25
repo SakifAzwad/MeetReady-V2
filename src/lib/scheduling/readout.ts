@@ -12,6 +12,15 @@ import { darkness } from "./sky";
  *   2:00 PM for you
  *   8:00 PM in Dhaka, after sunset
  *   Outside Sakif's working hours
+ *
+ * Day 30, a team's page: the windows are the hours when EVERY host works (an
+ * intersection), so naming one host's hours would be wrong, and the hosts may
+ * be in several cities. It says "Everyone is working" / "Not everyone is
+ * working" and shows only the guest's clock (the facts panel lists each
+ * host's).
+ *
+ *   2:00 PM for you
+ *   Not everyone is working
  */
 export function momentReadout({
   instant,
@@ -20,6 +29,7 @@ export function momentReadout({
   hostName,
   windows,
   hour12 = true,
+  team = false,
 }: {
   instant: Date;
   guestZone: string;
@@ -27,15 +37,24 @@ export function momentReadout({
   hostName: string;
   windows: readonly Interval[];
   hour12?: boolean;
+  /** Day 30: a team's collective event type; `windows` are the hours every host works. */
+  team?: boolean;
 }): { lines: string[]; text: string } {
   const first = hostName.split(" ")[0];
   const working = windows.some((w) => w.start <= instant && instant < w.end);
-  const hours = working ? `In ${first}'s working hours` : `Outside ${first}'s working hours`;
   const withSky = (time: string, zone: string) => {
     const dark = darkness(instant, zone);
     return dark ? `${time}, ${dark}` : time;
   };
   const guestTime = formatTime(instant, guestZone, hour12);
+  if (team) {
+    const lines = [
+      withSky(`${guestTime} for you`, guestZone),
+      working ? "Everyone is working" : "Not everyone is working",
+    ];
+    return { lines, text: `${lines.join(". ")}.` };
+  }
+  const hours = working ? `In ${first}'s working hours` : `Outside ${first}'s working hours`;
   const hostTime = formatTime(instant, hostZone, hour12);
 
   const lines =

@@ -80,7 +80,9 @@ export function bookingPayload(type: BookingEvent, b: BookingDetails, change: Ch
 /**
  * One row per endpoint of this host that listens to this event. Safe to run
  * twice (a retried job step): the dedupe key makes the second insert a no-op,
- * and the ids returned are the existing rows'.
+ * and the ids returned are the existing rows'. Day 30: a team meeting goes to
+ * EVERY host's endpoints (it's on each of their Bookings pages too), each with
+ * its own delivery row and key.
  */
 export async function queueBookingDeliveries(db: Database, change: Change, now: Date): Promise<string[]> {
   const b = await getBookingDetails(db, change.bookingId);
@@ -89,7 +91,12 @@ export async function queueBookingDeliveries(db: Database, change: Change, now: 
   const endpoints = await db
     .select({ id: webhookEndpoints.id })
     .from(webhookEndpoints)
-    .where(and(eq(webhookEndpoints.userId, b.hostId), arrayContains(webhookEndpoints.events, [type])));
+    .where(
+      and(
+        inArray(webhookEndpoints.userId, [b.hostId, ...(b.coHosts ?? []).map((h) => h.id)]),
+        arrayContains(webhookEndpoints.events, [type]),
+      ),
+    );
   if (endpoints.length === 0) return [];
 
   const payload = bookingPayload(type, b, change, now);

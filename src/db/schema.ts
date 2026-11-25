@@ -517,6 +517,14 @@ export const bookings = pgTable(
      */
     changedByClient: text(),
     /**
+     * Day 30: WHICH host made the latest cancel or move (cancelled_by / rescheduled_by = 'host'), null when
+     * the guest did. A team meeting has several hosts and any of them may change it, so "the host" no longer
+     * says who: the guest's email names this person ("Grace moved your meeting"), and every other host gets
+     * told. Null on a host change from before Day 30 means the organizer (only they could). Same "latest
+     * change" rule as changedByClient. Set null if that user is deleted: the change stays, unnamed.
+     */
+    changedByHostId: text().references(() => user.id, { onDelete: "set null" }),
+    /**
      * Day 25: the host marked that the guest didn't show up, and when. A separate column, not a status: the
      * booking is still a confirmed booking (every `status = 'confirmed'` rule, the no-overlap constraint and
      * the reminders stay as they are); this records what happened at the meeting. Null = attended or unknown.

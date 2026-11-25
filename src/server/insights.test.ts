@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { bookings, user } from "@/db/schema";
+import { bookingHosts, bookings, user } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { book, setupHost } from "@/test/booking-fixture";
 import { createTestDb } from "@/test/db";
@@ -95,7 +95,9 @@ describe("getInsights", () => {
     await meeting("2026-10-20T04:00:00Z"); // before the 4 weeks
     await db.insert(user).values({ id: "other", name: "O", email: "o@example.com", username: "other" });
     const id = await meeting("2026-11-17T04:00:00Z");
+    // Another host's meeting: its host and its booking_hosts row (Day 30: Insights reads who was IN it).
     await set(id, { hostId: "other" });
+    await db.update(bookingHosts).set({ hostId: "other" }).where(eq(bookingHosts.bookingId, id));
     const r = await getInsights(db, "host", "4w", TZ, NOW);
     expect(r.totals.meetings).toBe(0);
     // The 12-month view does include October.

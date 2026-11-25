@@ -3,7 +3,13 @@ import { z } from "zod";
 import { db } from "@/db";
 import { subtractInterval } from "@/lib/scheduling/intervals";
 import { slotsQuerySchema } from "@/lib/validation/booking";
-import { busyLoadRange, getBookingCalendar, hostsBusyTimes, resolveEventType } from "@/server/booking";
+import {
+  busyLoadRange,
+  eventTypeForBooking,
+  getBookingCalendar,
+  hostsBusyTimes,
+  resolveEventType,
+} from "@/server/booking";
 import { CalendarUnavailableError, calendarBusy } from "@/server/calendar";
 import { getSession } from "@/server/auth/session";
 import { getBookingByToken, getHostBookingDetails } from "@/server/manage-booking";
@@ -33,7 +39,7 @@ export async function GET(request: NextRequest) {
   }
   const { from, to, reschedule, move } = parsed.data;
 
-  const eventType = await resolveEventType(db, parsed.data);
+  let eventType = await resolveEventType(db, parsed.data);
   if (!eventType) return Response.json({ error: "Not found" }, { status: 404 });
 
   // Rescheduling: the guest's own booking (proved by its token, and only if it
@@ -41,7 +47,8 @@ export async function GET(request: NextRequest) {
   let excludeBookingId: string | undefined;
   let ownTime: { start: Date; end: Date } | undefined;
   // Day 25, the host's Move page: the same, but proved by the session. The lookup is scoped to the signed-in
-  // user (id AND host), so another host's booking id frees nothing. The session is read only for `move`.
+  // user (one of the booking's hosts, Day 30), so anyone else's booking id frees nothing. The session is
+  // read only for `move`.
   if (reschedule || move) {
     const session = move ? await getSession() : null;
     const own = reschedule
@@ -52,6 +59,9 @@ export async function GET(request: NextRequest) {
     if (own && own.eventTypeId === eventType.id && own.status === "confirmed") {
       excludeBookingId = own.id;
       ownTime = { start: own.startsAt, end: own.endsAt };
+      // Day 30: a move needs the MEETING's hosts free, not the event type's current list (someone
+      // added to a team event type since isn't in this meeting). Same rule as the move itself.
+      eventType = (await eventTypeForBooking(db, own)) ?? eventType;
     }
   }
 

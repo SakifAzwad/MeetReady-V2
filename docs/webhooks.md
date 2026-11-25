@@ -33,7 +33,11 @@ format, so you can verify it with an existing library or with the few lines belo
 }
 ```
 
-Times are UTC; `timeZone` is the host's. The guest's notes, answers and any cancellation reason are never sent.
+Times are UTC; `timeZone` is the host's (for a team meeting, the organizer's). The guest's notes, answers and any
+cancellation reason are never sent.
+
+**Team meetings:** each host's endpoints get the same event, as their own delivery (Day 30). `changedBy: "host"`
+means one of the hosts made the change, not necessarily the owner of the endpoint.
 
 ## Headers
 

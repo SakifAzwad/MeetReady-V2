@@ -44,16 +44,34 @@ export type BookingChange =
 
 export type Audience = "guest" | "host";
 
-/** The table above, as code. The row is read at this change's sequence, so its fields describe this change. */
-export function audiencesFor(
-  b: Pick<BookingDetails, "cancelledBy" | "rescheduledBy" | "changedByClient">,
-  change: BookingChange,
-): Audience[] {
+type ChangeFields = Pick<
+  BookingDetails,
+  "cancelledBy" | "rescheduledBy" | "changedByClient" | "hostId" | "changedByHostId"
+>;
+
+/** Day 30: the host who made a host change: recorded since Day 30, else the organizer (the only one who could). */
+const changerOf = (b: ChangeFields) => b.changedByHostId ?? b.hostId;
+
+/**
+ * Does this host get an email about this change? Everyone except the host who
+ * made it by hand (they know). Day 30: a team meeting has several hosts, and
+ * any of them may cancel or move it, so "the host did it" no longer means
+ * "every host knows": the others are told who did.
+ */
+export function hostIsTold(b: ChangeFields, change: BookingChange, hostId: string): boolean {
   const byHost =
     (change.kind === "cancelled" && b.cancelledBy === "host") ||
     (change.kind === "rescheduled" && b.rescheduledBy === "host");
-  if (byHost && !b.changedByClient) return ["guest"];
-  return ["guest", "host"];
+  if (!byHost || b.changedByClient) return true;
+  return changerOf(b) !== hostId;
+}
+
+/**
+ * The table above, as code, for the guest and the organizer (co-hosts: hostIsTold, each).
+ * The row is read at this change's sequence, so its fields describe this change.
+ */
+export function audiencesFor(b: ChangeFields, change: BookingChange): Audience[] {
+  return hostIsTold(b, change, b.hostId) ? ["guest", "host"] : ["guest"];
 }
 
 async function compose(
@@ -124,8 +142,11 @@ export async function composeChangeEmail(
   change: BookingChange,
   audience: Audience,
   manageToken: string | null,
-  /** Day 18: the AI brief, shown in the host's confirmation only. */
-  extras: { brief?: MeetingBrief | null } = {},
+  /**
+   * Day 18: the AI brief, shown in the host's confirmation only.
+   * Day 30: `hostId`, which host a "host" email is for (default: the organizer), to say "You" or a name.
+   */
+  extras: { brief?: MeetingBrief | null; hostId?: string } = {},
 ): Promise<EmailMessage> {
   const location = locationText(b);
   const dashboard = `${ctx.appUrl}/dashboard/bookings`;
@@ -138,6 +159,10 @@ export async function composeChangeEmail(
   const scheduledBy = b.source === "assistant" ? b.assistantName?.trim() || "an AI assistant" : undefined;
   // Day 24: the latest cancel or move was made through an assistant.
   const changedThrough = b.changedByClient ? b.changeAssistantName?.trim() || "an AI assistant" : undefined;
+  // Day 30: who made a host change, named unless the reader made it themselves.
+  const changerName = b.changedByHostName ?? b.organizerName;
+  const changedBy =
+    audience === "guest" || changerOf(b) !== (extras.hostId ?? b.hostId) ? changerName : undefined;
 
   if (change.kind === "created") {
     return audience === "guest"
@@ -183,6 +208,7 @@ export async function composeChangeEmail(
             previousWhen,
             actionUrl: manage,
             rescheduledBy: b.rescheduledBy,
+            changedBy,
           },
           zone,
           to,
@@ -199,6 +225,7 @@ export async function composeChangeEmail(
             actionUrl: dashboard,
             rescheduledBy: b.rescheduledBy,
             changedThrough,
+            changedBy,
           },
           zone,
           to,
@@ -211,6 +238,7 @@ export async function composeChangeEmail(
     kind: "cancelled",
     cancelledBy: b.cancelledBy,
     cancellationReason: b.cancellationReason,
+    changedBy,
   } as const;
   return audience === "guest"
     ? compose(b, { ...common, audience }, zone, to, ctx.now)

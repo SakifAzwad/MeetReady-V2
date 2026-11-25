@@ -1,0 +1,2 @@
+ALTER TABLE "bookings" ADD COLUMN "changed_by_host_id" text;--> statement-breakpoint
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_changed_by_host_id_user_id_fk" FOREIGN KEY ("changed_by_host_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;

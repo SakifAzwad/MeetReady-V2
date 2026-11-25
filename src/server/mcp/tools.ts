@@ -20,7 +20,15 @@ import { formatAnswer } from "@/lib/validation/questions";
 import { LOCATION_LABELS } from "@/lib/validation/event-type";
 import { findTimesInput, isRealDate, parseSearch, withinTimeOfDay } from "../ai/assistant";
 import { cleanText } from "../ai/brief";
-import { busyLoadRange, createBooking, getBookableSlots, getPublicEventType } from "../booking";
+import {
+  busyLoadRange,
+  createBooking,
+  eventTypeForBooking,
+  getBookableSlots,
+  getPublicEventType,
+  type EventHost,
+  type PublicEventType,
+} from "../booking";
 import type { ExternalBusy } from "../calendar/busy";
 import { listEventTypes } from "../event-types";
 import {
@@ -168,31 +176,41 @@ export async function findFreeTimesTool(
 ) {
   const host = await loadHost(deps, caller);
   if (!host.ok) return host;
-  const eventType = await getPublicEventType(deps.db, host.data.username, args.eventType);
-  if (!eventType) {
-    return fail(`No active meeting type "${args.eventType}". list_event_types shows the slugs.`);
-  }
   const now = deps.now();
-  // The same checks the booking assistant's search goes through (Day 19): real dates, today at the
-  // earliest, 14 days at most, a real timezone. Default clock: the host's.
-  const parsed = parseSearch(args, host.data.timeZone, now);
-  if (!parsed.ok) return fail(parsed.error);
-  const { search } = parsed;
 
   // Day 24: moving a booking? Then its own time (and its own Google event) mustn't hide the times around
   // it, exactly as on the guest's reschedule page (/api/slots).
+  // Day 30: and the meeting type is the BOOKING's, found by id with the meeting's own hosts. By slug, a
+  // team meeting's "sync" found the organizer's own "sync": free times under the wrong rules (Day 30 story).
   let moving: BookingDetails | null = null;
+  let eventType: PublicEventType | null;
   if (args.bookingId) {
     moving = await getHostBookingDetails(deps.db, caller.userId, args.bookingId);
     if (!moving) return fail("No booking with that id. list_bookings shows the ids.");
     const changeable = movable(moving, now);
     if (!changeable.ok) return changeable;
-    if (moving.eventSlug !== eventType.slug) {
+    if (moving.eventSlug !== args.eventType.trim().toLowerCase()) {
       return fail(
         `That booking is a "${moving.eventTitle}" (slug "${moving.eventSlug}"); search with that meeting type.`,
       );
     }
+    eventType = await eventTypeForBooking(deps.db, moving);
+    if (!eventType) {
+      return fail(
+        `"${moving.eventTitle}" is switched off, so its bookings can't be moved. Switch it on first.`,
+      );
+    }
+  } else {
+    eventType = await getPublicEventType(deps.db, host.data.username, args.eventType);
+    if (!eventType) {
+      return fail(`No active meeting type "${args.eventType}". list_event_types shows the slugs.`);
+    }
   }
+  // The same checks the booking assistant's search goes through (Day 19): real dates, today at the
+  // earliest, 14 days at most, a real timezone. Default clock: the host's.
+  const parsed = parseSearch(args, host.data.timeZone, now);
+  if (!parsed.ok) return fail(parsed.error);
+  const { search } = parsed;
 
   const range = {
     start: wallTimeToInstant(search.from, "00:00", search.timeZone),
@@ -200,8 +218,8 @@ export async function findFreeTimesTool(
   };
   let slots: Slot[];
   try {
-    // The booking page's own slots: rules, bookings, buffers, Google Calendar.
-    let externalBusy = await deps.busyTimes(caller.userId, busyLoadRange(range));
+    // The booking page's own slots: rules, bookings, buffers, Google Calendar (every host's, Day 30).
+    let externalBusy = await hostsBusy(deps, eventType.hosts, busyLoadRange(range));
     if (moving) externalBusy = subtractInterval(externalBusy, { start: moving.startsAt, end: moving.endsAt });
     slots = withinTimeOfDay(
       await getBookableSlots(deps.db, eventType, range, now, {
@@ -275,9 +293,30 @@ export async function listBookingsTool(
         /** Day 25: the user marked that the guest didn't show up (read-only here). */
         noShow: b.noShowAt !== null,
         bookedBy: b.source === "assistant" ? "the user, through an assistant" : "the guest",
+        ...teamFields(b, caller.userId),
       })),
     },
   };
+}
+
+/**
+ * Day 30: a team meeting says so, and who's in it. The user may be a co-host:
+ * the meeting is then on their list though someone else organizes it.
+ */
+function teamFields(b: HostBookingRow, userId: string) {
+  if (!b.team) return {};
+  return {
+    team: b.team.name,
+    hosts: b.hosts.map((h) => (h.id === userId ? `${h.name} (the user)` : h.name)),
+    organizer: b.hostId === userId ? "the user" : (b.hosts.find((h) => h.id === b.hostId)?.name ?? null),
+  };
+}
+
+/** Day 30: everyone's Google busy times, for a team meeting's hosts (one host for a personal booking). */
+async function hostsBusy(deps: McpDeps, hosts: readonly EventHost[], range: Interval): Promise<Interval[]> {
+  const all: Interval[] = [];
+  for (const h of hosts) all.push(...(await deps.busyTimes(h.id, range)));
+  return all;
 }
 
 // ─── get_booking ────────────────────────────────────────────────────────────────
@@ -292,10 +331,10 @@ export async function getBookingTool(deps: McpDeps, caller: Caller, args: z.infe
   const b = await getHostBooking(deps.db, caller.userId, args.bookingId);
   // Another host's booking and a made-up id give the same answer.
   if (!b) return fail("No booking with that id. list_bookings shows the ids.");
-  return { ok: true as const, data: bookingDetails(b, host.data.timeZone) };
+  return { ok: true as const, data: bookingDetails(b, host.data.timeZone, caller.userId) };
 }
 
-function bookingDetails(b: HostBookingRow, tz: string) {
+function bookingDetails(b: HostBookingRow, tz: string, userId: string) {
   return {
     id: b.id,
     timeZone: tz,
@@ -309,7 +348,7 @@ function bookingDetails(b: HostBookingRow, tz: string) {
       : {}),
     rescheduled: b.rescheduledAt !== null,
     noShow: b.noShowAt !== null,
-    ...(b.rescheduledBy ? { rescheduledBy: b.rescheduledBy === "host" ? "the user" : "the guest" } : {}),
+    ...(b.rescheduledBy ? { rescheduledBy: movedBy(b, userId) } : {}),
     bookedBy: b.source === "assistant" ? "the user, through an assistant" : "the guest",
     guestName: b.guestName,
     guestEmail: b.guestEmail,
@@ -321,7 +360,20 @@ function bookingDetails(b: HostBookingRow, tz: string) {
     },
     /** Day 18's brief, written by AI from the guest's answers when they left any. */
     brief: b.brief,
+    ...teamFields(b, userId),
   };
+}
+
+/**
+ * "the user", "the guest", or the host who did it (Day 30: any host of a team meeting may move it).
+ * changedByHostId describes the LATEST change: on a cancelled booking that's the cancel, so the mover of
+ * a cancelled team meeting is just "a host".
+ */
+function movedBy(b: HostBookingRow, userId: string): string {
+  if (b.rescheduledBy !== "host") return "the guest";
+  if (b.status !== "confirmed") return b.team ? "a host" : "the user";
+  const id = b.changedByHostId ?? b.hostId;
+  return id === userId ? "the user" : (b.changedByHostName ?? "another host");
 }
 
 // ─── book_meeting (Day 22) ──────────────────────────────────────────────────────
@@ -673,7 +725,8 @@ export async function rescheduleBookingTool(
   const changeable = movable(b, now);
   if (!changeable.ok) return changeable;
 
-  const eventType = b.hostUsername ? await getPublicEventType(deps.db, b.hostUsername, b.eventSlug) : null;
+  // Day 30: by id, with the meeting's own hosts (never by username + slug, which a team's type can share).
+  const eventType = await eventTypeForBooking(deps.db, b);
   if (!eventType) {
     return fail(`"${b.eventTitle}" is switched off, so its bookings can't be moved. Switch it on first.`);
   }
@@ -685,7 +738,7 @@ export async function rescheduleBookingTool(
   const window = { start: newStart, end: new Date(newStart.getTime() + 60_000) };
   let free: boolean;
   try {
-    const busy = await deps.busyTimes(caller.userId, busyLoadRange(window));
+    const busy = await hostsBusy(deps, eventType.hosts, busyLoadRange(window));
     const externalBusy = subtractInterval(busy, { start: b.startsAt, end: b.endsAt });
     const slots = await getBookableSlots(deps.db, eventType, window, now, {
       externalBusy,
@@ -699,7 +752,7 @@ export async function rescheduleBookingTool(
   }
   if (!free) {
     return fail(
-      `${to} (${tz}) isn't free for ${eventType.title}: it's outside your hours, too soon, or taken. Use find_free_times with this bookingId.`,
+      `${to} (${tz}) isn't free for ${eventType.title}: it's outside ${eventType.team ? "the hosts'" : "your"} hours, too soon, or taken. Use find_free_times with this bookingId.`,
     );
   }
 

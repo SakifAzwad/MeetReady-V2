@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
-import { bookings, eventTypes } from "@/db/schema";
+import { bookings, eventTypes, teams } from "@/db/schema";
 import type { Database } from "@/db/types";
+import { hostedBy } from "./hosted-by";
 import {
   addDaysToKey,
   dateKeyInZone,
@@ -112,11 +113,9 @@ export async function getInsights(
   const period = insightsPeriod(range, now, timeZone);
   // Wall-clock time in the host's timezone. The zone is a bound parameter, never spliced into the SQL.
   const local = sql`(${bookings.startsAt} at time zone ${timeZone})`;
-  const mine = and(
-    eq(bookings.hostId, hostId),
-    gte(bookings.startsAt, period.from),
-    lt(bookings.startsAt, now),
-  );
+  // Day 30: every meeting this host was in, team meetings they didn't organize included. EXISTS, not a
+  // join: a team meeting is one meeting, however many hosts it has.
+  const mine = and(hostedBy(hostId), gte(bookings.startsAt, period.from), lt(bookings.startsAt, now));
   const bucket = sql<string>`to_char(date_trunc(${period.unit}, ${local}), 'YYYY-MM-DD')`;
   const weekday = int(sql`extract(isodow from ${local})`);
   const hour = int(sql`extract(hour from ${local})`);
@@ -144,14 +143,16 @@ export async function getInsights(
     db
       .select({
         title: eventTypes.title,
+        team: teams.name,
         meetings: count(),
         cancelled: count(cancelled),
         noShows: count(noShow),
       })
       .from(bookings)
       .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+      .leftJoin(teams, eq(teams.id, eventTypes.teamId))
       .where(mine)
-      .groupBy(eventTypes.id, eventTypes.title)
+      .groupBy(eventTypes.id, eventTypes.title, teams.name)
       .orderBy(desc(count()), eventTypes.title),
     db
       .select({ weekday, hour, meetings: count() })
@@ -191,7 +192,8 @@ export async function getInsights(
       };
     }),
     sources: { bookingPage: t.bookingPage, assistant: t.assistant },
-    eventTypes: typeRows,
+    // A team's meeting type says whose it is: a team's "Intro" and your own "Intro" are different rows.
+    eventTypes: typeRows.map(({ team, ...r }) => (team ? { ...r, title: `${r.title} (${team})` } : r)),
     times: timeRows.sort((a, b) => a.weekday - b.weekday || a.hour - b.hour),
   };
 }

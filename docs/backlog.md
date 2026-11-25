@@ -1,17 +1,14 @@
 # Backlog: what's not built yet, and why
 
 One list for everything deferred or decided against, so nothing from the reviews gets lost. Each item says
-**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 29).
+**why it's waiting** and **when** it fits. Updated as days are delivered (last: Day 30).
 
 ## Next, in order
 
-1. **Push Day 29** (collective team event types; migration 0015), then runbook step 22.
-2. **Day 30: team meetings for every host.** Google Calendar (one event in the organizer's calendar, co-hosts
-   invited as attendees, one Meet link), moving a team meeting (every host's lock, sorted), team meetings on each
-   host's Bookings page, week view and Insights, and a band sentence that fits a team.
-3. **Day 31: round-robin.** One member per booking: fewest bookings of that type in the last 30 days, ties to
+1. **Push Day 30** (team meetings for every host; migration 0016), then runbook step 23.
+2. **Day 31: round-robin.** One member per booking: fewest bookings of that type in the last 30 days, ties to
    whoever was booked longest ago; race tests when two guests book the same time.
-4. **Then pick from the list below.** The domain day waits until a domain is bought.
+3. **Then pick from the list below.** The domain day waits until a domain is bought.
 
 Done: custom booking questions (Day 10), the last Phase 1 feature; browser tests in CI (Day 11); deploy-ready
 code and runbook (Day 12); live at <https://meetreadyv2.vercel.app> since 12 Nov 2026; error monitoring (Day 13);
@@ -29,7 +26,8 @@ format, retries through Inngest, SSRF protection at save and connect time, secre
 System / Light / Dark theme switcher with no flash (Day 26, Part B); a booking widget for other websites, inline or
 as a popup (Day 27), which completes Phase 2; teams with an owner and members, and single-use invite links (Day
 28, team scheduling part 1); collective team event types, with every host's double booking guarded by Postgres
-(Day 29, part 2).
+(Day 29, part 2); team meetings for every host: Google with the co-hosts invited, moves by the guest or any host,
+and team meetings on every host's Bookings page, week view, Insights, assistant and webhooks (Day 30, part 3).
 
 ## Ideas from reviews, deferred
 
@@ -73,6 +71,9 @@ as a popup (Day 27), which completes Phase 2; teams with an owner and members, a
 | **Email invites**                                                                   | Day 28 | Links are copied and sent by the owner. Emailing them needs a domain: Resend's test sender only reaches Sakif.                                                                                                                                                                                                                                                                                       | The domain day                                     |
 | **The booking assistant on team pages**                                             | Day 29 | It searches one host's calendar (`getPublicEventType` by username). Teams need it to search the collective free times instead, and its own lines in `LIMITS` per team.                                                                                                                                                                                                                               | After round-robin                                  |
 | **Embedding a team's page**                                                         | Day 29 | `/embed/{username}/{slug}` only. A team route needs the embed page to resolve teams too, and a snippet in the team's Embed dialog.                                                                                                                                                                                                                                                                   | When a team asks                                   |
+| **Any connected host holds a team meeting's event**                                 | Day 30 | Today only the organizer's calendar gets it (co-hosts invited); with no calendar on the organizer, nobody's does. Letting the first host with a calendar hold it needs a column for which calendar holds each event (updates and deletes must go to the same one), and changes to the backfill on connect and to Retry.                                                                              | If organizers often have no calendar               |
+| **Remove a host from one meeting** (or from future meetings when they leave a team) | Day 30 | Leaving a team stops new bookings; meetings already booked keep them (the guest was promised them; Sakif's pick). Removing someone means deleting their `booking_hosts` row, telling the guest and the others, and updating Google's attendees (a PATCH that replaces the list).                                                                                                                     | When a team asks                                   |
+| **The team owner sees every team meeting**                                          | Day 30 | A team meeting is on the Bookings page of its hosts only. An owner who isn't a host of one doesn't see it. A team view (all of a team's meetings, for its owner) is a page and a query scoped by ownership.                                                                                                                                                                                          | With round-robin, if owners ask                    |
 | **Booking a team meeting through MCP**                                              | Day 29 | `book_meeting` refuses a team's event type: the assistant acts for one host, and a team meeting books several people's time. Needs a rule for who may (the owner? any host?).                                                                                                                                                                                                                        | If hosts ask                                       |
 | **Show the MCP tool calls to the host** (an activity log per assistant)             | Day 21 | Today the dashboard shows which assistants are connected, not what they read. A log is a table and a page; useful once assistants can write.                                                                                                                                                                                                                                                         | With `book_meeting`, if hosts ask                  |
 | **Assistant on the host's dashboard** ("move my 3pm to Friday")                     | Day 19 | Signed-in and able to write: a different trust model. The MCP server (Day 21) covers acting for a signed-in person first.                                                                                                                                                                                                                                                                            | After the MCP server                               |
@@ -134,7 +135,7 @@ as a popup (Day 27), which completes Phase 2; teams with an owner and members, a
   - an embeddable booking widget (done, Day 27: inline and popup).
 - **Phase 3 (pick 2–3):**
   - team scheduling (in progress: teams and invites Day 28; collective Day 29; every host's calendar and moves
-    Day 30; round-robin Day 31);
+    Day 30, done; round-robin Day 31);
   - group events with seats;
   - meeting polls;
   - routing forms;
@@ -152,6 +153,10 @@ as a popup (Day 27), which completes Phase 2; teams with an owner and members, a
 
 ## Known issues
 
+- **Team meetings booked on Day 29** (before Day 30) are in the organizer's Google Calendar without the co-hosts
+  invited: attendees are sent only when the event is created, so later moves don't add them, and the co-hosts'
+  emails skip the `.ics` because the booking is marked synced. Only test meetings were made that way; cancelling
+  and booking again fixes it.
 - **`/booking/{made-up-token}` returns 200** with the not-found page and `noindex` (Day 12). Profile and booking
   pages got real 404s from Proxy; the manage page didn't, because its URL is private and never linked publicly.
 - **Sun times use each timezone's main city** (Day 9). Someone in Chattogram sees Dhaka's sunrise, a few

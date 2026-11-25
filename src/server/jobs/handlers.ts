@@ -1,7 +1,13 @@
 import type { Database } from "@/db/types";
 import { getBrief, type BriefOutcome } from "../ai/briefs";
 import { upcomingBookingsToSync, type CalendarSync } from "../calendar/sync";
-import { audiencesFor, composeChangeEmail, type Audience, type BookingChange } from "../email/notifications";
+import {
+  audiencesFor,
+  composeChangeEmail,
+  hostIsTold,
+  type Audience,
+  type BookingChange,
+} from "../email/notifications";
 import { PermanentEmailError, type EmailSender } from "../email/sender";
 import { getBookingDetails, readManageToken } from "../manage-booking";
 import { findDueReminders, reminderEventId, sendReminder } from "../reminders";
@@ -174,8 +180,11 @@ async function sendOrReject(
 
 /**
  * Day 29: a team meeting's co-hosts. The same email as the organizer's, sent
- * to each of them, in their own timezone. Always with an .ics: the event is in
- * the ORGANIZER's Google Calendar (Day 30 adds the co-hosts there), not theirs.
+ * to each of them, in their own timezone. Day 30: each is told unless they
+ * made the change themselves (any host may cancel or move a team meeting),
+ * and the .ics is left out when the event is in the organizer's Google
+ * Calendar, which invites the co-hosts (Google's invite puts it in their
+ * calendar; a second copy from us would show the meeting twice).
  * Returns how many were sent (0 for anything but a team meeting).
  */
 export async function sendCoHostEmails(
@@ -186,20 +195,20 @@ export async function sendCoHostEmails(
   const b = await getBookingDetails(deps.db, data.bookingId);
   if (!b?.coHosts?.length || b.sequence !== data.sequence) return none;
   const change = toChange(data);
-  if (!audiencesFor(b, change).includes("host")) return none;
   const brief = change.kind === "created" ? await getBrief(deps.db, b.id) : null;
   const result = { ...none };
   // Every co-host gets their try before anything is retried: one refused or failing address
   // must not keep the others from their email. Sent ones aren't sent twice on a retry (keys).
   let retryLater: unknown = null;
   for (const h of b.coHosts) {
+    if (!hostIsTold(b, change, h.id)) continue;
     const message = await composeChangeEmail(
       { appUrl: deps.appUrl, now: new Date(data.at) },
-      { ...b, hostEmail: h.email, hostTimeZone: h.timeZone, calendarSync: null },
+      { ...b, hostEmail: h.email, hostTimeZone: h.timeZone },
       change,
       "host",
       null,
-      { brief },
+      { brief, hostId: h.id },
     );
     try {
       const outcome = await sendOrReject(deps, message, `booking/${b.id}/${b.sequence}/host/${h.id}`, {

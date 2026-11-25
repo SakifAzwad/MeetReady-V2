@@ -69,7 +69,11 @@ export default function PrivacyPage() {
             and MeetReady stores only a scrambled (hashed) form of it. A member can leave at any time; the
             owner can remove members or delete the team. If the owner makes you a host of a team event type,
             its public booking page shows guests your name and the time in your city, and your bookings and
-            working hours decide which times it offers (guests see the times, never your other meetings).
+            working hours decide which times it offers (guests see the times, never your other meetings). Its
+            meetings appear on your Bookings page and in your Insights, the other hosts are told when you move
+            or cancel one, and your webhooks receive them. If the organizer has connected Google Calendar, the
+            meeting is added to their calendar with your email address as an invited guest, so Google sends
+            you an invitation and you can see the other hosts on it.
           </li>
         </ul>
       </LegalSection>
@@ -155,7 +159,9 @@ export default function PrivacyPage() {
           <li>
             <strong>Add, change and remove events</strong>. Used only for the events of your own MeetReady
             bookings: adding them to your calendar, moving them when a booking is rescheduled, and removing
-            them when it&apos;s cancelled. It is never used to read, change or delete any other event.
+            them when it&apos;s cancelled. It is never used to read, change or delete any other event. For a
+            team meeting you organize, the other hosts&apos; names and email addresses are added to the event
+            as guests, and Google emails them the invitation and any change (never the person who booked).
           </li>
         </ul>
         <p>

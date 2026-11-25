@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { PageTransition } from "@/components/motion";
 import { Card } from "@/components/ui/card";
 import { db } from "@/db";
-import { locationText } from "@/lib/booking-format";
+import { bookingEventInfo } from "@/lib/booking-event-info";
 import { requireOnboardedUser } from "@/server/auth/session";
 import { getHostBookingDetails } from "@/server/manage-booking";
 import { MoveWidget } from "./move-widget";
@@ -18,7 +18,8 @@ export const metadata: Metadata = { title: "Move a meeting" };
  * widget in a host mode: the same calendar, daylight band and timezone
  * handling a guest gets when they reschedule, and the same rules (Day 24's
  * rescheduleBookingAsHost). The booking is looked up by id AND host: another
- * host's booking id is a 404, not a way in.
+ * host's booking id is a 404, not a way in. Day 30: any host of a team meeting
+ * can move it; the widget then works on the team's page with the meeting's hosts.
  */
 export default function MoveBookingPage({ params }: PageProps<"/dashboard/bookings/[id]/move">) {
   return (
@@ -40,7 +41,7 @@ export default function MoveBookingPage({ params }: PageProps<"/dashboard/bookin
 
 async function MoveBody({ params }: Pick<PageProps<"/dashboard/bookings/[id]/move">, "params">) {
   const [{ id }, user] = await Promise.all([params, requireOnboardedUser()]);
-  const b = await getHostBookingDetails(db, user.id, id); // scoped to this host
+  const b = await getHostBookingDetails(db, user.id, id); // only if this user is one of its hosts
   if (!b) notFound();
 
   const heading = (
@@ -49,6 +50,7 @@ async function MoveBody({ params }: Pick<PageProps<"/dashboard/bookings/[id]/mov
       <p className="text-muted-foreground text-sm">
         {b.eventTitle} with {b.guestName}. They&apos;ll get an email from MeetReady with the new time and a
         link to change it again.
+        {b.team && " The other hosts are told too, and the new time must suit all of them."}
       </p>
     </div>
   );
@@ -76,16 +78,7 @@ async function MoveBody({ params }: Pick<PageProps<"/dashboard/bookings/[id]/mov
           <MoveWidget
             bookingId={b.id}
             guestName={b.guestName}
-            event={{
-              username: b.hostUsername!,
-              slug: b.eventSlug,
-              title: b.eventTitle,
-              description: null,
-              durationMinutes: b.durationMinutes,
-              hostName: b.hostName,
-              hostTimeZone: b.hostTimeZone,
-              locationLabel: locationText(b),
-            }}
+            event={bookingEventInfo(b)}
             currentStartsAt={b.startsAt.toISOString()}
             currentEndsAt={b.endsAt.toISOString()}
           />

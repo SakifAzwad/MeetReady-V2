@@ -751,6 +751,44 @@ Nothing to set in Vercel. About 10 minutes. You need the team from step 21 with 
 **If the team page says "No meetings available":** the event type is off, or no host is still in the team (someone
 who leaves stops hosting). Edit it and tick a host.
 
+## 23. Team meetings for every host, added on Day 30
+
+Nothing to set in Vercel. About 15 minutes. You need step 22's team, `Team intro`, the second Google account in its
+own window, and your Google Calendar connected (step 14). The real Google is the point here: CI only has a fake one.
+
+1. **Deploy** (push Day 30). Migration 0016 adds one column, `bookings.changed_by_host_id`. The log ends with
+   `[migrate] up to date`.
+2. **The band speaks for everyone:** in a private window open `/team/{team}/team-intro` and pick a weekday. Under
+   the band: "Everyone is working 3–5 PM your time." (on your clock), at the top right "Hosts in Dhaka and
+   London". Drag along the band: the badge says "Everyone is working" or "Not everyone is working" (before
+   Day 30 it said "Outside Acme's working hours" with only your clock).
+3. **Book it** with your own email. In **your** Google Calendar: one event, "Team intro with …", with the second
+   account listed as a guest and a Meet link.
+4. **The co-host's invitation comes from Google:** the second account's Gmail gets Google's invitation (from you,
+   through Google Calendar), and the event is in its calendar too. This works without a domain: Google sends it,
+   not Resend. (MeetReady's own email to it is still refused by Resend's test sender, as in step 22.)
+5. **The co-host's dashboard:** in the second account's window, **Bookings**: "Team intro with …", a line "{team},
+   with {you}", and **Move** / **Cancel**. **Insights** counts it (after it has happened), and the dashboard's
+   "Coming up" lists it.
+6. **The guest moves it:** open the link in the guest email → **Reschedule** (it's offered for team meetings now) →
+   pick another shared time → **Confirm new time**. Your Google event moves; the second account gets Google's
+   "Updated invitation".
+7. **The co-host moves it:** in the second account's window, **Bookings** → **Move** → another time → **Confirm
+   new time**. Your inbox: the guest email says "{second account} moved your meeting", and your own email says
+   "{second account} moved your meeting with …". Your **Bookings** page says "Moved by {second account}".
+8. **The database:** Neon → SQL Editor (`production`):
+   ```sql
+   select b.starts_at, b.rescheduled_by, b.changed_by_host_id, bh.host_id, bh.starts_at as host_row_starts_at
+   from bookings b join booking_hosts bh on bh.booking_id = b.id order by b.created_at desc limit 2;
+   ```
+   Two rows (one per host), both host rows at the booking's time, `rescheduled_by = host` and `changed_by_host_id`
+   = the second account's id.
+9. **Cancel** it from either window: Google removes the event from both calendars and emails the co-host the
+   cancellation.
+
+**Team meetings booked before Day 30** (step 22's) are in your calendar without the co-host invited: Google is told
+about co-hosts only when it creates the event. Cancel them and book again to try this step.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

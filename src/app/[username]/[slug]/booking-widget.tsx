@@ -421,6 +421,7 @@ function Scheduler({
                 hostTimeZone={event.hostTimeZone}
                 hostName={event.hostName}
                 hostShortName={shortName(event)}
+                teamZones={event.team?.hosts.map((h) => h.timeZone)}
                 hour12={hour12}
               />
             ) : (

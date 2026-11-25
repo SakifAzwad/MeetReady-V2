@@ -176,6 +176,7 @@ describe("syncBooking", () => {
       accessToken: "token",
       calendarId: "primary",
       bookingId: booking.id,
+      notify: false, // a personal booking: no co-hosts to tell
     });
   });
 

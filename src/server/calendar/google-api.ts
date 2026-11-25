@@ -127,6 +127,11 @@ export type CalendarEvent = {
   withMeet: boolean;
   /** Our booking id, kept on the event (private extended property) and used as the Meet request id. */
   bookingId: string;
+  /**
+   * Day 30: a team meeting's co-hosts, invited to the organizer's event (one event, one Meet link).
+   * Empty for a personal booking. The guest is never one: they get MeetReady's own email and invite.
+   */
+  attendees: { email: string; displayName: string }[];
 };
 
 /**
@@ -161,11 +166,16 @@ async function eventsRequest(
   method: "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
+  /**
+   * Day 30: "all" for a team meeting's event, so Google sends the invited co-hosts an invitation, and
+   * updates when it moves or is cancelled. The guest is never an attendee, so "all" never reaches them.
+   * "none" otherwise: Google emails nobody, and guests get MeetReady's own email.
+   */
+  sendUpdates: "all" | "none" = "none",
 ): Promise<Response> {
-  // sendUpdates=none: Google never emails anyone about these events. Guests get MeetReady's own email.
   const url = `${call.baseUrl}/calendars/${encodeURIComponent(call.calendarId)}/events${path}${
     path.includes("?") ? "&" : "?"
-  }sendUpdates=none`;
+  }sendUpdates=${sendUpdates}`;
   let res: Response;
   try {
     res = await call.fetch(url, {
@@ -204,13 +214,25 @@ async function readEvent(res: Response): Promise<{ meetUrl: string | null }> {
 /**
  * Creates the booking's event, or brings it up to date if it already exists
  * (a retry, or a reschedule). Returns the Meet link if there is one.
+ *
+ * Day 30: co-hosts are attendees, sent only when the event is CREATED. A PATCH
+ * that includes `attendees` replaces the whole list, and we'd be sending it
+ * without each co-host's RSVP; a meeting's hosts never change after booking,
+ * so updates leave the list as Google has it.
  */
 export async function upsertGoogleEvent(
   call: EventsCall & { event: CalendarEvent; exists: boolean },
 ): Promise<{ meetUrl: string | null }> {
   const id = googleEventId(call.event.bookingId);
+  const sendUpdates = call.event.attendees.length > 0 ? "all" : "none";
   const patch = async () => {
-    const res = await eventsRequest(call, "PATCH", `/${id}?conferenceDataVersion=1`, eventBody(call.event));
+    const res = await eventsRequest(
+      call,
+      "PATCH",
+      `/${id}?conferenceDataVersion=1`,
+      eventBody(call.event),
+      sendUpdates,
+    );
     // The host deleted the event in Google: their choice, so it isn't recreated.
     if (res.status === 404 || res.status === 410) return { meetUrl: null };
     if (!res.ok)
@@ -219,26 +241,44 @@ export async function upsertGoogleEvent(
   };
   if (call.exists) return patch();
 
-  const res = await eventsRequest(call, "POST", "?conferenceDataVersion=1", {
-    id,
-    ...eventBody(call.event),
-    // conferenceDataVersion=1 + createRequest: Google creates a Meet link for this event.
-    // requestId makes the request idempotent on Google's side too.
-    ...(call.event.withMeet && {
-      conferenceData: {
-        createRequest: { requestId: call.event.bookingId, conferenceSolutionKey: { type: "hangoutsMeet" } },
-      },
-    }),
-  });
+  const res = await eventsRequest(
+    call,
+    "POST",
+    "?conferenceDataVersion=1",
+    {
+      id,
+      ...eventBody(call.event),
+      ...(call.event.attendees.length > 0 && { attendees: call.event.attendees }),
+      // conferenceDataVersion=1 + createRequest: Google creates a Meet link for this event.
+      // requestId makes the request idempotent on Google's side too.
+      ...(call.event.withMeet && {
+        conferenceData: {
+          createRequest: { requestId: call.event.bookingId, conferenceSolutionKey: { type: "hangoutsMeet" } },
+        },
+      }),
+    },
+    sendUpdates,
+  );
   // 409: an earlier attempt already created it (it timed out on our side). Update it instead.
   if (res.status === 409) return patch();
   if (!res.ok) throw new CalendarUnavailableError("unavailable", `Creating the event failed (${res.status})`);
   return readEvent(res);
 }
 
-/** Removes the booking's event. Already gone (404/410: the host deleted it) counts as done. */
-export async function deleteGoogleEvent(call: EventsCall & { bookingId: string }): Promise<void> {
-  const res = await eventsRequest(call, "DELETE", `/${googleEventId(call.bookingId)}`);
+/**
+ * Removes the booking's event. Already gone (404/410: the host deleted it) counts as done.
+ * Day 30: `notify` for a team meeting, so Google tells the invited co-hosts it's cancelled.
+ */
+export async function deleteGoogleEvent(
+  call: EventsCall & { bookingId: string; notify: boolean },
+): Promise<void> {
+  const res = await eventsRequest(
+    call,
+    "DELETE",
+    `/${googleEventId(call.bookingId)}`,
+    undefined,
+    call.notify ? "all" : "none",
+  );
   if (res.ok || res.status === 404 || res.status === 410) return;
   throw new CalendarUnavailableError("unavailable", `Deleting the event failed (${res.status})`);
 }

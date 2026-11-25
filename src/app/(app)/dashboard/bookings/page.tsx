@@ -50,7 +50,8 @@ async function BookingsList({ searchParams }: { searchParams: SearchParams }) {
   // ?view= is user-controlled: anything unexpected falls back to "upcoming".
   const view: BookingsView = VIEWS.some((v) => v.view === raw) ? (raw as BookingsView) : "upcoming";
   const now = new Date();
-  const rows = await listHostBookings(db, user.id, view, now); // scoped to this host
+  // Scoped to this user: their own bookings, and team meetings they're a host of (Day 30).
+  const rows = await listHostBookings(db, user.id, view, now);
 
   return (
     <div className="flex flex-col gap-4">
@@ -88,7 +89,14 @@ async function BookingsList({ searchParams }: { searchParams: SearchParams }) {
       ) : (
         <ul className="flex flex-col gap-3">
           {rows.map((b) => (
-            <BookingRow key={b.id} booking={b} timeZone={user.timeZone} view={view} now={now} />
+            <BookingRow
+              key={b.id}
+              booking={b}
+              viewerId={user.id}
+              timeZone={user.timeZone}
+              view={view}
+              now={now}
+            />
           ))}
         </ul>
       )}
@@ -96,19 +104,29 @@ async function BookingsList({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
+const names = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
 function BookingRow({
   booking: b,
+  viewerId,
   timeZone,
   view,
   now,
 }: {
   booking: HostBookingRow;
+  viewerId: string;
   timeZone: string;
   view: BookingsView;
   now: Date;
 }) {
   const day = dateKeyInZone(b.startsAt, timeZone);
   const inProgress = b.startsAt <= now && b.endsAt > now;
+  // Day 30: a team meeting says which team and who else is in it. Google Calendar's state is about the
+  // ORGANIZER's calendar (the event lives there, co-hosts are invited), so only the organizer sees it.
+  const others = b.hosts.filter((h) => h.id !== viewerId).map((h) => h.name);
+  const organizer = b.hostId === viewerId;
+  const moved = movedLabel(b, viewerId);
+  const cancelled = cancelledLabel(b, viewerId);
   return (
     <li>
       <Card className="relative gap-3 overflow-hidden p-5 sm:flex-row sm:items-start sm:gap-6">
@@ -130,6 +148,12 @@ function BookingRow({
             {b.eventTitle} with {b.guestName}
           </p>
           <p className="text-muted-foreground truncate text-sm">{b.guestEmail}</p>
+          {b.team && (
+            <p className="text-muted-foreground text-sm">
+              {b.team.name}
+              {others.length > 0 && `, with ${names.format(others)}`}
+            </p>
+          )}
           {b.guestTimeZone !== timeZone && (
             <p className="text-muted-foreground text-sm">
               {formatTime(b.startsAt, b.guestTimeZone)} for them in {cityName(b.guestTimeZone)}
@@ -155,12 +179,12 @@ function BookingRow({
           <div className="mt-2 flex flex-wrap gap-2">
             {inProgress && <Badge className="border-primary/40 text-primary">Happening now</Badge>}
             {/* Day 24: who moved or cancelled it, and through which assistant (lib/booking-labels.ts). */}
-            {movedLabel(b) && <Badge>{movedLabel(b)}</Badge>}
+            {moved && <Badge>{moved}</Badge>}
             {/* Day 22: the host booked it through an AI assistant, so the guest's email said so too. */}
             {b.source === "assistant" && (
               <Badge>Booked by you through {b.assistantName ?? "an AI assistant"}</Badge>
             )}
-            {b.calendarSync === "failed" && (
+            {organizer && b.calendarSync === "failed" && (
               <>
                 <Badge className="border-destructive/40">
                   {b.status === "cancelled" ? "Still in Google Calendar" : "Not in Google Calendar"}
@@ -168,7 +192,7 @@ function BookingRow({
                 <RetryCalendarButton bookingId={b.id} />
               </>
             )}
-            {cancelledLabel(b) && <Badge>{cancelledLabel(b)}</Badge>}
+            {cancelled && <Badge>{cancelled}</Badge>}
             {b.noShowAt && <Badge>Didn&apos;t show up</Badge>}
           </div>
         </div>

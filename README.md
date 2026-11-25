@@ -30,7 +30,7 @@ their own words, and the host can book or check meetings from Claude.
 - **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
   and evals against the real model. ([Day 18](docs/day-18.md))
 - **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
-  limits, and Sentry with a privacy scrubber. About 840 unit tests and 55 browser tests run in CI.
+  limits, and Sentry with a privacy scrubber. About 870 unit tests and 56 browser tests run in CI.
   ([Days 11–17](#design-notes))
 
 ## Screenshots
@@ -265,6 +265,10 @@ Each day of the build has its own write-up with the decisions, the reasons and t
   every host is free (each in their own timezone), and the no-double-booking guarantee moves to a
   `booking_hosts` table kept in step by triggers, so Postgres protects every host of every meeting. Locks taken in
   sorted order (a race test deadlocks without it).
+- [Day 30: Team meetings for every host](docs/day-30.md): team scheduling, part 3. One Google event in the
+  organizer's calendar with the co-hosts invited, moves checked against the meeting's own hosts with every host's
+  lock, team meetings on each host's Bookings page, week view, Insights, AI assistant and webhooks, and any host
+  may move or cancel one (the others are told who did).
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

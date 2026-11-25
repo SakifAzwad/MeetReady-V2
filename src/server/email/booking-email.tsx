@@ -56,10 +56,19 @@ export type BookingEmailProps = {
    * since the assistant may have acted while they weren't looking.
    */
   changedThrough?: string;
+  /**
+   * Day 30: the host who made a host change (cancel or move), named because the reader isn't them: always
+   * for the guest, and for every other host of a team meeting ("Grace moved your meeting with Ada").
+   * Left out when the reader made the change themselves ("You moved…").
+   */
+  changedBy?: string;
 };
 
 export function bookingEmailHeading(p: BookingEmailProps): string {
   const host = p.hostName.split(" ")[0];
+  // Day 30: who made a host change. For the guest, the host who did it (any host of a team meeting may).
+  const changer = (p.changedBy ?? p.hostName).split(" ")[0];
+  const other = p.changedBy?.split(" ")[0];
   if (p.kind === "reminder") return p.reminderHeading ?? "Your meeting is coming up";
   if (p.kind === "confirmed" && p.scheduledBy)
     return p.audience === "guest"
@@ -69,18 +78,21 @@ export function bookingEmailHeading(p: BookingEmailProps): string {
     return p.audience === "guest" ? `You're booked with ${host}` : `New booking: ${p.guestName}`;
   if (p.kind === "rescheduled") {
     if (p.audience === "guest")
-      return p.rescheduledBy === "host" ? `${host} moved your meeting` : "Your meeting has moved";
-    if (p.changedThrough) return `You moved your meeting with ${p.guestName} through ${p.changedThrough}`;
+      return p.rescheduledBy === "host" ? `${changer} moved your meeting` : "Your meeting has moved";
+    if (p.changedThrough)
+      return `${other ?? "You"} moved your meeting with ${p.guestName} through ${p.changedThrough}`;
     return p.rescheduledBy === "host"
-      ? `You moved your meeting with ${p.guestName}`
+      ? `${other ?? "You"} moved your meeting with ${p.guestName}`
       : `${p.guestName} moved their meeting`;
   }
   if (p.audience === "host") {
-    return p.changedThrough
-      ? `You cancelled your meeting with ${p.guestName} through ${p.changedThrough}`
+    if (p.changedThrough)
+      return `${other ?? "You"} cancelled your meeting with ${p.guestName} through ${p.changedThrough}`;
+    return p.cancelledBy === "host" && other
+      ? `${other} cancelled your meeting with ${p.guestName}`
       : `${p.guestName} cancelled`;
   }
-  return p.cancelledBy === "host" ? `${host} cancelled your meeting` : "Your meeting is cancelled";
+  return p.cancelledBy === "host" ? `${changer} cancelled your meeting` : "Your meeting is cancelled";
 }
 
 // The Daylight palette, as plain hex: email clients don't support CSS variables.
@@ -154,8 +166,8 @@ export function BookingEmail(p: BookingEmailProps) {
           )}
           {p.kind === "rescheduled" && p.rescheduledBy === "host" && p.audience === "guest" && (
             <Text style={styles.value}>
-              {p.hostName} moved this meeting using MeetReady. If the new time doesn&apos;t suit you,
-              reschedule or cancel with the button below.
+              {p.changedBy ?? p.hostName} moved this meeting using MeetReady. If the new time doesn&apos;t
+              suit you, reschedule or cancel with the button below.
             </Text>
           )}
 

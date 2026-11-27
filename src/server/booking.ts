@@ -9,7 +9,8 @@ import {
   type BusyInterval,
   type Slot,
 } from "@/lib/scheduling/generate-slots";
-import { addMinutes, intersectAll, type Interval } from "@/lib/scheduling/intervals";
+import { addMinutes, intersectAll, mergeIntervals, type Interval } from "@/lib/scheduling/intervals";
+import { pickHost, ROUND_ROBIN_DAYS, type HostLoad } from "@/lib/scheduling/round-robin";
 import { addDaysToKey, dateKeyInZone, type DateKey } from "@/lib/scheduling/time";
 import type { BookingRequest } from "@/lib/validation/booking";
 import { answersSchema, toAnswerSnapshot, type Question } from "@/lib/validation/questions";
@@ -60,6 +61,12 @@ export type PublicEventType = {
   hosts: EventHost[];
   /** Day 29: the team that owns it; null for a host's own event type. */
   team: { id: string; slug: string; name: string } | null;
+  /**
+   * Day 31: how a team's event type uses its hosts. "collective" = every host is in the meeting (the times
+   * when ALL are free); "round_robin" = one host per meeting, assigned fairly (the times when ANY is free).
+   * Null for a host's own event type.
+   */
+  kind: "collective" | "round_robin" | null;
   // Booking rules: used by generateSlots on the server, not sent to the browser.
   rules: {
     slotIntervalMinutes: number | null;
@@ -101,9 +108,9 @@ export async function getPublicEventType(
 }
 
 /**
- * Day 29: a team's event type, /team/{teamSlug}/{slug}. Only active,
- * collective ones for now (round-robin is Day 31), and only with at least one
- * host who is still in the team: someone who left never hosts.
+ * Day 29: a team's event type, /team/{teamSlug}/{slug}. Only active ones
+ * (collective, or round-robin since Day 31), and only with at least one host
+ * who is still in the team: someone who left never hosts.
  */
 export async function getTeamEventType(
   db: Database,
@@ -119,7 +126,6 @@ export async function getTeamEventType(
         eq(teams.slug, teamSlug.toLowerCase()),
         eq(eventTypes.slug, slug.toLowerCase()),
         eq(eventTypes.isActive, true),
-        eq(eventTypes.teamKind, "collective"),
       ),
     );
   if (!row) return null;
@@ -228,6 +234,7 @@ function toPublic(
     hostTimeZone: organizer.timeZone,
     hosts,
     team,
+    kind: et.teamKind ?? null,
     title: et.title,
     slug: et.slug,
     description: et.description,
@@ -351,6 +358,11 @@ export type CalendarOptions = {
    * this file waits on Google, and booking can fetch them BEFORE taking the lock.
    */
   externalBusy?: readonly Interval[];
+  /**
+   * Day 31, round-robin: each host's own Google busy times. A busy time only blocks ITS host (the others can
+   * still take that slot), so the flat list above can't be used with more than one host.
+   */
+  externalBusyByHost?: ReadonlyMap<string, readonly Interval[]>;
 };
 
 /**
@@ -380,8 +392,17 @@ export async function getBookingCalendar(
   range: Interval,
   now: Date,
   options: CalendarOptions = {},
-): Promise<{ slots: Slot[]; windows: Interval[] }> {
+): Promise<BookingCalendar> {
   const { start: loadFrom, end: loadTo } = busyLoadRange(range);
+  if (
+    eventType.kind === "round_robin" &&
+    eventType.hosts.length > 1 &&
+    options.externalBusy &&
+    !options.externalBusyByHost
+  ) {
+    // A flat list can't say whose busy time is whose: one host's meeting would block everyone's slots.
+    throw new Error("Round-robin with several hosts needs externalBusyByHost, not externalBusy");
+  }
 
   // Each host's working hours, in their own timezone. One at a time: inside a
   // transaction every query goes over the same connection anyway.
@@ -407,6 +428,7 @@ export async function getBookingCalendar(
   const existing = await db
     .select({
       bookingId: bookings.id,
+      hostId: bookingHosts.hostId,
       startsAt: bookings.startsAt,
       endsAt: bookings.endsAt,
       eventTypeId: bookings.eventTypeId,
@@ -428,6 +450,11 @@ export async function getBookingCalendar(
         options.excludeBookingId ? ne(bookings.id, options.excludeBookingId) : undefined,
       ),
     );
+
+  const rules = { durationMinutes: eventType.durationMinutes, ...eventType.rules };
+  if (eventType.kind === "round_robin") {
+    return roundRobinCalendar(eventType, schedules, existing, range, now, rules, options);
+  }
 
   const seen = new Set<string>();
   const busy: BusyInterval[] = [];
@@ -460,12 +487,75 @@ export async function getBookingCalendar(
       range,
       now,
       host,
-      eventType: { durationMinutes: eventType.durationMinutes, ...eventType.rules },
+      eventType: rules,
       busy,
       windows: schedules.length === 1 ? undefined : windows,
     }),
     windows,
   };
+}
+
+export type BookingCalendar = {
+  slots: Slot[];
+  /** When the hosts work, for the daylight band: everyone at once (collective), anyone (round-robin). */
+  windows: Interval[];
+  /** Day 31, round-robin only: which hosts are free at each slot (by start time in ms), in host-list order. */
+  freeHosts?: Map<number, string[]>;
+};
+
+/**
+ * Day 31: round-robin free times. Each host is a calendar of their own: their
+ * hours in their own timezone, their own meetings with buffers, their own
+ * Google busy times, and their own daily limit for this event type. The same
+ * pure generateSlots runs once per host, and a time is offered if ANY host
+ * has it. Which host gets it is decided at booking (pickHost), not here.
+ */
+function roundRobinCalendar(
+  eventType: PublicEventType,
+  schedules: Parameters<typeof availabilityWindows>[1][],
+  existing: {
+    hostId: string;
+    startsAt: Date;
+    endsAt: Date;
+    eventTypeId: string;
+    bufferBeforeMinutes: number;
+    bufferAfterMinutes: number;
+  }[],
+  range: Interval,
+  now: Date,
+  rules: Parameters<typeof generateSlots>[0]["eventType"],
+  options: CalendarOptions,
+): BookingCalendar {
+  const freeHosts = new Map<number, string[]>();
+  const windows: Interval[] = [];
+  eventType.hosts.forEach((h, i) => {
+    const schedule = schedules[i]!;
+    const busy: BusyInterval[] = existing
+      .filter((b) => b.hostId === h.id)
+      .map((b) => ({
+        start: b.startsAt,
+        end: b.endsAt,
+        bufferBeforeMinutes: b.bufferBeforeMinutes,
+        bufferAfterMinutes: b.bufferAfterMinutes,
+        // The daily limit is per host: "at most 2 a day" means 2 for each of them.
+        countsTowardDailyLimit: b.eventTypeId === eventType.id,
+      }));
+    const external =
+      options.externalBusyByHost?.get(h.id) ??
+      (eventType.hosts.length === 1 ? options.externalBusy : []) ??
+      [];
+    for (const b of external) busy.push({ start: b.start, end: b.end, countsTowardDailyLimit: false });
+    for (const slot of generateSlots({ range, now, host: schedule, eventType: rules, busy })) {
+      const key = slot.start.getTime();
+      freeHosts.set(key, [...(freeHosts.get(key) ?? []), h.id]);
+    }
+    windows.push(...availabilityWindows(range, schedule));
+  });
+  const duration = eventType.durationMinutes;
+  const slots = [...freeHosts.keys()]
+    .sort((a, b) => a - b)
+    .map((ms) => ({ start: new Date(ms), end: addMinutes(new Date(ms), duration) }));
+  return { slots, windows: mergeIntervals(windows), freeHosts };
 }
 
 /**
@@ -484,8 +574,77 @@ export async function hostsBusyTimes(
   return all;
 }
 
+/**
+ * Day 31: each host's Google busy times, kept apart (round-robin). A host whose
+ * calendar can't be read is left out of `readable` instead of failing the
+ * whole request: round-robin needs ONE free host, so that host just sits this
+ * one out. (Collective needs every host, so it still fails closed: hostsBusyTimes.)
+ */
+export async function busyByHost(
+  calendar: ExternalBusy,
+  hosts: readonly EventHost[],
+  range: Interval,
+  mode: Parameters<ExternalBusy["busyTimes"]>[2],
+): Promise<{ byHost: Map<string, Interval[]>; readable: EventHost[] }> {
+  const byHost = new Map<string, Interval[]>();
+  const readable: EventHost[] = [];
+  for (const h of hosts) {
+    try {
+      byHost.set(h.id, await calendar.busyTimes(h.id, range, mode));
+      readable.push(h);
+    } catch (error) {
+      if (!(error instanceof CalendarUnavailableError)) throw error;
+    }
+  }
+  return { byHost, readable };
+}
+
+/**
+ * Day 31: the facts pickHost needs, for the hosts free at the requested time.
+ * One grouped query over this event type's confirmed bookings, by host.
+ */
+async function hostLoads(
+  db: Database,
+  eventType: PublicEventType,
+  candidateIds: readonly string[],
+  now: Date,
+): Promise<HostLoad[]> {
+  const since = addMinutes(now, -ROUND_ROBIN_DAYS * 24 * 60);
+  const rows = await db
+    .select({
+      hostId: bookings.hostId,
+      recent:
+        sql<number>`(count(*) filter (where ${bookings.createdAt} >= ${since.toISOString()}::timestamptz))::int`.mapWith(
+          Number,
+        ),
+      lastAssignedAt: sql<Date>`max(${bookings.createdAt})`.mapWith((v: string | Date) => new Date(v)),
+    })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.eventTypeId, eventType.id),
+        eq(bookings.status, "confirmed"),
+        inArray(bookings.hostId, [...candidateIds]),
+      ),
+    )
+    .groupBy(bookings.hostId);
+  const byId = new Map(rows.map((r) => [r.hostId, r]));
+  return candidateIds.map((id) => ({
+    id,
+    position: eventType.hosts.findIndex((h) => h.id === id),
+    recent: byId.get(id)?.recent ?? 0,
+    lastAssignedAt: byId.get(id)?.lastAssignedAt ?? null,
+  }));
+}
+
 export type BookingResult =
-  | { ok: true; booking: { id: string; startsAt: Date; endsAt: Date }; manageToken: string }
+  | {
+      ok: true;
+      booking: { id: string; startsAt: Date; endsAt: Date };
+      manageToken: string;
+      /** Day 31: who a round-robin booking went to (the guest's confirmation names them). */
+      assignedTo?: { name: string; timeZone: string };
+    }
   | { ok: false; error: "not_found" | "slot_unavailable" | "slot_taken" }
   /** The host's calendar couldn't be checked, so the time can't be confirmed (fail closed, Day 15). */
   | { ok: false; error: "calendar_unavailable" }
@@ -495,7 +654,9 @@ export type BookingResult =
   | { ok: false; error: "questions_changed"; questions: Question[]; questionsVersion: string };
 
 /**
- * Books a slot. Three layers, each covering what the one before can't:
+ * Books a slot. Three layers, each covering what the one before can't.
+ * (Day 31, round-robin: the same layers over every host in the pool, then
+ * pickHost chooses among those free at that time, under the locks.)
  *
  *  1. Re-check: the requested start must be a slot generateSlots() would offer
  *     right now (hours, overrides, notice, window, buffers, daily limit). The
@@ -544,11 +705,19 @@ export async function createBooking(
 ): Promise<BookingResult> {
   const window = { start: request.startsAt, end: addMinutes(request.startsAt, 1) };
   let externalBusy: Interval[] = [];
+  // Day 31, round-robin: each host's own busy times, and who could be read (the others sit this one out).
+  let byHost: Map<string, Interval[]> | undefined;
   if (options.calendar) {
     const found = await resolveEventType(db, request);
     if (!found) return { ok: false, error: "not_found" };
     try {
-      externalBusy = await hostsBusyTimes(options.calendar, found.hosts, busyLoadRange(window), "live");
+      if (found.kind === "round_robin") {
+        const read = await busyByHost(options.calendar, found.hosts, busyLoadRange(window), "live");
+        if (read.readable.length === 0) return { ok: false, error: "calendar_unavailable" };
+        byHost = read.byHost;
+      } else {
+        externalBusy = await hostsBusyTimes(options.calendar, found.hosts, busyLoadRange(window), "live");
+      }
     } catch (error) {
       if (error instanceof CalendarUnavailableError) return { ok: false, error: "calendar_unavailable" };
       throw error;
@@ -556,8 +725,13 @@ export async function createBooking(
   }
   try {
     return await db.transaction(async (tx) => {
-      const eventType = await resolveEventType(tx, request);
-      if (!eventType) return { ok: false, error: "not_found" } as const;
+      const found = await resolveEventType(tx, request);
+      if (!found) return { ok: false, error: "not_found" } as const;
+      const roundRobin = found.kind === "round_robin";
+      // Round-robin: only the hosts whose calendar was read take part (all of them when there's no calendar).
+      const eventType =
+        roundRobin && byHost ? { ...found, hosts: found.hosts.filter((h) => byHost.has(h.id)) } : found;
+      if (eventType.hosts.length === 0) return { ok: false, error: "calendar_unavailable" } as const;
       // Day 29: an assistant books for its host's own event types only.
       if (options.byAssistant && eventType.team) return { ok: false, error: "not_found" } as const;
 
@@ -595,9 +769,25 @@ export async function createBooking(
 
       // (1) Is this exact start still offered? Ask for slots in a 1-minute window around it.
       const start = request.startsAt;
-      const slots = await getBookableSlots(tx, eventType, window, now, { externalBusy });
-      if (!slots.some((s) => s.start.getTime() === start.getTime())) {
+      const calendar = await getBookingCalendar(
+        tx,
+        eventType,
+        window,
+        now,
+        roundRobin ? { externalBusyByHost: byHost } : { externalBusy },
+      );
+      if (!calendar.slots.some((s) => s.start.getTime() === start.getTime())) {
         return { ok: false, error: "slot_unavailable" } as const;
+      }
+      // Day 31, round-robin: of the hosts free at this time, the one pickHost chooses. Counted under the
+      // locks above, so two bookings at once can't both see the same "fewest" and both pick that host.
+      let hostId = eventType.hostId;
+      let assignedTo: { name: string; timeZone: string } | undefined;
+      if (roundRobin) {
+        const free = calendar.freeHosts?.get(start.getTime()) ?? [];
+        hostId = pickHost(await hostLoads(tx, eventType, free, now)) ?? hostId;
+        const host = eventType.hosts.find((h) => h.id === hostId)!;
+        assignedTo = { name: host.name, timeZone: host.timeZone };
       }
       await options.afterCheck?.();
 
@@ -613,7 +803,8 @@ export async function createBooking(
           manageTokenHash: hash,
           manageTokenEncrypted: options.sealToken?.(token, id) ?? null,
           eventTypeId: eventType.id,
-          hostId: eventType.hostId,
+          // The organizer (collective, personal), or the assigned host (round-robin).
+          hostId,
           guestName: request.guestName,
           guestEmail: request.guestEmail,
           guestTimeZone: request.guestTimeZone,
@@ -630,13 +821,14 @@ export async function createBooking(
       // The organizer's booking_hosts row came from a trigger; the other hosts are added here.
       // Their times come from the booking too (another trigger), and the no-overlap constraint
       // on booking_hosts refuses the whole booking if any of them is already busy then.
-      const others = eventType.hosts.slice(1);
+      // Round-robin meetings have one host: the trigger's row is the only one.
+      const others = roundRobin ? [] : eventType.hosts.slice(1);
       if (others.length > 0) {
         await tx
           .insert(bookingHosts)
           .values(others.map((h) => ({ bookingId: id, hostId: h.id, ...FILLED_BY_TRIGGER })));
       }
-      return { ok: true, booking: row!, manageToken: token } as const;
+      return { ok: true, booking: row!, manageToken: token, ...(assignedTo && { assignedTo }) } as const;
     });
   } catch (error) {
     // (3) An error aborts the transaction, so it's caught out here, after rollback.
@@ -660,8 +852,8 @@ const FILLED_BY_TRIGGER = { startsAt: new Date(0), endsAt: new Date(0), active: 
 
 /**
  * Day 29: a team's public page, /team/{slug}: its name and the event types a
- * guest can book now (active, collective, with at least one host still in the
- * team). Null if there's no such team.
+ * guest can book now (active, with at least one host still in the team;
+ * collective or, since Day 31, round-robin). Null if there's no such team.
  */
 export async function getPublicTeam(db: Database, slug: string) {
   const [team] = await db
@@ -678,15 +870,10 @@ export async function getPublicTeam(db: Database, slug: string) {
       durationMinutes: eventTypes.durationMinutes,
       locationType: eventTypes.locationType,
       color: eventTypes.color,
+      kind: eventTypes.teamKind,
     })
     .from(eventTypes)
-    .where(
-      and(
-        eq(eventTypes.teamId, team.id),
-        eq(eventTypes.isActive, true),
-        eq(eventTypes.teamKind, "collective"),
-      ),
-    )
+    .where(and(eq(eventTypes.teamId, team.id), eq(eventTypes.isActive, true)))
     .orderBy(asc(eventTypes.createdAt));
   const withHosts = [];
   for (const t of types) {

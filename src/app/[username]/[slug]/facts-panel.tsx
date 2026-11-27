@@ -13,7 +13,13 @@ export type EventInfo = {
    * username is unused, hostName is the team's name and hostTimeZone the
    * organizer's; `hosts` are everyone who takes the meeting.
    */
-  team?: { slug: string; name: string; hosts: { name: string; timeZone: string }[] };
+  team?: {
+    slug: string;
+    name: string;
+    hosts: { name: string; timeZone: string }[];
+    /** Day 31: "round_robin" = the guest meets ONE of the hosts, assigned when they book. */
+    kind?: "collective" | "round_robin";
+  };
   title: string;
   description: string | null;
   durationMinutes: number;
@@ -27,6 +33,8 @@ export type EventInfo = {
  * both clocks ticking. Before looking at any times, a guest can see it's
  * late evening for the host.
  */
+const names = new Intl.ListFormat("en", { style: "long", type: "disjunction" });
+
 export function FactsPanel({
   event,
   timeZone,
@@ -43,9 +51,13 @@ export function FactsPanel({
   const Title = titleAs;
   const firstName = event.hostName.split(" ")[0];
   // Day 29: a team meeting lists every host's clock (Sakif's pick); "your time" only if it differs from all.
-  const clocks = event.team
-    ? event.team.hosts.map((h) => ({ term: h.name.split(" ")[0] ?? h.name, timeZone: h.timeZone }))
-    : [{ term: firstName, timeZone: event.hostTimeZone }];
+  // Day 31: round-robin lists who they might meet instead: whose clock matters isn't known until booking.
+  const roundRobin = event.team?.kind === "round_robin";
+  const clocks = roundRobin
+    ? []
+    : event.team
+      ? event.team.hosts.map((h) => ({ term: h.name.split(" ")[0] ?? h.name, timeZone: h.timeZone }))
+      : [{ term: firstName, timeZone: event.hostTimeZone }];
   const sameZone = clocks.some((c) => c.timeZone === timeZone);
 
   return (
@@ -68,6 +80,13 @@ export function FactsPanel({
       <dl className="border-foreground border-t-[1.5px] text-sm">
         <Fact term="Length" value={formatMinutes(event.durationMinutes)} />
         <Fact term="Where" value={event.locationLabel} note="Details in your confirmation email" />
+        {roundRobin && (
+          <Fact
+            term="With"
+            value={`One of ${names.format(event.team!.hosts.map((h) => h.name))}`}
+            note="Shared fairly between them: your confirmation says who"
+          />
+        )}
         {clocks.map((c, i) => (
           <Fact
             key={i}

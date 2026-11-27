@@ -122,7 +122,7 @@ async function TeamBody({ params }: Pick<PageProps<"/dashboard/teams/[id]">, "pa
         {eventTypes.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             {isOwner
-              ? "None yet. A team event type shows guests only the times when all its hosts are free."
+              ? "None yet. A team event type meets guests with all its hosts, or with one of them in turn."
               : "None yet. The team's owner can add them."}
           </p>
         ) : (
@@ -151,10 +151,26 @@ async function TeamBody({ params }: Pick<PageProps<"/dashboard/teams/[id]">, "pa
                       />
                     )}
                   </div>
-                  <p className="text-muted-foreground text-sm">
-                    {formatMinutes(et.durationMinutes)} with{" "}
-                    {et.hosts.map((h) => h.name).join(", ") || "nobody yet"}
-                  </p>
+                  {et.teamKind === "round_robin" ? (
+                    <>
+                      <p className="text-muted-foreground text-sm">
+                        {formatMinutes(et.durationMinutes)} with one of{" "}
+                        {et.hosts.map((h) => h.name).join(", ") || "nobody yet"}, shared fairly
+                      </p>
+                      {/* Day 31: the counts round-robin compares, so anyone can see the turns are fair. */}
+                      {et.hosts.length > 0 && (
+                        <p className="text-muted-foreground text-sm">
+                          Last 30 days:{" "}
+                          {et.hosts.map((h) => `${h.name.split(" ")[0]} ${h.recent ?? 0}`).join(", ")}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      {formatMinutes(et.durationMinutes)} with{" "}
+                      {et.hosts.map((h) => h.name).join(", ") || "nobody yet"}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {isOwner && (
                       <Button asChild variant="outline" size="sm">

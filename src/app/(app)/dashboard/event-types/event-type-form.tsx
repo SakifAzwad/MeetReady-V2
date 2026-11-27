@@ -45,7 +45,22 @@ export type TeamFormContext = {
   slug: string;
   members: { userId: string; name: string }[];
   hostIds: string[];
+  /** Day 31: everyone in each meeting (collective) or one of them (round-robin). Chosen once, on create. */
+  kind: "collective" | "round_robin";
 };
+
+const KINDS = [
+  {
+    value: "collective",
+    label: "Everyone in the meeting",
+    hint: "Guests see only the times when every host is free, and meet all of them.",
+  },
+  {
+    value: "round_robin",
+    label: "One of them, shared fairly",
+    hint: "Guests see the times when any host is free; each booking goes to whoever has had the fewest lately.",
+  },
+] as const;
 
 /** `appHost`: e.g. "meetreadyv2.vercel.app", for the "Guests book at …" hint. */
 type Props = (
@@ -58,6 +73,8 @@ export function EventTypeForm(props: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   // Day 29: who hosts a team's event type, kept in the team's member order.
   const [hostIds, setHostIds] = useState<string[]>(team?.hostIds ?? []);
+  // Day 31: picked on create only. Changing it later would change what existing bookings mean.
+  const [kind, setKind] = useState(team?.kind ?? "collective");
   const linkPrefix = team ? `team/${team.slug}` : username;
   // Fill the slug from the title until the user edits the slug themselves.
   const [slugTouched, setSlugTouched] = useState(props.mode === "edit");
@@ -94,6 +111,7 @@ export function EventTypeForm(props: Props) {
           { teamId: team.id, eventTypeId: props.mode === "edit" ? props.id : undefined },
           values,
           orderedHosts,
+          kind,
         )
       : props.mode === "create"
         ? await createEventTypeAction(values)
@@ -229,13 +247,41 @@ export function EventTypeForm(props: Props) {
       {team && (
         <Card>
           <CardTitle>Hosts</CardTitle>
+          {props.mode === "create" ? (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-sm font-medium">Who&apos;s in each meeting</legend>
+              {KINDS.map((k) => (
+                <label key={k.value} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="team-kind"
+                    className="mt-1"
+                    checked={kind === k.value}
+                    onChange={() => setKind(k.value)}
+                  />
+                  <span>
+                    <span className="block font-medium">{k.label}</span>
+                    <span className="text-muted-foreground block">{k.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          ) : (
+            <p className="text-sm">
+              <span className="font-medium">{KINDS.find((k) => k.value === kind)!.label}.</span>{" "}
+              <span className="text-muted-foreground">Chosen when it was created; it can&apos;t change.</span>
+            </p>
+          )}
           <fieldset className="flex flex-col gap-2">
             <legend className="text-muted-foreground mb-2 text-sm">
-              Guests see only the times when everyone ticked here is free, and the meeting is with all of
-              them. The first one is the organizer: the booking goes on their dashboard and Google Calendar.
+              {kind === "round_robin"
+                ? "Each booking goes to one of the people ticked here: the one free then who has had the fewest of this meeting in the last 30 days. It goes on their dashboard and Google Calendar."
+                : "Guests see only the times when everyone ticked here is free, and the meeting is with all of them. The first one is the organizer: the booking goes on their dashboard and Google Calendar."}
             </legend>
             {team.members.map((m) => {
-              const organizer = team.members.find((x) => hostIds.includes(x.userId))?.userId === m.userId;
+              const organizer =
+                kind === "collective" &&
+                team.members.find((x) => hostIds.includes(x.userId))?.userId === m.userId;
               return (
                 <label key={m.userId} className="flex items-center gap-2 text-sm">
                   <input

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { subtractInterval } from "@/lib/scheduling/intervals";
 import { slotsQuerySchema } from "@/lib/validation/booking";
 import {
+  busyByHost,
   busyLoadRange,
   eventTypeForBooking,
   getBookingCalendar,
@@ -68,6 +69,29 @@ export async function GET(request: NextRequest) {
   // The host's Google Calendar (Day 15): cached for a minute, or up to an hour old if Google is
   // failing. Showing slightly old times is fine: booking re-checks Google live.
   const range = { start: from, end: to };
+  // Day 31, round-robin: each host's busy times apart (one host's meeting blocks only them), and a host
+  // whose calendar can't be read just sits out: one free host is enough. Nobody readable = 503, as below.
+  if (eventType.kind === "round_robin") {
+    const { byHost, readable } = await busyByHost(
+      calendarBusy,
+      eventType.hosts,
+      busyLoadRange(range),
+      "cached",
+    );
+    if (readable.length === 0) return calendarUnavailable();
+    if (ownTime) for (const [id, busy] of byHost) byHost.set(id, subtractInterval(busy, ownTime));
+    const { slots, windows } = await getBookingCalendar(
+      db,
+      { ...eventType, hosts: readable },
+      range,
+      new Date(),
+      {
+        excludeBookingId,
+        externalBusyByHost: byHost,
+      },
+    );
+    return slotsResponse(slots, windows);
+  }
   let externalBusy;
   try {
     // Day 29: every host's, for a team event type.
@@ -77,21 +101,31 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (!(error instanceof CalendarUnavailableError)) throw error;
     // No usable copy at all: showing times we can't check would only lead to refused bookings.
-    return Response.json(
-      { error: "Calendar unavailable" },
-      { status: 503, headers: { "Retry-After": "30", "Cache-Control": "no-store" } },
-    );
+    return calendarUnavailable();
   }
 
   const { slots, windows } = await getBookingCalendar(db, eventType, range, new Date(), {
     excludeBookingId,
     externalBusy,
   });
-  const iso = (i: { start: Date; end: Date }) => ({ start: i.start.toISOString(), end: i.end.toISOString() });
+  return slotsResponse(slots, windows);
+}
+
+type Span = { start: Date; end: Date };
+const iso = (i: Span) => ({ start: i.start.toISOString(), end: i.end.toISOString() });
+
+function slotsResponse(slots: Span[], windows: Span[]) {
   return Response.json(
     // windows: the host's working hours (for the daylight band), not free time.
     { slots: slots.map(iso), windows: windows.map(iso) },
     // Availability changes with every booking; never serve a stale copy.
     { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+function calendarUnavailable() {
+  return Response.json(
+    { error: "Calendar unavailable" },
+    { status: 503, headers: { "Retry-After": "30", "Cache-Control": "no-store" } },
   );
 }

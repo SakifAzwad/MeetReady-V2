@@ -21,6 +21,9 @@ import { darkness } from "./sky";
  *
  *   2:00 PM for you
  *   Not everyone is working
+ *
+ * Day 31, round-robin ("any"): the windows are when ANY host works, so it
+ * says "Someone is working" / "Nobody is working".
  */
 export function momentReadout({
   instant,
@@ -29,7 +32,7 @@ export function momentReadout({
   hostName,
   windows,
   hour12 = true,
-  team = false,
+  team,
 }: {
   instant: Date;
   guestZone: string;
@@ -37,8 +40,11 @@ export function momentReadout({
   hostName: string;
   windows: readonly Interval[];
   hour12?: boolean;
-  /** Day 30: a team's collective event type; `windows` are the hours every host works. */
-  team?: boolean;
+  /**
+   * A team's event type: "all" (Day 30, collective: `windows` are when every host works) or "any"
+   * (Day 31, round-robin: when at least one does).
+   */
+  team?: "all" | "any";
 }): { lines: string[]; text: string } {
   const first = hostName.split(" ")[0];
   const working = windows.some((w) => w.start <= instant && instant < w.end);
@@ -50,7 +56,13 @@ export function momentReadout({
   if (team) {
     const lines = [
       withSky(`${guestTime} for you`, guestZone),
-      working ? "Everyone is working" : "Not everyone is working",
+      team === "any"
+        ? working
+          ? "Someone is working"
+          : "Nobody is working"
+        : working
+          ? "Everyone is working"
+          : "Not everyone is working",
     ];
     return { lines, text: `${lines.join(". ")}.` };
   }

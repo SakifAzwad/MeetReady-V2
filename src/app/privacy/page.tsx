@@ -71,9 +71,11 @@ export default function PrivacyPage() {
             its public booking page shows guests your name and the time in your city, and your bookings and
             working hours decide which times it offers (guests see the times, never your other meetings). Its
             meetings appear on your Bookings page and in your Insights, the other hosts are told when you move
-            or cancel one, and your webhooks receive them. If the organizer has connected Google Calendar, the
-            meeting is added to their calendar with your email address as an invited guest, so Google sends
-            you an invitation and you can see the other hosts on it.
+            or cancel one, and your webhooks receive them. For a round-robin event type (one host per
+            meeting), the team&apos;s pages show how many of its meetings each host has had in the last 30
+            days. If the organizer has connected Google Calendar, the meeting is added to their calendar with
+            your email address as an invited guest, so Google sends you an invitation and you can see the
+            other hosts on it.
           </li>
         </ul>
       </LegalSection>

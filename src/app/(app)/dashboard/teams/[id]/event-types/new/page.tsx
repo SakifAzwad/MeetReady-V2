@@ -11,7 +11,7 @@ import { EventTypeForm } from "../../../../event-types/event-type-form";
 
 export const metadata: Metadata = { title: "New team event type" };
 
-/** Day 29: a new collective event type for a team. Owner only: anyone else gets the 404. */
+/** Day 29: a new event type for a team (collective, or round-robin since Day 31). Owner only: anyone else gets the 404. */
 export default function NewTeamEventTypePage({ params }: PageProps<"/dashboard/teams/[id]/event-types/new">) {
   return (
     <PageTransition>
@@ -41,6 +41,7 @@ async function Form({ params }: Pick<PageProps<"/dashboard/teams/[id]/event-type
         slug: team.slug,
         members: members.map((m) => ({ userId: m.userId, name: m.name })),
         hostIds: members.map((m) => m.userId), // everyone, by default (Sakif's pick)
+        kind: "collective",
       }}
     />
   );

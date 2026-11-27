@@ -349,18 +349,22 @@ function Scheduler({
                 ? "Meeting moved"
                 : reschedule
                   ? "Your meeting has moved"
-                  : `You're booked with ${shortName(event)}`
+                  : booked.host
+                    ? `You're booked with ${booked.host.name}` // Day 31: round-robin names who they got
+                    : `You're booked with ${shortName(event)}`
             }
             note={
               reschedule && "host" in reschedule
                 ? `${reschedule.host.guestName} gets an email from MeetReady with the new time.`
-                : undefined
+                : booked.host && event.team
+                  ? `${event.team.name} shares these meetings fairly between its hosts.`
+                  : undefined
             }
             booked={booked}
             timeZone={timeZone}
             hour12={hour12}
-            hostName={shortName(event)}
-            hostTimeZone={event.hostTimeZone}
+            hostName={booked.host ? booked.host.name.split(" ")[0]! : shortName(event)}
+            hostTimeZone={booked.host?.timeZone ?? event.hostTimeZone}
             locationLabel={event.locationLabel}
           />
         }
@@ -421,7 +425,13 @@ function Scheduler({
                 hostTimeZone={event.hostTimeZone}
                 hostName={event.hostName}
                 hostShortName={shortName(event)}
-                teamZones={event.team?.hosts.map((h) => h.timeZone)}
+                // A team's words only with several hosts: one host (a round-robin meeting being moved) is a person.
+                teamZones={
+                  event.team && event.team.hosts.length > 1
+                    ? event.team.hosts.map((h) => h.timeZone)
+                    : undefined
+                }
+                teamMode={event.team?.kind === "round_robin" ? "any" : "all"}
                 hour12={hour12}
               />
             ) : (

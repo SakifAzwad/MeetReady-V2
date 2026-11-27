@@ -54,6 +54,7 @@ async function TeamBookingCard({ params }: { params: Params }) {
           slug: eventType.team.slug,
           name: eventType.team.name,
           hosts: eventType.hosts.map((h) => ({ name: h.name, timeZone: h.timeZone })),
+          kind: eventType.kind ?? "collective",
         },
       }}
       questions={{ questions: eventType.questions, questionsVersion: eventType.questionsVersion }}

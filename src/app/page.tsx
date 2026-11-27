@@ -287,7 +287,7 @@ const FOR_HOSTS = [
   },
   {
     title: "Meetings with your whole team",
-    body: "Create a team, invite people with a link, and share one page that offers only the times when everyone on it is free. Every host sees the meeting on their dashboard and gets it in Google Calendar, and any of them can move it.",
+    body: "Create a team, invite people with a link, and share one page: meet everyone when all of you are free, or one of you, with bookings shared fairly. Every host sees their meetings on their dashboard and in Google Calendar.",
   },
   {
     title: "On your website and in your tools",
@@ -344,10 +344,6 @@ const AI_FEATURES = [
 ];
 
 const COMING = [
-  {
-    title: "Round-robin",
-    body: "Bookings shared fairly across a team: the next one goes to whoever had the fewest lately.",
-  },
   {
     title: "Hold a time while the guest types",
     body: "A few minutes' hold on the picked time, so nobody takes it halfway through the form.",
@@ -420,7 +416,7 @@ const FAQ = [
   },
   {
     q: "Can my team use it?",
-    a: "Yes. Create a team from your account menu, invite people with a link, and add team event types: guests see only the times when every host you picked is free, and the meeting is with all of them. It's one event in the organizer's Google Calendar with the other hosts invited, it's on every host's Bookings page and Insights, and any host (or the guest) can move or cancel it. Round-robin (one host per meeting, shared fairly) is next.",
+    a: "Yes. Create a team from your account menu, invite people with a link, and add team event types: guests see only the times when every host you picked is free, and the meeting is with all of them. It's one event in the organizer's Google Calendar with the other hosts invited, it's on every host's Bookings page and Insights, and any host (or the guest) can move or cancel it. Or make it round-robin: guests see when anyone is free, and each booking goes to the host who has had the fewest of that meeting in the last 30 days.",
   },
 ];
 

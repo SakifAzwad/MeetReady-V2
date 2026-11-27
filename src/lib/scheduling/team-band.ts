@@ -22,8 +22,20 @@ export function anyHostDiffers(zones: readonly string[], guestZone: string, at: 
   return zones.some((z) => offsetDifference(z, guestZone, at) !== null);
 }
 
-/** The sentence under the band: the shared hours in the guest's time, or that there are none. */
-export function teamSentence(yourRanges: readonly string[], anyDiffers: boolean): string {
-  if (yourRanges.length === 0) return "The hosts' hours don't overlap on this day.";
-  return `Everyone is working ${yourRanges.join(" and ")}${anyDiffers ? " your time" : ""}.`;
+/**
+ * The sentence under the band, in the guest's time. "all" (collective): the shared hours, or that there are
+ * none. "any" (Day 31, round-robin): the hours when at least one host works, or that nobody does that day.
+ */
+export function teamSentence(
+  yourRanges: readonly string[],
+  anyDiffers: boolean,
+  kind: "all" | "any" = "all",
+): string {
+  if (yourRanges.length === 0) {
+    return kind === "any"
+      ? "Nobody on the team works on this day."
+      : "The hosts' hours don't overlap on this day.";
+  }
+  const when = `${yourRanges.join(" and ")}${anyDiffers ? " your time" : ""}`;
+  return kind === "any" ? `Someone on the team is working ${when}.` : `Everyone is working ${when}.`;
 }

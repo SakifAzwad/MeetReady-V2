@@ -34,10 +34,14 @@ function failure(result: Exclude<TeamEventTypeResult, { ok: true }>): EventTypeA
   return { ok: false, formError: "This team or event type no longer exists, or you don't own the team." };
 }
 
+/** Day 31: collective or round-robin. Read on create only; an edit never changes it. */
+const kindSchema = z.enum(["collective", "round_robin"]);
+
 export async function saveTeamEventTypeAction(
   where: unknown,
   values: unknown,
   hostIds: unknown,
+  kind: unknown,
 ): Promise<EventTypeActionResult> {
   const user = await requireOnboardedUser();
   const place = ids.safeParse(where);
@@ -46,11 +50,13 @@ export async function saveTeamEventTypeAction(
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsByPath(parsed.error) };
   const hosts = teamHostIdsSchema.safeParse(hostIds);
   if (!hosts.success) return { ok: false, formError: hosts.error.issues[0]?.message ?? "Pick the hosts." };
+  const teamKind = kindSchema.safeParse(kind);
+  if (!teamKind.success) return { ok: false, formError: "Pick who's in each meeting." };
 
   const { teamId, eventTypeId } = place.data;
   const result = eventTypeId
     ? await updateTeamEventType(db, user.id, teamId, eventTypeId, parsed.data, hosts.data)
-    : await createTeamEventType(db, user.id, teamId, parsed.data, hosts.data);
+    : await createTeamEventType(db, user.id, teamId, parsed.data, hosts.data, teamKind.data);
   if (!result.ok) return failure(result);
   redirect(`/dashboard/teams/${teamId}`); // throws: keep outside try/catch
 }

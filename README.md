@@ -30,7 +30,7 @@ their own words, and the host can book or check meetings from Claude.
 - **AI meeting briefs with five layers of protection against prompt injection,** plus a cost log for every call
   and evals against the real model. ([Day 18](docs/day-18.md))
 - **Production work around the core.** Google Calendar sync with Meet links, background jobs with retries, rate
-  limits, and Sentry with a privacy scrubber. About 870 unit tests and 56 browser tests run in CI.
+  limits, and Sentry with a privacy scrubber. About 890 unit tests and 57 browser tests run in CI.
   ([Days 11–17](#design-notes))
 
 ## Screenshots
@@ -64,7 +64,7 @@ They can disconnect from the dashboard at any time.
 | ![Consent page: Claude wants to use your MeetReady account](docs/images/consent.png) | ![The AI assistants section of the dashboard, with Claude connected](docs/images/dashboard-assistants.png) |
 | :----------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------: |
 
-Claude booking a meeting through MeetReady's MCP server, with the confirm step::
+Claude booking a meeting through MeetReady's MCP server, with the confirm step:
 ![Claude booking a meeting through MeetReady's MCP server, with the confirm step](docs/images/claude.png)
 
 ## Architecture
@@ -269,6 +269,9 @@ Each day of the build has its own write-up with the decisions, the reasons and t
   organizer's calendar with the co-hosts invited, moves checked against the meeting's own hosts with every host's
   lock, team meetings on each host's Bookings page, week view, Insights, AI assistant and webhooks, and any host
   may move or cancel one (the others are told who did).
+- [Day 31: Round-robin](docs/day-31.md): team scheduling, the last part. Guests see when any host is free; each
+  booking goes to the free host with the fewest recent bookings, decided under every host's lock, so a burst of
+  simultaneous bookings still splits evenly (a race test shows 1–9 splits without the locks).
 - [Deploying](docs/deploy.md): the runbook for Vercel + Neon (branch per preview), Google, Resend and GitHub.
 - [Backlog](docs/backlog.md): everything not built yet, with the reason and when it fits.
 - [Handoff](docs/handoff.md): one-page summary of the state, conventions and gotchas, for picking the work up fresh.

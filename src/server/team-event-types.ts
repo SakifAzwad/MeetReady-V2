@@ -1,8 +1,9 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { pgConstraintName, pgErrorCode, PG_UNIQUE_VIOLATION } from "@/db/errors";
-import { eventTypeHosts, eventTypes, teamMembers, user, type EventType } from "@/db/schema";
+import { bookings, eventTypeHosts, eventTypes, teamMembers, user, type EventType } from "@/db/schema";
 import type { Database } from "@/db/types";
+import { ROUND_ROBIN_DAYS } from "@/lib/scheduling/round-robin";
 import type { EventTypeInput } from "@/lib/validation/event-type";
 import { roleIn } from "./teams";
 
@@ -31,8 +32,12 @@ const isUuid = (id: string) => z.uuid().safeParse(id).success;
 const isSlugTaken = (error: unknown) =>
   pgErrorCode(error) === PG_UNIQUE_VIOLATION && pgConstraintName(error) === "event_types_team_slug_unique";
 
-/** A team's event types with their hosts (names, in order). Empty for someone outside the team. */
-export async function listTeamEventTypes(db: Database, userId: string, teamId: string) {
+/**
+ * A team's event types with their hosts (names, in order). Empty for someone outside the team.
+ * Day 31: each host's `recent` count for a round-robin type (the same numbers pickHost compares:
+ * confirmed bookings of that type made in the last 30 days), so the team can see the turns are fair.
+ */
+export async function listTeamEventTypes(db: Database, userId: string, teamId: string, now = new Date()) {
   if (!isUuid(teamId) || !(await roleIn(db, userId, teamId))) return [];
   const types = await db
     .select()
@@ -51,7 +56,33 @@ export async function listTeamEventTypes(db: Database, userId: string, teamId: s
       ),
     )
     .orderBy(asc(eventTypeHosts.position));
-  return types.map((t) => ({ ...t, hosts: hosts.filter((h) => h.eventTypeId === t.id) }));
+  const roundRobin = types.filter((t) => t.teamKind === "round_robin").map((t) => t.id);
+  const counts =
+    roundRobin.length === 0
+      ? []
+      : await db
+          .select({
+            eventTypeId: bookings.eventTypeId,
+            hostId: bookings.hostId,
+            n: sql<number>`count(*)::int`.mapWith(Number),
+          })
+          .from(bookings)
+          .where(
+            and(
+              inArray(bookings.eventTypeId, roundRobin),
+              eq(bookings.status, "confirmed"),
+              gte(bookings.createdAt, new Date(now.getTime() - ROUND_ROBIN_DAYS * 86_400_000)),
+            ),
+          )
+          .groupBy(bookings.eventTypeId, bookings.hostId);
+  const recent = (eventTypeId: string, hostId: string) =>
+    counts.find((c) => c.eventTypeId === eventTypeId && c.hostId === hostId)?.n ?? 0;
+  return types.map((t) => ({
+    ...t,
+    hosts: hosts
+      .filter((h) => h.eventTypeId === t.id)
+      .map((h) => ({ ...h, recent: t.teamKind === "round_robin" ? recent(t.id, h.userId) : null })),
+  }));
 }
 
 /** One of the team's event types and its host ids, for the edit form. Owner only. */
@@ -92,12 +123,20 @@ async function setHosts(db: Database, eventTypeId: string, hostIds: readonly str
     .values(hostIds.map((userId, position) => ({ eventTypeId, userId, position })));
 }
 
+export type TeamKind = "collective" | "round_robin";
+
+/**
+ * Day 31: `kind` is chosen here and never changed (updateTeamEventType has no
+ * such input): switching an event type with bookings would change what those
+ * bookings mean (all of you, or one of you).
+ */
 export async function createTeamEventType(
   db: Database,
   ownerId: string,
   teamId: string,
   input: EventTypeInput,
   hostIds: string[],
+  kind: TeamKind = "collective",
 ): Promise<TeamEventTypeResult> {
   if (!isUuid(teamId)) return { ok: false, error: "not_found" };
   try {
@@ -106,7 +145,7 @@ export async function createTeamEventType(
       if (!(await allInTeam(tx, teamId, hostIds))) return { ok: false, error: "hosts_not_in_team" } as const;
       const [row] = await tx
         .insert(eventTypes)
-        .values({ ...input, teamId, teamKind: "collective" })
+        .values({ ...input, teamId, teamKind: kind })
         .returning({ id: eventTypes.id });
       await setHosts(tx, row!.id, hostIds);
       return { ok: true, id: row!.id } as const;

@@ -34,10 +34,31 @@ describe("the band on a team's page", () => {
         hostZone: "Asia/Dhaka",
         hostName: "Ada Lovelace",
         windows,
-        team: true,
+        team: "all",
       }).lines;
     expect(readout(AT)).toEqual(["10:00 AM for you", "Everyone is working"]);
     // 08:30 UTC: Ada works (2:30 PM in Dhaka), Grace starts at 9. Day 29 said "Outside Acme's working hours".
     expect(readout(new Date("2026-12-07T08:30:00Z"))).toEqual(["8:30 AM for you", "Not everyone is working"]);
+  });
+
+  it("round-robin (Day 31): when anyone works, never 'everyone'", () => {
+    expect(teamSentence(["9 AM–9 PM"], true, "any")).toBe(
+      "Someone on the team is working 9 AM–9 PM your time.",
+    );
+    expect(teamSentence([], true, "any")).toBe("Nobody on the team works on this day.");
+    const lines = (instant: Date) =>
+      momentReadout({
+        instant,
+        guestZone: "Europe/London",
+        hostZone: "Asia/Dhaka",
+        hostName: "Acme",
+        windows,
+        team: "any",
+      }).lines;
+    expect(lines(AT)).toEqual(["10:00 AM for you", "Someone is working"]);
+    expect(lines(new Date("2026-12-07T20:00:00Z"))).toEqual([
+      "8:00 PM for you, after sunset",
+      "Nobody is working",
+    ]);
   });
 });

@@ -18,7 +18,12 @@ import { sealToken } from "@/server/manage-link";
 import { actionIp, emailBucket, rateLimit } from "@/server/rate-limit";
 
 export type BookSlotResult =
-  | { ok: true; booking: { startsAt: string; endsAt: string } }
+  | {
+      ok: true;
+      booking: { startsAt: string; endsAt: string };
+      /** Day 31: a round-robin booking's host, for the guest's confirmation. */
+      assignedTo?: { name: string; timeZone: string };
+    }
   | { ok: false; error: "slot_unavailable" | "not_found" }
   /** The host's Google Calendar couldn't be checked: nothing was booked, the guest retries (Day 15). */
   | { ok: false; error: "calendar_unavailable" }
@@ -83,6 +88,7 @@ export async function bookSlotAction(input: unknown): Promise<BookSlotResult> {
   return {
     ok: true,
     booking: { startsAt: result.booking.startsAt.toISOString(), endsAt: result.booking.endsAt.toISOString() },
+    ...(result.assignedTo && { assignedTo: result.assignedTo }),
   };
 }
 

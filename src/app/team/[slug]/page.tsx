@@ -66,8 +66,11 @@ async function TeamProfile({ params }: { params: Params }) {
                       {LOCATION_LABELS[et.locationType]}
                     </span>
                     <span className="text-muted-foreground mt-1 block text-sm">
-                      With{" "}
-                      {new Intl.ListFormat("en", { type: "conjunction" }).format(et.hosts.map((h) => h.name))}
+                      {/* Day 31: round-robin meets one of them ("or"), collective all of them ("and"). */}
+                      {et.kind === "round_robin" ? "With one of " : "With "}
+                      {new Intl.ListFormat("en", {
+                        type: et.kind === "round_robin" ? "disjunction" : "conjunction",
+                      }).format(et.hosts.map((h) => h.name))}
                     </span>
                   </span>
                   <ChevronRight className="text-muted-foreground size-5 transition-transform group-hover:translate-x-0.5" />

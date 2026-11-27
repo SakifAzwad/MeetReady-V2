@@ -36,6 +36,7 @@ export function DaylightBand({
   hostName,
   hostShortName,
   teamZones,
+  teamMode = "all",
   hour12,
   headingAs: Heading = "h2",
 }: {
@@ -48,6 +49,8 @@ export function DaylightBand({
   hostShortName?: string;
   /** Day 30: a team's page: every host's timezone, organizer first. The windows are their shared hours. */
   teamZones?: string[];
+  /** Day 31: "any" for round-robin (the windows are when ANY host works); "all" (default) for collective. */
+  teamMode?: "all" | "any";
   hour12: boolean;
   /** "h4" inside the landing page preview, where it sits under other headings. */
   headingAs?: "h2" | "h4";
@@ -68,7 +71,7 @@ export function DaylightBand({
         hostName,
         windows,
         hour12,
-        team: !!teamZones,
+        team: teamZones ? teamMode : undefined,
       })
     : null;
   const firstName = hostShortName ?? hostName.split(" ")[0];
@@ -96,7 +99,7 @@ export function DaylightBand({
       (hostDates.size > 1 ? ` ${hostWeekday(s.start)}` : ""),
   );
   const sentence = teamZones
-    ? teamSentence(yourRanges, teamDiffers)
+    ? teamSentence(yourRanges, teamDiffers, teamMode)
     : segments.length === 0
       ? `${firstName} isn't working on this day.`
       : !difference
@@ -128,7 +131,7 @@ export function DaylightBand({
         startsAfter &&
           `${endsBefore ? "start again" : "they start"} at ${formatTime(startsAfter, timeZone, hour12)}`,
       ].filter(Boolean);
-      daytimeNote = `None of ${teamZones ? "the shared" : `${firstName}'s`} hours fall in your daytime (${daytimeLabel}): ${parts.join(" and ")} your time.`;
+      daytimeNote = `None of ${teamZones ? (teamMode === "any" ? "the team's" : "the shared") : `${firstName}'s`} hours fall in your daytime (${daytimeLabel}): ${parts.join(" and ")} your time.`;
     }
   }
 

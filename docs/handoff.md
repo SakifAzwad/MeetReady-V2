@@ -1,7 +1,7 @@
-# Handoff: starting a new chat (after Day 30)
+# Handoff: starting a new chat (after Day 31)
 
-Read this first in a new chat. It replaces the long Days 1–30 conversations. Details live in `docs/day-01.md` …
-`docs/day-30.md`; the plan lives in `docs/backlog.md`.
+Read this first in a new chat. It replaces the long Days 1–31 conversations. Details live in `docs/day-01.md` …
+`docs/day-31.md`; the plan lives in `docs/backlog.md`.
 
 ## Where things stand
 
@@ -249,7 +249,21 @@ Read this first in a new chat. It replaces the long Days 1–30 conversations. D
     `bookingEventInfo(b)` (`src/lib/booking-event-info.ts`) gives the widget the team page + meeting's hosts.
     Band on team pages: `lib/scheduling/team-band.ts` + `momentReadout({ team })` ("Everyone is working 3–5 PM
     your time.", "Hosts in Dhaka and London").
-- **Numbers:** 870 unit tests (+ 11 race tests on real Postgres) + 56 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
+  - Round-robin (Day 31, team scheduling done): `PublicEventType.kind` (`collective` | `round_robin` | null);
+    the kind is chosen on create (radio in the event type form, `saveTeamEventTypeAction`'s 4th argument) and
+    fixed. Free times: `getBookingCalendar` → `roundRobinCalendar` runs `generateSlots` per host (own schedule,
+    meetings, Google, daily limit) and unions them; returns `freeHosts` (start ms → host ids) and the union of
+    working windows. Google per host: `CalendarOptions.externalBusyByHost` (a flat `externalBusy` with several
+    round-robin hosts throws) and `busyByHost` (an unreadable calendar leaves that host out; none readable =
+    `calendar_unavailable` / 503). Booking: lock the whole pool (sorted), re-check, `hostLoads` (one grouped query)
+    → `pickHost` (`src/lib/scheduling/round-robin.ts`, pure: fewest confirmed bookings of the type CREATED in the
+    last `ROUND_ROBIN_DAYS` = 30, then oldest last assignment, then host order, then id) → insert with `host_id` =
+    the chosen host (one `booking_hosts` row). `BookingResult.assignedTo` → action → `Booked.host` → "You're booked
+    with Grace Hopper". Moves keep the host (meeting's hosts = one). Pages: facts panel "With: One of A or B" (no
+    per-host clocks), band `teamMode="any"` ("Someone on the team is working …", "Someone/Nobody is working"),
+    public team page "With one of …", dashboard team page "Last 30 days: Ada 1, Grace 1" (`listTeamEventTypes`
+    → `hosts[].recent`). `bookingEventInfo` treats a one-host team meeting as that person (hostName). No migration.
+- **Numbers:** 890 unit tests (+ 14 race tests on real Postgres) + 57 E2E tests + 6 smoke tests + 14 evals (14/14 on Groq, Sakif's `eval.log`,
   18 Nov); typecheck, lint, format, `drizzle-kit check` and build all green. 17 migrations (0000–0016).
 - **Live:** <https://meetreadyv2.vercel.app> (Vercel project `meetreadyv2`), demo booking page
   `/sakifazwad18/intro`. Neon project `meetready`, AWS US East 1, Postgres 18; a branch per preview. Set up with
@@ -259,9 +273,8 @@ Read this first in a new chat. It replaces the long Days 1–30 conversations. D
 
 ## Next (from `docs/backlog.md`)
 
-1. **Sakif:** push Day 30 (migration 0016), then runbook step 23 (the real Google: co-host invited, moves).
-2. **Day 31: round-robin** (fewest bookings of that type in the last 30 days, ties to the longest idle; race tests
-   when two guests book the same time). The domain day waits until a domain is bought.
+1. **Sakif:** push Day 31 (no migration), then runbook step 24.
+2. **Pick the next day from the backlog** (team scheduling is done). The domain day waits until a domain is bought.
 3. Email: Resend's test sender only reaches Sakif's own address until he buys a domain (planned).
 
 ## How Sakif works
@@ -458,3 +471,9 @@ Read this first in a new chat. It replaces the long Days 1–30 conversations. D
   the loser lost (`slot_unavailable` = the locks, `slot_taken` = the constraint).
 - **A role that becomes plural (Day 30 story 5):** "the host did it" needs "which host" (`changed_by_host_id`).
   Words on screen describe data: when its meaning changes, update the sentences too (story 1).
+- **Constraints protect facts, not decisions (Day 31 story 1):** read → decide → write needs the transactions to
+  take turns (write skew). Round-robin locks the whole pool so counts are true; the race test checks the split.
+- **A value whose shape stops fitting a case must fail loudly** (Day 31 story 2: a flat busy list for round-robin
+  throws). Apply a safety rule at the level it protects (story 3: an unreadable calendar removes one host).
+- **E2E on the booking page:** times outside the guest's 8 AM–8 PM fold away (Day 9); email HTML escapes `'` as
+  `&#x27;`. Check what the page shows before calling a failure a bug (Day 31 story 4).

@@ -33,7 +33,9 @@ export function bookingEventInfo(b: MovableBooking): EventInfo {
     hostTimeZone: b.hostTimeZone,
     locationLabel: locationText(b),
   };
-  if (!b.team) return { ...common, hostName: b.hostName };
+  // A personal booking, or (Day 31) a team meeting with one host, a round-robin one: moving it is
+  // moving a meeting with that person, so the widget speaks of them, not the team.
+  if (!b.team || (b.coHosts ?? []).length === 0) return { ...common, hostName: b.organizerName };
   return {
     ...common,
     // For a team, sentences name the team ("You're booked with Acme Sales"), as on its booking page.

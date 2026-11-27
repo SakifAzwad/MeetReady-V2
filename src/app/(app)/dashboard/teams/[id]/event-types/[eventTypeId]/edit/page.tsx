@@ -46,6 +46,7 @@ async function Form({ params }: Pick<Props, "params">) {
         slug: team.slug,
         members: members.map((m) => ({ userId: m.userId, name: m.name })),
         hostIds: found.hostIds,
+        kind: found.eventType.teamKind ?? "collective",
       }}
     />
   );

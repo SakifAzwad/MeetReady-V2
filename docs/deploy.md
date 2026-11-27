@@ -789,6 +789,34 @@ own window, and your Google Calendar connected (step 14). The real Google is the
 **Team meetings booked before Day 30** (step 22's) are in your calendar without the co-host invited: Google is told
 about co-hosts only when it creates the event. Cancel them and book again to try this step.
 
+## 24. Round-robin team event types, added on Day 31
+
+Nothing to set in Vercel, no migration. About 10 minutes, with step 22's team and the second account (London 9–5).
+
+1. **Deploy** (push Day 31). The log ends with `[migrate] up to date` (nothing new to run).
+2. **Create one:** your account → **Teams** → the team → **New team event type**. Title `Demo`. Under **Hosts**,
+   **Who's in each meeting** → **One of them, shared fairly**; both of you ticked, and no "(organizer)" mark.
+   **Create event type**. The team page shows "with one of {you}, {second account}, shared fairly" and "Last 30
+   days: {you} 0, {second} 0".
+3. **The guest's view:** in a private window open `/team/{team}/demo`. The panel says "With: One of {you} or {second
+   account}" (no clocks per host). A weekday offers 9:00 AM to 10:30 PM Dhaka time (yours from 9, theirs until 11
+   PM; the late ones fold under "later"), and the band says "Someone on the team is working 9 AM–11 PM your time."
+4. **Book 3:00 PM** (both of you work then) with your own email: "You're booked with {you}" (a tie goes to the
+   first on the host list). In **another** private window, book **the same 3:00 PM**: "You're booked with {second
+   account}". The time is then gone for a third guest.
+5. **Each meeting is one person's:** your **Bookings** has the first; the second account's has the other. Your
+   Google Calendar has only yours (no guests invited). The team page now says "Last 30 days: {you} 1, {second} 1".
+6. **Turns:** book one more when both of you work (e.g. 4:00 PM). With 1 each, it goes to whoever was assigned
+   longest ago: {you}, who got the first 3:00 PM.
+7. **Moving keeps the host:** open the link in the guest email of {second account}'s meeting → **Reschedule**: only
+   their times are offered (no 9 AM Dhaka). Move it; it stays theirs.
+8. **The database:** Neon → SQL Editor (`production`):
+   ```sql
+   select b.host_id, count(bh.*) as host_rows from bookings b join booking_hosts bh on bh.booking_id = b.id
+   join event_types et on et.id = b.event_type_id where et.team_kind = 'round_robin' group by b.id, b.host_id;
+   ```
+   One host row per booking, and the `host_id`s alternate.
+
 ## Afterwards: how a change ships
 
 1. Push a branch → CI runs (unit + E2E) → Vercel builds a **preview** on its own database branch → try it.

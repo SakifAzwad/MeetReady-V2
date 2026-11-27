@@ -25,7 +25,12 @@ import { bookSlotAction } from "./actions";
 import { QuestionFields } from "./question-fields";
 import { cityName } from "@/lib/scheduling/daylight";
 
-export type Booked = { startsAt: Date; endsAt: Date };
+export type Booked = {
+  startsAt: Date;
+  endsAt: Date;
+  /** Day 31: who a round-robin booking went to; the confirmation names them. */
+  host?: { name: string; timeZone: string };
+};
 
 /** "Monday, 9 November 2026, 4:30–5:00 AM" style line used by every step. */
 function When({ slot, timeZone, hour12 }: { slot: Booked | Slot; timeZone: string; hour12: boolean }) {
@@ -137,7 +142,11 @@ export function GuestForm({
     await queryClient.invalidateQueries({ queryKey: ["calendar", ownerKey(owner), slug] });
 
     if (result.ok) {
-      onBooked({ startsAt: new Date(result.booking.startsAt), endsAt: new Date(result.booking.endsAt) });
+      onBooked({
+        startsAt: new Date(result.booking.startsAt),
+        endsAt: new Date(result.booking.endsAt),
+        ...(result.assignedTo && { host: result.assignedTo }),
+      });
     } else if (result.error === "slot_unavailable") {
       onSlotGone(form.getValues());
     } else if (result.error === "questions_changed") {

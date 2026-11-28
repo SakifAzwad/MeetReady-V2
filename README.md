@@ -278,6 +278,6 @@ Each day of the build has its own write-up with the decisions, the reasons and t
 
 ## Credits
 
-MeetReady v1 (Jan–Feb 2024) was built by a team of 4:
+MeetReady v1 (Jan–Feb 2024) was built initially:
 [SakifAzwad/Meet-Ready](https://github.com/SakifAzwad/Meet-Ready). v2 is a solo rebuild that keeps the idea and
 rewrites the code.
